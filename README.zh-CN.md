@@ -301,6 +301,17 @@ roslaunch odin_vlm_terminal odin_vlm_terminal.launch          # ROS1
 
 ## 巡检感知（Florence-2）
 
+> **可选模块 —— 不装它 ONS2 也能完整运行。** 接入感知是“两进程旁挂”，不是重新构建：
+> 无需重编本栈、无需改 launch、无需动任何导航参数，随时装也随时拆。
+
+**你需要它吗？**
+
+| 需要 Odin-perception 的场景 | **不需要**的场景 |
+|---|---|
+| 巡检必须输出**合格/不合格结论**（阀门开关、仪表读数、指示灯颜色、铭牌 OCR） | 只需要机器人在航点间**导航** |
+| 希望在相机画面上看到**标注图**（检测框 + 结论文字） | 靠人看视频流自己判断 |
+| 你的 Odin1 相机能推 RGB（`sendrgb: 1`） | 平台没有 RGB 图像流 |
+
 针对**结构化巡检任务**（如阀门是否关闭、仪表读数、指示灯颜色识别），巡检感知模块位于**独立的开源仓库**中，因此模型环境无需合并到本 ROS 工作空间内：
 
 **➡️ [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception)**
@@ -317,7 +328,7 @@ odin driver ──► /odin1/image/undistorted
         /inspection/annotated/compressed ──► Foxglove / RViz / rosbridge
 ```
 
-**安装与集成步骤详见该仓库的 README** —— 请参考其中的 *Integrating with Odin-Nav-Stack* 章节了解详细步骤、话题契约以及 ROS 1 / Jetson 注意事项。
+**安装与集成步骤详见该仓库的 README** —— 请参考其中的 *Integrating with Odin-Nav-Stack2* 章节了解详细步骤、话题契约以及 ROS 1 / Jetson 注意事项。
 
 本导航栈侧的前置条件：Odin 驱动需开启图像发布（即在驱动 `control_command.yaml` 中设置 `sendrgb: 1` 和 `sendrgbundistort: 1`），接入感知前请先用 `rostopic hz /odin1/image/undistorted` 验证。
 

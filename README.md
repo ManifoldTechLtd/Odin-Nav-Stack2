@@ -301,6 +301,18 @@ On an onboard computer with limited resources, run the VLM server on a companion
 
 ## Inspection Perception (Florence-2)
 
+> **Optional module — ONS2 runs fully without it.** Adding perception is a two-process
+> side-car, not a rebuild: you do not have to recompile this stack, touch its launch files,
+> or change any navigation parameter. You can add it or drop it at any time.
+
+**Do you need it?**
+
+| You need Odin-perception if… | You do **not** need it if… |
+|---|---|
+| Patrols must produce **pass/fail verdicts** (valve state, gauge readings, indicator colors, nameplate OCR) | You only need the robot to **navigate** between waypoints |
+| You want **annotated images** (boxes + verdict text) on the camera feed | A human watches the video stream and decides |
+| Your Odin1 camera can publish RGB (`sendrgb: 1`) | Your platform has no RGB stream |
+
 For **structured inspection** — valve closed? gauge reading? indicator color? — the perception
 component lives in a **separate open-source repository**, so the model environment never has to
 be merged into this ROS workspace:
@@ -322,7 +334,7 @@ odin driver ──► /odin1/image/undistorted
 ```
 
 **Installation and integration are documented in that repository's README** — see its
-*Integrating with Odin-Nav-Stack* section for the step-by-step procedure, the topic contract,
+*Integrating with Odin-Nav-Stack2* section for the step-by-step procedure, the topic contract,
 and the ROS 1 / Jetson pitfalls.
 
 Prerequisite on this side: the Odin driver must actually publish images, i.e. `sendrgb: 1` and

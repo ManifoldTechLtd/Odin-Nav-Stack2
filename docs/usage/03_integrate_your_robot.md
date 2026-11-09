@@ -612,7 +612,7 @@ It attaches over HTTP in two processes, so the model environment stays isolated 
 ```
 
 **Installation and the step-by-step procedure are in that repository's README** — its
-*Integrating with Odin-Nav-Stack* section covers the topic contract, annotated-image publishing,
+*Integrating with Odin-Nav-Stack2* section covers the topic contract, annotated-image publishing,
 and the ROS 1 / Jetson pitfalls. Do not duplicate that setup here.
 
 Prerequisite on this side: your driver must actually publish images — `sendrgb: 1` and
