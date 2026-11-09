@@ -43,11 +43,34 @@ odin_ros_driver ──► /odin1/image/undistorted
 
 ---
 
-## 如何拉取到 `perception/` 目录（避免产生 `perception/Odin-perception/` 双层嵌套）
+## 如何安装
 
-如果你希望直接把 `Odin-perception` 的代码拉取到当前的 `perception/` 目录下（而不是在 `perception/` 里面再多套一层 `perception/Odin-perception/` 文件夹），请在**本仓库根目录（`Odin-Nav-Stack2/`）**执行以下任一方式：
+### 方式 A：一条命令（推荐）
 
-### 方式一：直接克隆到 `perception` 目录（推荐）
+```bash
+# 在 Odin-Nav-Stack2 仓库根目录下执行：
+bash perception/setup.sh
+```
+
+脚本会把 `Odin-perception` 装到 `~/odin-perception`（**仓库之外**，不会动本目录的两份说明），
+自动建隔离 venv、装钉死版本的依赖、下载 Florence-2 权重并跑自检。
+
+常用参数：
+
+| 参数 | 作用 |
+|---|---|
+| `--tag v0.1.0` | 钉版本（生产环境推荐） |
+| `--dir <path>` | 装到指定目录 |
+| `--cpu` | 强制 CPU 版 torch（无 GPU 平台） |
+| `--check-only` | 只自检，不安装 |
+| `--skip-weights` | 跳过 888MB 权重下载（离线设备） |
+
+脚本是个**编排器**：实际调用 `Odin-perception` 自带的 `scripts/setup.sh`、
+`scripts/download_models.sh` 与 `scripts/doctor.py`，安装逻辑不在本仓库重复一份。
+
+### 方式 B：手动克隆到 `perception/` 目录（会覆盖本说明）
+
+如果你更希望把源码放在本仓库内、又不想要 `perception/Odin-perception/` 双层嵌套：
 
 ```bash
 # 在 Odin-Nav-Stack2 仓库根目录下执行：
@@ -55,7 +78,10 @@ rm -rf perception
 git clone https://github.com/ManifoldTechLtd/Odin-perception.git perception
 ```
 
-### 方式二：与本仓库平级克隆（独立目录）
+> ⚠️ 这条命令会**替换掉** `perception/` 目录，本目录的两份说明文件会被删除。
+> 需要的话自己先备份。
+
+### 方式 C：与本仓库平级克隆（独立目录）
 
 ```bash
 cd ..

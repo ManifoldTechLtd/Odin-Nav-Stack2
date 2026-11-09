@@ -43,11 +43,37 @@ odin_ros_driver ──► /odin1/image/undistorted
 
 ---
 
-## How to Clone into `perception/` (Without Nested `perception/Odin-perception/` Directories)
+## How to Install
 
-If you want to place the `Odin-perception` source code directly inside this `perception/` directory **without** creating an extra nested `perception/Odin-perception/` folder, run either of the following from the **root of this repository** (`Odin-Nav-Stack2/`):
+### Option A — One command (recommended)
 
-### Option 1: Replace `perception/` directly (Recommended)
+```bash
+# Run from the Odin-Nav-Stack2 repository root:
+bash perception/setup.sh
+```
+
+This clones `Odin-perception` into `~/odin-perception` (**outside** this repo, so this guide
+and the `perception/` folder stay intact), creates an isolated venv, installs pinned
+dependencies, downloads the Florence-2 weights and runs a self-check.
+
+Useful flags:
+
+| Flag | Effect |
+|---|---|
+| `--tag v0.1.0` | Pin a release (recommended for production) |
+| `--dir <path>` | Install somewhere else |
+| `--cpu` | Force the CPU torch wheel (no GPU platform) |
+| `--check-only` | Self-check only, no install |
+| `--skip-weights` | Skip the 888 MB download (offline devices) |
+
+The script is an **orchestrator**: it calls `Odin-perception`'s own `scripts/setup.sh`,
+`scripts/download_models.sh` and `scripts/doctor.py`, so installation logic never gets
+duplicated here.
+
+### Option B — Manual clone into `perception/` (overwrites this guide)
+
+If you would rather keep the source inside this repo without a nested
+`perception/Odin-perception/` folder:
 
 ```bash
 # Run from the Odin-Nav-Stack2 repository root:
@@ -55,7 +81,10 @@ rm -rf perception
 git clone https://github.com/ManifoldTechLtd/Odin-perception.git perception
 ```
 
-### Option 2: Clone alongside `Odin-Nav-Stack2` as a sibling directory
+> ⚠️ This **replaces** the `perception/` directory, deleting the two guide files here.
+> Keep a copy if you still want them.
+
+### Option C — Clone as a sibling directory
 
 ```bash
 cd ..
