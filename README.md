@@ -16,10 +16,13 @@
   <a href="LICENSE">
   <img src='https://img.shields.io/badge/License-GPL--3.0-green' alt='GPL-3.0'></a>
   <a href="https://wiki.ros.org/noetic">
-  <img src='https://img.shields.io/badge/ROS1-Noetic-orange' alt='noetic'></a>
+  <img src='https://img.shields.io/badge/ROS1-Noetic-orange' alt='ROS1 Noetic'></a>
   <a href="https://docs.ros.org/en/jazzy/">
-  <img src='https://img.shields.io/badge/ROS2-Jazzy-blue' alt='jazzy'></a>
+  <img src='https://img.shields.io/badge/ROS2-Jazzy-blue' alt='ROS2 Jazzy'></a>
 </div>
+
+> [!NOTE]
+> This repository is under active development. Please refer to the latest code!
 
 **Odin1** is a high-performance spatial sensing module that delivers **high-precision 3D mapping**, **robust relocalization**, and rich sensory streams including **RGB images**, **depth**, **IMU**, **odometry**, and **dense point clouds**. ONS2 builds on Odin1 to provide an autonomous **patrol navigation** stack for ground platforms, enabling:
 

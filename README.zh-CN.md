@@ -16,10 +16,13 @@
   <a href="LICENSE">
   <img src='https://img.shields.io/badge/License-GPL--3.0-green' alt='GPL-3.0'></a>
   <a href="https://wiki.ros.org/noetic">
-  <img src='https://img.shields.io/badge/ROS1-Noetic-orange' alt='noetic'></a>
+  <img src='https://img.shields.io/badge/ROS1-Noetic-orange' alt='ROS1 Noetic'></a>
   <a href="https://docs.ros.org/en/jazzy/">
-  <img src='https://img.shields.io/badge/ROS2-Jazzy-blue' alt='jazzy'></a>
+  <img src='https://img.shields.io/badge/ROS2-Jazzy-blue' alt='ROS2 Jazzy'></a>
 </div>
+
+> [!NOTE]
+> 本仓库持续更新中，请以最新代码为准！
 
 **Odin1** 是一款高性能空间感知模块，可提供**高精度 3D 建图**、**鲁棒的重定位**，以及包括 **RGB 图像**、**深度**、**IMU**、**里程计**和**稠密点云**在内的丰富感知数据流。ONS2 在 Odin1 的基础上，为地面平台提供自主**巡逻导航**栈，支持：
 
