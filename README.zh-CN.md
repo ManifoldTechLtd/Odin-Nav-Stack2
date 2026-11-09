@@ -150,7 +150,7 @@ git submodule update --init yolov5                       # 可选：目标检测
 git submodule update --init odin_rtk_fusion              # 可选：RTK 输入
 ```
 
-ROS2 的 Odin1 驱动 `ros2_ws/src/odin_ros_driver` 是源码树内副本，不是子模块。
+ROS2 的 Odin1 驱动 `ros2_ws/src/odin_ros_driver` 是 [manifoldsdk/odin_ros_driver](https://github.com/manifoldsdk/odin_ros_driver/) 的源码树内副本，不是子模块。
 
 ### 2. Odin1 USB 规则
 

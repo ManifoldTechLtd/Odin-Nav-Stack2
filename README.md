@@ -150,7 +150,7 @@ git submodule update --init yolov5                       # optional: object dete
 git submodule update --init odin_rtk_fusion              # optional: RTK input
 ```
 
-The ROS2 Odin1 driver `ros2_ws/src/odin_ros_driver` is an in-tree copy, not a submodule.
+The ROS2 Odin1 driver `ros2_ws/src/odin_ros_driver` is an in-tree copy of [manifoldsdk/odin_ros_driver](https://github.com/manifoldsdk/odin_ros_driver/), not a submodule.
 
 ### 2. Odin1 USB rule
 
