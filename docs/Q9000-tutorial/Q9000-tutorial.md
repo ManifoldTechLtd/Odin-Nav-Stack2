@@ -9,7 +9,7 @@ This document walks through the complete workflow from scanning an environment w
 
 ## 1. Connect the Q9000 to Your Workstation
 
-Connect a Type-C to USB-A or Type-C to Type-C data cable between the USB-C port on the back of the Q9000 head and your computer. Once recognized, a removable USB drive will appear on your computer containing the recorded project folders.
+Connect a Type-C to USB-A or Type-C to Type-C data cable between the USB-C port on the back of the [Q9000](https://www.manifoldtech.cn/products/q9000) head and your computer. Once recognized, a removable USB drive will appear on your computer containing the recorded project folders.
 
 ![Q9000 bottom interface ports](https://i.ibb.co/prvWBS9C/09.png)
 

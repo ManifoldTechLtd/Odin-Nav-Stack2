@@ -97,23 +97,37 @@ By default the stack uses **NeuPAN** (analytic DUNE + NRMP MPC) on a global A\* 
 
 In SRU mode the stack does not plan a global path. It sends each waypoint to SRU in the odom frame, and arrival is judged by odometry distance (`sru_arrive_threshold_m` in `nav_params.yaml`, 0.7 m by default). Route segmentation, periodic replanning, recovery, and the hot path are disabled.
 
-## Run SRU on ASTRALL SW01
+## Running SRU
 
-ROS2 (SRU's ROS2 workspace contains the onnxruntime virtual environment):
+Pass `--local-planner=sru` to any platform launcher to switch from NeuPAN to the SRU policy:
 
-``` shell
-export SRU_WS_ROS2=/path/to/sru_ros2_workspace
-bash scripts/ons2_sw01.sh --local-planner=sru --map=NAME
-```
+- **Unitree Go2 (ROS1):**
+  ``` shell
+  export SRU_WS=/path/to/sru_ros1_workspace
+  bash scripts/ons2_go2.sh --local-planner=sru --map=NAME
+  # Optional: select a specific policy file with --sru-policy=FILE
+  ```
+- **ASTRALL SW01 (ROS2 or ROS1):**
+  ``` shell
+  # ROS2 (default)
+  export SRU_WS_ROS2=/path/to/sru_ros2_workspace
+  bash scripts/ons2_sw01.sh --local-planner=sru --map=NAME
 
-- Start the SRU policy node and relay via `ros2_ws/scripts/sru/start_sru_ros2.sh` and `ros2_ws/scripts/sru/sru_cmd_vel_relay.py`.
+  # ROS1
+  export SRU_WS=/path/to/sru_ros1_workspace
+  bash scripts/ons2_sw01.sh --ros1 --local-planner=sru --map=NAME
+  ```
+- **Dobot Lumo (ROS1):**
+  ``` shell
+  export SRU_WS=/path/to/sru_ros1_workspace
+  bash scripts/ons2_dobot_lumo.sh --local-planner=sru --map=NAME
+  ```
+
+Common notes:
+- On ROS2, the launcher starts the SRU policy node and velocity relay via `ros2_ws/scripts/sru/start_sru_ros2.sh` and `ros2_ws/scripts/sru/sru_cmd_vel_relay.py` (models default to `$SRU_WS_ROS2/Deployment/models`, overridable via `SRU_MODELS_DIR`).
+- On ROS1, the SRU helper defaults to `sru_nav_go2_ros1`; set `SRU_PKG` and `SRU_LAUNCH` (or configure `planner.local` in `robots/<robot>/robot.yaml`) to point to your robot's SRU package and launch file.
 - `--navigation-mode` has no effect in SRU mode.
-- Models are read from `$SRU_WS_ROS2/Deployment/models` by default (`SRU_MODELS_DIR`).
-
-- The ROS1 SRU launcher defaults to the Go2 package `sru_nav_go2_ros1`. Set `SRU_PKG` and `SRU_LAUNCH` to your robot's package and launch file.
-- On Go2, `bash scripts/ons2_go2.sh --local-planner=sru --sru-policy=FILE` also selects the model.
-
-SRU is experimental and has not yet been validated on SW01 hardware. Its output is a body-frame `Twist`, so any robot with a `/cmd_vel` bridge can use it. See [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md) for the bridge.
+- SRU outputs a body-frame `Twist`, so any robot with a `/cmd_vel` bridge can use it. See [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md).
 
 # Installation and Build
 

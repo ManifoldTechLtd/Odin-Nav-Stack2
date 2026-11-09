@@ -97,23 +97,37 @@ Unitree Go2 仅由 ROS1 栈支持。
 
 在 SRU 模式下，该栈不规划全局路径。它将每个航点以 odom 坐标系发送给 SRU，并根据里程计距离判断是否到达（`nav_params.yaml` 中的 `sru_arrive_threshold_m`，默认 0.7 m）。路线分段、周期性重规划、恢复和热路径均被禁用。
 
-## 在 ASTRALL SW01 上运行 SRU
+## 运行 SRU
 
-ROS2（SRU 的 ROS2 工作空间包含 onnxruntime 虚拟环境）：
+在任一平台启动脚本中传入 `--local-planner=sru`，即可将局部规划器从 NeuPAN 切换为 SRU 策略：
 
-``` shell
-export SRU_WS_ROS2=/path/to/sru_ros2_workspace
-bash scripts/ons2_sw01.sh --local-planner=sru --map=NAME
-```
+- **Unitree Go2（ROS1）：**
+  ``` shell
+  export SRU_WS=/path/to/sru_ros1_workspace
+  bash scripts/ons2_go2.sh --local-planner=sru --map=NAME
+  # 可选：通过 --sru-policy=FILE 指定策略模型文件
+  ```
+- **ASTRALL SW01（ROS2 或 ROS1）：**
+  ``` shell
+  # ROS2（默认）
+  export SRU_WS_ROS2=/path/to/sru_ros2_workspace
+  bash scripts/ons2_sw01.sh --local-planner=sru --map=NAME
 
-- 通过 `ros2_ws/scripts/sru/start_sru_ros2.sh` 与 `ros2_ws/scripts/sru/sru_cmd_vel_relay.py` 启动 SRU 策略节点与速度门控 relay。
+  # ROS1
+  export SRU_WS=/path/to/sru_ros1_workspace
+  bash scripts/ons2_sw01.sh --ros1 --local-planner=sru --map=NAME
+  ```
+- **Dobot Lumo（ROS1）：**
+  ``` shell
+  export SRU_WS=/path/to/sru_ros1_workspace
+  bash scripts/ons2_dobot_lumo.sh --local-planner=sru --map=NAME
+  ```
+
+通用说明：
+- 在 ROS2 下，启动脚本通过 `ros2_ws/scripts/sru/start_sru_ros2.sh` 与 `ros2_ws/scripts/sru/sru_cmd_vel_relay.py` 启动 SRU 策略节点与速度门控 relay（模型默认从 `$SRU_WS_ROS2/Deployment/models` 读取，可通过 `SRU_MODELS_DIR` 覆盖）。
+- 在 ROS1 下，SRU 启动脚本默认使用 `sru_nav_go2_ros1`；可通过设置 `SRU_PKG` 和 `SRU_LAUNCH`（或在 `robots/<robot>/robot.yaml` 的 `planner.local` 中配置）指定对应机器人的 SRU 包和 launch 文件。
 - `--navigation-mode` 在 SRU 模式下无效。
-- 模型默认从 `$SRU_WS_ROS2/Deployment/models` 读取（`SRU_MODELS_DIR`）。
-
-- ROS1 的 SRU 启动脚本默认使用 Go2 包 `sru_nav_go2_ros1`。请将 `SRU_PKG` 和 `SRU_LAUNCH` 设置为你的机器人对应的包和 launch 文件。
-- 在 Go2 上，`bash scripts/ons2_go2.sh --local-planner=sru --sru-policy=FILE` 也可用于选择模型。
-
-SRU 为实验性功能，尚未在 SW01 硬件上验证。其输出为机体坐标系下的 `Twist`，因此任何具备 `/cmd_vel` 桥接的机器人都可以使用。桥接方式见 [03 · 接入你自己的机器人](docs/usage/03_integrate_your_robot.md)。
+- SRU 输出机体坐标系下的 `Twist`，因此任何具备 `/cmd_vel` 桥接的机器人都可以使用。详见 [03 · 接入你自己的机器人](docs/usage/03_integrate_your_robot.md)。
 
 # 安装与构建
 
