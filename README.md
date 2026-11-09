@@ -91,13 +91,36 @@ By default the stack uses **NeuPAN** (analytic DUNE + NRMP MPC) on a global A\* 
 | Model | Analytic: no training for a new chassis | ONNX policy: **must be trained for your robot** |
 | Select with | Default | `--local-planner=sru` |
 
+## Running NeuPAN
+
+NeuPAN is the default local planner (`--local-planner=neupan`) and requires no neural-network training for new robot footprints:
+
+- **Unitree Go2 (ROS1):**
+  ``` shell
+  bash scripts/ons2_go2.sh --map=NAME
+  ```
+- **ASTRALL SW01 (ROS2 or ROS1):**
+  ``` shell
+  # ROS2 (default)
+  bash scripts/ons2_sw01.sh --map=NAME
+
+  # ROS1
+  bash scripts/ons2_sw01.sh --ros1 --map=NAME
+  ```
+- **Dobot Lumo (ROS1):**
+  ``` shell
+  bash scripts/ons2_dobot_lumo.sh --map=NAME
+  ```
+
+For parameter tuning (speed, footprint, safety clearance, stuck escape), see [02 · Parameter Tuning](docs/usage/02_parameter_tuning.md).
+
+## Running SRU
+
 > **SRU requires training.** The trained ONNX models (policy and VAE encoder) are **not included** in this repository. Train the policy in the SRU repository, then deploy the exported models to the SRU workspace on the robot:
 >
 > **[ManifoldTechLtd/SRU-Odin](https://github.com/ManifoldTechLtd/SRU-Odin)** — training (`Train/`), deployment (`Deployment/`), and the porting guide.
 
 In SRU mode the stack does not plan a global path. It sends each waypoint to SRU in the odom frame, and arrival is judged by odometry distance (`sru_arrive_threshold_m` in `nav_params.yaml`, 0.7 m by default). Route segmentation, periodic replanning, recovery, and the hot path are disabled.
-
-## Running SRU
 
 Pass `--local-planner=sru` to any platform launcher to switch from NeuPAN to the SRU policy:
 

@@ -91,13 +91,36 @@ Unitree Go2 仅由 ROS1 栈支持。
 | 模型 | 解析式：新底盘无需训练 | ONNX 策略：**必须针对你的机器人训练** |
 | 选择方式 | 默认 | `--local-planner=sru` |
 
+## 运行 NeuPAN
+
+NeuPAN 是默认的局部规划器（`--local-planner=neupan`），适配新机器人底盘尺寸时无需任何神经网络训练：
+
+- **Unitree Go2（ROS1）：**
+  ``` shell
+  bash scripts/ons2_go2.sh --map=NAME
+  ```
+- **ASTRALL SW01（ROS2 或 ROS1）：**
+  ``` shell
+  # ROS2（默认）
+  bash scripts/ons2_sw01.sh --map=NAME
+
+  # ROS1
+  bash scripts/ons2_sw01.sh --ros1 --map=NAME
+  ```
+- **Dobot Lumo（ROS1）：**
+  ``` shell
+  bash scripts/ons2_dobot_lumo.sh --map=NAME
+  ```
+
+参数调优（速度、底盘尺寸、安全间隙、脱困策略）请参见 [02 · 参数调优](docs/usage/02_parameter_tuning.md)。
+
+## 运行 SRU
+
 > **SRU 需要训练。** 训练好的 ONNX 模型（策略和 VAE 编码器）**不包含**在本仓库中。请在 SRU 仓库中训练策略，然后将导出的模型部署到机器人上的 SRU 工作空间：
 >
 > **[ManifoldTechLtd/SRU-Odin](https://github.com/ManifoldTechLtd/SRU-Odin)** —— 训练（`Train/`）、部署（`Deployment/`）与移植指南。
 
 在 SRU 模式下，该栈不规划全局路径。它将每个航点以 odom 坐标系发送给 SRU，并根据里程计距离判断是否到达（`nav_params.yaml` 中的 `sru_arrive_threshold_m`，默认 0.7 m）。路线分段、周期性重规划、恢复和热路径均被禁用。
-
-## 运行 SRU
 
 在任一平台启动脚本中传入 `--local-planner=sru`，即可将局部规划器从 NeuPAN 切换为 SRU 策略：
 
