@@ -1,0 +1,154 @@
+# ============================================================================
+# ONS2 Robot Profile Template (`robots/<robot>/robot.yaml`)
+# ============================================================================
+# Copy this directory (`robots/_template/`) to `robots/<your_robot>/` and fill
+# in the physical measurements and control parameters for your platform.
+#
+# How this file is consumed at runtime:
+#   - `scripts/lib/robot_profile.py` parses this file and injects the values
+#     into `ons2_bringup` (ROS 1 `go2.launch` / `dobot.launch`, or ROS 2
+#     `bringup.launch.py`).
+#   - Relative paths under `local_planner.backends.neupan.*` are resolved
+#     relative to this `robots/<your_robot>/` directory.
+# ============================================================================
+
+schema_version: 1
+name: my_robot                  # Short identifier matching the folder name `robots/<name>/`
+display_name: My Robot          # Human-readable platform name
+
+# ----------------------------------------------------------------------------
+# Coordinate Frames (REP-105 + Odin1 sensor frame)
+# ----------------------------------------------------------------------------
+frames:
+  map: map                      # Global static occupancy-grid map frame
+  odom: odom                    # Continuous odometry frame published by Odin SLAM
+  base: base_link               # Robot chassis geometric center / control pivot frame
+  sensor: odin1_base_link       # Odin1 sensor body frame
+
+# ----------------------------------------------------------------------------
+# Core ROS Topics
+# ----------------------------------------------------------------------------
+topics:
+  odom: /odin1/odometry         # nav_msgs/Odometry from Odin1 SLAM/VIO
+  scan: /scan                   # 2D LaserScan sliced from /odin1/cloud_slam by pc_to_scan
+  scan_360: /scan_360           # 360-degree accumulated virtual scan output from sliding_map
+  cmd_vel: /cmd_vel             # geometry_msgs/Twist velocity command to chassis bridge
+
+# ----------------------------------------------------------------------------
+# Robot Geometry & Sensor Extrinsics (consumed by Static TF and sliding_map)
+# ----------------------------------------------------------------------------
+geometry:
+  # Self-occlusion mask used by `sliding_map` to discard returns inside the robot body.
+  footprint:
+    mode: polygon               # `polygon` (rectangular chassis) | `radial` (circular radius)
+    length: 0.70                # [m] Chassis front-to-back length (used when mode == polygon)
+    width: 0.40                 # [m] Chassis left-to-right width (used when mode == polygon)
+    radius: 0.35                # [m] Bounding circle radius (used when mode == radial)
+    margin: 0.10                # [m] Extra safety padding around the footprint mask
+
+  # Rigid transform from `parent` (sensor frame) to `child` (robot base_link).
+  # Published as a static TF by `ons2_bringup`.
+  # Convention: if Odin1 is mounted 0.30 m ahead of base_link, then base_link
+  # is at x = -0.30 m in the `odin1_base_link` frame.
+  sensor_mount:
+    parent: odin1_base_link
+    child: base_link
+    x: -0.30                    # [m] Translation along sensor +X (forward)
+    y: 0.0                      # [m] Translation along sensor +Y (left)
+    z: 0.0                      # [m] Translation along sensor +Z (up)
+    yaw: 0.0                    # [rad] Yaw rotation from parent to child around +Z
+
+  supports_strafe: false        # true if the chassis supports lateral vy commands (holonomic/quadruped)
+
+# ----------------------------------------------------------------------------
+# Chassis Velocity Bridge Configuration
+# ----------------------------------------------------------------------------
+bridge:
+  common:
+    cmd_vel_topic: /cmd_vel     # Input Twist topic subscribed by the chassis bridge
+    max_linear_vel: 0.50        # [m/s] Hardware forward velocity clamp
+    max_angular_vel: 0.80       # [rad/s] Hardware yaw-rate clamp
+    cmd_vel_timeout: 0.50       # [s] Watchdog timeout before zeroing chassis velocity
+  ros1:
+    package: my_robot_control   # ROS 1 package providing the chassis bridge
+    launch: my_robot_control.launch
+  # Uncomment if the platform has a ROS 2 chassis bridge:
+  # ros2:
+  #   package: my_robot_control
+  #   launch: my_robot_control.launch.py
+  #   cmd_vel_topic: /cmd_vel
+  native: {}                    # Optional SDK-specific parameters (IP, ports, deadbands, FSM IDs)
+
+# ----------------------------------------------------------------------------
+# Global Planner (`map_planner`) & PointCloud-to-LaserScan (`pc_to_scan`)
+# ----------------------------------------------------------------------------
+navigation:
+  # --- map_planner (2D A* global path planner) ---
+  inflation_radius: 0.30            # [m] Hard obstacle inflation radius (impassable zone; set >= inscribed radius)
+  obstacle_cost_safe_distance: 0.60 # [m] Soft proximity cost decay radius (pushes paths away from walls)
+  obstacle_cost_weight: 5.0         # Dimensionless weight for soft obstacle proximity cost in A*
+  line_of_sight_safe_distance: 0.30 # [m] Minimum obstacle clearance required during path shortcutting
+  smoothing_iterations: 30          # Number of iterative path smoothing passes
+  smoothing_max_deviation_m: 0.30   # [m] Maximum allowed displacement from raw A* path during smoothing
+
+  # --- pc_to_scan (3D SLAM point cloud height slice -> 2D /scan) ---
+  min_height: -0.20                 # [m] Lower Z bound in `odin1_base_link` frame (above floor, below obstacles)
+  max_height: 0.30                  # [m] Upper Z bound in `odin1_base_link` frame
+
+  # --- Default runtime mode ---
+  local_planner: neupan             # Active local planner backend (`neupan`)
+  navigation_mode: replan_periodic  # `replan_periodic` | `escape` | `neupan_only`
+  periodic_replan_sec: 2.0          # [s] Global A* periodic replanning interval when in `replan_periodic` mode
+
+# ----------------------------------------------------------------------------
+# Mission Manager Parameters (`mission_manager`)
+# ----------------------------------------------------------------------------
+mission:
+  enable_alignment: true            # Run closed-loop final yaw alignment via `atomic_move` upon arrival
+  angular_tolerance: 0.3491         # [rad] Heading error tolerance (~20 deg) before triggering alignment
+  route_segment_enable: true        # Split long global paths into overlapping sub-segments
+  route_segment_length_m: 10.0      # [m] Sub-segment length for long-distance missions
+  route_segment_overlap_m: 3.0      # [m] Overlap distance between consecutive sub-segments
+
+# ----------------------------------------------------------------------------
+# Global Planner Backends
+# ----------------------------------------------------------------------------
+# `backend` selects the active global planner key under `backends:`:
+#   - `map_planner` (default): Built-in 2D occupancy-grid A* global planner.
+#   - `<custom>`             : Any user-defined global planner key under `backends:`.
+#                              Must provide the `/map_planner/plan` (`nav_interfaces/srv/PlanPath`)
+#                              service. If `package` and `launch` are provided, `ons2_bringup`
+#                              launches it automatically (ROS 1 & ROS 2); if omitted,
+#                              `ons2_bringup` leaves global planner startup to the user.
+global_planner:
+  backend: map_planner
+  backends:
+    map_planner:
+      plan_service: /map_planner/plan
+
+# ----------------------------------------------------------------------------
+# Local Planner Backends
+# ----------------------------------------------------------------------------
+# `backend` selects the active local planner key under `backends:`:
+#   - `neupan` (default): Built-in NeuPAN MPC + DUNE local planner.
+#   - `<custom>`        : Any user-defined planner key under `backends:`.
+#                         Set `interface.mode` to `action` (tracks global A* path)
+#                         or `goal_pose` (receives PoseStamped target directly).
+#                         If `package` and `launch` are provided, `ons2_bringup`
+#                         launches it automatically (ROS 1 & ROS 2); if omitted,
+#                         `ons2_bringup` leaves local planner startup to the user.
+local_planner:
+  backend: neupan
+  backends:
+    neupan:
+      interface:
+        mode: action                      # `action` (tracks global A* path via navPath action) | `goal_pose`
+        path_topic: /initial_path         # Global reference path topic from `map_planner`
+        scan_topic: /scan_360             # Obstacle scan input (`/scan` or `/scan_360`)
+        odom_topic: /odin1/odometry       # Odometry input
+        cmd_vel_topic: /cmd_vel           # Velocity command output
+        nav_path_action: /neupan/nav_path # Action server name called by `mission_manager`
+        stop_topic: /neupan/stop          # Emergency stop topic
+      # Paths below are resolved relative to `robots/<your_robot>/`:
+      config: neupan/config.yaml          # NeuPAN ROS node wrapper configuration
+      planner: neupan/planner.yaml        # NeuPAN MPC kinematics, DUNE weights & NRMP solver config

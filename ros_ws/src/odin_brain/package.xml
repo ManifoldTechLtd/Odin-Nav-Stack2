@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<!--
+  Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<package format="2">
+  <name>odin_brain</name>
+  <version>0.1.0</version>
+  <description>
+    Natural-language task layer on top of the navigation stack (ROS1 / Noetic).
+    One Chinese sentence -> ordered waypoints -> /waypoint_manager/start_mission.
+    The core (place store / planner / LLM client / executor) has no ROS dependency;
+    only ros1_nav.py, node.py and place_tool.record touch ROS.
+  </description>
+  <maintainer email="yuhaowen@manifoldtech.cn">Haowen Yu</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>rospy</depend>
+  <depend>nav_interfaces</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>tf2_ros</depend>
+
+  <export/>
+</package>

@@ -1,0 +1,99 @@
+.vscode/
+.venv/
+bags/
+*.bag
+maps/
+.windsurf/
+dev_docs/
+.qoder/
+.agents/
+go2_logs/
+bag_review/
+
+frontend_delivery.zip
+frontend_delivery/
+delivery/
+.gate_tmp/
+docs/media/ddr_opt_diag_20261020/
+docs/qoder_memory_export_20261012(璇玑巡检对话)/
+log/
+inspection_map_save/
+deployment_package/go2_nx_backup_20260810_122256.tar.gz
+NeuPAN/neupan_pdf_md/neupan/auto
+NeuPAN/example/sw01_bench/results
+NX_BACKUP_20260826
+NeuPAN/example/sw01_bench/animation_buffer
+NeuPAN/example/sw01_bench/.tmp
+# docs/design/留形端到端导航
+docs/design/帧间滤波处理方案
+# docs/design/bag分析
+# docs/design/figures
+NeuPAN/animation
+docs/design/gifs审核
+# sw01_bench 一次性评估批脚本（c1_regress/sweep_n1/gif_review/*_verify 等，2026-09-07 用户要求不入库）
+NeuPAN/example/sw01_bench/*.sh
+NeuPAN/animation_buffer
+docs/archive/*
+# MT-Real2Sim-Tutorial: 独立 git 仓库（Isaac 仿真教程），禁止提交进 base_inspection
+MT-Real2Sim-Tutorial/
+
+# 第三方厂商 SDK / 资料镜像（体积大且非本仓代码，整目录不入库）
+/third_party/
+
+# 构建/打包/测试产物（2026-09-22 清理，不入库）
+release_out/
+ota_artifacts/
+__pycache__/
+*.pyc
+
+# Qoder 记忆导出（工作区迁移用，本地保留不入库；如需随仓库保留请删除本行）
+docs/qoder_memory_export_20260929/
+
+# ============================================================
+# AL-iLQR 栈：2026-10-12 迁至 feature/al-ilqr-navigation 分支开发，
+# ros2-jazzy 不再跟踪（索引已移除，磁盘文件保留供本地仿真）。
+# ============================================================
+scripts/al_ilqr_sim_up.sh
+ros2_ws/src/al_ilqr_ros2/
+ros2_ws/src/hybrid_corridor_ros2/
+ros2_ws/src/local_voxel_map/
+ros2_ws/src/rog_map_ros2/
+ros2_ws/src/sim_bridge_ros2/
+ros2_ws/src/terrain_corridor/
+ros2_ws/src/terrain_map_msgs/
+ros2_ws/src/topo_planner_ros2/
+ros2_ws/third_party/al_ilqr_core/
+scripts/sim_bench/
+ros2_ws/scripts/mock_depth_publisher.py
+# 拓扑规划（LeoDeng/topo_planning 独立仓库，417M pcd 不入库）
+topo/
+
+# ilqr 相关文档（ros2-jazzy 不跟踪；feature 分支已跟踪的不受影响）
+docs/design/*AL-iLQR*
+docs/design/2.5D体素走廊*
+docs/ops/仿真2.5D_AL-iLQR*
+docs/alilqr-report/
+
+# mt28 hardware captures; only small reviewed summaries belong in docs/media.
+/.gate_tmp/cloud_filter_mt28_20261016/
+.tmp_feishu_err.txt
+.gate_tmp/
+customer_file/
+logs/
+
+# 按约定不入库：DDR-opt 算法调试线、第三方资料镜像
+/DDR-opt/
+
+# o1l 厂商驱动包（132MB，从 ros_driver_*.tar.xz 解压落位，与 third_party 同口径不入库）
+ros_ws/src/odin_ros_driver_rev1/
+
+# ── 2026-11-03 补充（第七版稳定版收口时发现的未入库大件/工具产物）──
+# ROS2 第三方算法镜像（358MB/1117 文件，与 /third_party/ 同口径不入库）
+ros2_ws/third_party/
+# aoci 工具产物
+.aoci/
+aoci.txt
+aoci.code.txt
+aoci.meta.txt
+# 参考论文（7.9MB，非本仓资产）
+NeuPAN/nerobem.pdf

@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!--
+  Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!--
+  SRU node topic wiring launch file for ROS1 Go2:
+  1) Routes goal and velocity topics through /sru/goal_pose and /sru/cmd_vel (for sru_cmd_vel_relay gating).
+  2) Forwards SRU_VAE_MODEL and SRU_POLICY_MODEL environment variables when set.
+-->
+<launch>
+  <arg name="sim"              default="false"/>
+  <arg name="require_joystick" default="false"/>
+
+  <node pkg="sru_nav_go2_ros1" type="sru_nav_node" name="sru_nav_node"
+        output="screen" required="true">
+    <rosparam command="load" file="$(find sru_nav_go2_ros1)/config/sru_nav.yaml"/>
+    <param name="use_sim"          value="$(arg sim)"/>
+    <param name="require_joystick" value="$(arg require_joystick)"/>
+    <param name="goal_topic"       value="/sru/goal_pose"/>
+    <param name="cmd_vel_topic"    value="/sru/cmd_vel"/>
+    <param name="vae_model_path"    value="$(optenv SRU_VAE_MODEL '')"/>
+    <param name="policy_model_path" value="$(optenv SRU_POLICY_MODEL '')"/>
+  </node>
+</launch>

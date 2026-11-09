@@ -1,0 +1,52 @@
+# Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#   http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# atomic_move parameters (ROS 2).
+# Node name must match the launch node name (atomic_move) so private services
+# resolve to /atomic_move/move, /atomic_move/turn, and /atomic_move/align.
+/atomic_move:
+  ros__parameters:
+    # Coordinate frames and control loop rate
+    control_frame: map
+    base_frame: base_link
+    control_frequency: 20.0
+    stuck_timeout: 2.0
+
+    # Linear motion (/atomic_move/move)
+    linear_kp: 1.0
+    linear_ki: 0.02
+    linear_kd: 0.02
+    linear_max_vel: 0.5
+    linear_min_vel: 0.15
+    linear_tolerance: 0.20
+    linear_max_duration: 30.0
+    linear_fine_window: 0.12
+    linear_pulse_duration: 0.08
+    linear_settle_duration: 0.15
+    linear_stuck_tolerance: 0.01
+
+    # In-place rotation (/atomic_move/turn)
+    angular_kp: 1.0
+    angular_ki: 0.01
+    angular_kd: 0.03
+    angular_max_vel: 1.0
+    angular_min_vel: 0.45
+    angular_tolerance: 0.3491        # 20 deg: lower bound for clean in-place turns
+    angular_fine_window: 0.35
+    angular_pulse_duration: 0.08
+    angular_settle_duration: 0.15
+    angular_max_duration: 30.0
+    angular_kick_duration: 0.25
+    angular_stuck_tolerance: 0.03    # Above stationary SLAM yaw jitter floor (~0.018 rad)
+
+    # Final waypoint alignment (/atomic_move/align)
+    alignment_heading_tolerance: 0.35
+    alignment_max_duration: 20.0

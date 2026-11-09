@@ -1,0 +1,10 @@
+string state
+string mission_id
+uint32 current_waypoint_idx
+uint32 total_waypoints
+geometry_msgs/Pose current_target
+float64 dwell_remaining_sec
+float64 progress_percent
+float64 distance_to_target_m
+float64 linear_vel
+float64 angular_vel

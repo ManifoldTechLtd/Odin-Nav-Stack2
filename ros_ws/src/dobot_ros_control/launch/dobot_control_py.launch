@@ -1,0 +1,32 @@
+<launch>
+  <!-- Dobot Lumo chassis velocity bridge (Python JSON-RPC implementation).
+       Deadbands: linear 0.43 m/s, angular 0.40 rad/s (below_deadband_policy=boost).
+  -->
+  <arg name="robot_ip"         default="192.168.5.2"/>
+  <arg name="robot_port"       default="51234"/>
+  <arg name="rate"             default="20.0"/>
+  <arg name="deadband_lin"     default="0.43"/>
+  <arg name="deadband_ang"     default="0.40"/>
+  <arg name="deadband_policy"  default="boost"/>
+  <arg name="setvel_duration"  default="1.0"/>
+  <arg name="max_linear_vel"   default="1.0"/>
+  <arg name="dry_run"          default="true"/>
+  <arg name="allow_walk_switch" default="false"/>
+  <arg name="cmd_vel_topic"    default="/cmd_vel"/>
+
+  <node pkg="dobot_ros_control" type="dobot_vel_bridge.py" name="dobot_vel_bridge" output="screen"
+        respawn="true" respawn_delay="3">
+    <remap from="/cmd_vel" to="$(arg cmd_vel_topic)"/>
+    <param name="robot_ip"             value="$(arg robot_ip)"/>
+    <param name="dry_run"              value="$(arg dry_run)"/>
+    <param name="robot_port"           value="$(arg robot_port)"/>
+    <param name="rate"                 value="$(arg rate)"/>
+    <param name="deadband_lin"         value="$(arg deadband_lin)"/>
+    <param name="deadband_ang"         value="$(arg deadband_ang)"/>
+    <param name="below_deadband_policy" value="$(arg deadband_policy)"/>
+    <param name="setvel_duration_s"    value="$(arg setvel_duration)"/>
+    <param name="max_linear_vel"       value="$(arg max_linear_vel)"/>
+    <param name="allow_walk_switch"    value="$(arg allow_walk_switch)"/>
+    <param name="state_topic"          value="/base/state"/>
+  </node>
+</launch>

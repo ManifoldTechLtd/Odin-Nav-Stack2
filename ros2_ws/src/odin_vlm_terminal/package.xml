@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!--
+  Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<package format="3">
+  <name>odin_vlm_terminal</name>
+  <version>0.1.0</version>
+  <description>Terminal VLM client over Odin images + local llama-server (ROS2 Jazzy port).</description>
+  <maintainer email="yuhaowen@manifoldtech.cn">Manifold Tech Ltd.</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>cv_bridge</depend>
+  <exec_depend>python3-opencv</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-requests</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

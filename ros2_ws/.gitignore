@@ -1,0 +1,8 @@
+# ROS2 (colcon) 构建产物：不入库（本机与 NUC 各自构建）
+build/
+install/
+log/
+
+# Python 缓存
+__pycache__/
+*.pyc

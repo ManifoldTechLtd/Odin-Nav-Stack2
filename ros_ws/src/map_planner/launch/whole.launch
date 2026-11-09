@@ -1,0 +1,118 @@
+<!--
+  Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<launch>
+  <!-- Increase send_buffer_limit to 200MB so large OccupancyGrid maps are not dropped. -->
+  <include file="$(find foxglove_bridge)/launch/foxglove_bridge.launch">
+    <arg name="port" default="8765" />
+    <arg name="send_buffer_limit" value="200000000" />
+  </include>
+
+  <arg name="map_topic" default="/map" />
+  <!-- Set MAP_FILE_NAME in scripts/start_map_planner.sh; this default placeholder
+       ensures map_server fails fast if launched without specifying a map. -->
+  <arg name="map_file_name" default="__SET_MAP_NAME_IN_start_map_planner.sh__" />
+  <arg name="goal_topic" default="/move_base_simple/goal" />
+  <arg name="path_topic" default="/initial_path" />
+  <arg name="service_name" default="/map_planner/plan" />
+  <arg name="inflated_map_topic" default="/inflated_map" />
+  <arg name="publish_path" default="true" />
+  <arg name="arrive_topic" default="/neupan/arrive" />
+  <arg name="use_sliding_map" default="true" />
+  <arg name="sliding_map_cell_decay_sec" default="8.0" />
+  <arg name="sliding_map_footprint_radius_m" default="0.35" />
+  <!-- cloud_slam 帧间滤波：off 不启动；shadow 仅旁路对比；
+       on 由 start_map_planner.sh 同时把 scan_cloud_topic 切到 /odin1/cloud_filtered -->
+  <arg name="cloud_filter_mode" default="off" />
+  <arg name="scan_cloud_topic" default="/odin1/cloud_slam" />
+
+  <!-- Map Server -->
+  <node pkg="map_server" type="map_server" name="map_server" output="screen"
+        args="$(find map_planner)/maps/$(arg map_file_name).yaml">
+    <remap from="/map" to="$(arg map_topic)" />
+  </node>
+
+  <arg name="obstacle_cost_weight" default="3.0" />
+  <arg name="start_heading_penalty_weight" default="2.0" />
+  <arg name="start_heading_penalty_radius_m" default="1.0" />
+
+  <!-- Map A* Planner -->
+  <node pkg="map_planner" type="map_planner" name="map_planner" output="screen">
+    <!-- Exposed as a rosparam so external tools can query the active map name. -->
+    <param name="map_file_name" value="$(arg map_file_name)" />
+    <rosparam file="$(find map_planner)/config/nav_params.yaml" command="load" />
+    <param name="obstacle_cost_weight" value="$(arg obstacle_cost_weight)" />
+    <remap from="map" to="$(arg map_topic)" />
+    <remap from="/move_base_simple/goal" to="$(arg goal_topic)" />
+    <remap from="initial_path" to="$(arg path_topic)" />
+    <remap from="inflated_map" to="$(arg inflated_map_topic)" />
+  </node>
+
+  <!-- Static TF (identity transform from imu to odin1_base_link for SDK compatibility) -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="imu_to_odin1_base"
+        args="0 0 0 0 0 0 imu odin1_base_link" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="odin1_to_base"
+        args="-0.3 0 0 0 0 0 odin1_base_link base_link" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="odin1_to_lidar"
+        args="0.00347 0.03447 0.02174 0 0 0 1 odin1_base_link odin1_lidar_link" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="lidar_to_camera"
+        args="0.02055 0.0004 -0.00735 0.497 -0.499 0.499 0.504 odin1_lidar_link odin1_camera_link" />
+  
+  <!-- Unitree Control -->
+  <node pkg="unitree_control" type="unitree_vel_controller" name="vel_to_sdk"/>
+
+  <!-- cloud_slam 帧间滤波（SW01 语义：精确时间戳 TF，查不到原样透传） -->
+  <node pkg="map_planner" type="odin_slam_temporal_filter.py" name="odin_cloud_temporal_filter"
+        output="screen" if="$(eval arg('cloud_filter_mode') in ['shadow','on'])">
+    <param name="input_topic" value="/odin1/cloud_slam" />
+    <param name="output_topic" value="/odin1/cloud_filtered" />
+    <param name="fixed_frame" value="odom" />
+    <param name="reference_frame" value="lidar" />
+    <param name="expected_input_frame" value="odom" />
+    <param name="roi_radius_m" value="0.8" />
+    <param name="voxel_size_m" value="0.03" />
+    <param name="min_range_drop_m" value="0.10" />
+  </node>
+
+  <!-- Pointcloud to LaserScan -->
+  <node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node" name="pc_to_scan" output="screen">
+    <param name="target_frame"        value="odin1_base_link"/>
+    <param name="transform_tolerance" value="0.1"/>
+
+    <rosparam file="$(find map_planner)/config/nav_params.yaml" command="load" />
+
+    <param name="angle_min"           value="-0.7853"/>
+    <param name="angle_max"           value="0.7853"/>
+    <param name="angle_increment"     value="0.017"/>
+    <param name="scan_time"           value="0.1"/>
+
+    <param name="range_min"           value="0.2"/>
+    <param name="range_max"           value="5.0"/>
+
+    <remap from="cloud_in" to="$(arg scan_cloud_topic)"/>
+    <remap from="scan"     to="/scan"/>
+  </node>
+
+  <!-- Sliding map 360 scan -->
+  <node pkg="sliding_map" type="sliding_map_node" name="sliding_map_node" output="screen"
+        if="$(arg use_sliding_map)">
+    <param name="map_frame" value="odom" />
+    <param name="cell_decay_sec" value="$(arg sliding_map_cell_decay_sec)" />
+    <param name="base_frame" value="odin1_base_link" />
+    <param name="input_scan_topic" value="/scan" />
+    <param name="cell_decay_sec" value="$(arg sliding_map_cell_decay_sec)" />
+    <param name="range_min" value="0.05" />
+    <param name="resolution" value="0.05" />
+    <param name="width" value="400" />
+    <param name="height" value="400" />
+  </node>
+</launch>

@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="map_file_name" default="map_opt"/>
+  <arg name="map_topic" default="/map"/>
+
+  <node pkg="map_server" type="map_server" name="map_server" output="screen"
+        args="$(find map_planner)/maps/$(arg map_file_name).yaml">
+    <remap from="/map" to="$(arg map_topic)"/>
+  </node>
+</launch>

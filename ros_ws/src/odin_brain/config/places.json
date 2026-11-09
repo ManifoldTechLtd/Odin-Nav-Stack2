@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "map_id": "map_opt",
+  "frame_id": "map",
+  "updated_at": "2026-10-23T16:00:00",
+  "places": [
+    {
+      "id": "office.toilet",
+      "name": "厕所",
+      "aliases": ["卫生间", "洗手间", "WC"],
+      "pose": {"x": 1.0, "y": 2.0, "yaw": 0.0},
+      "dwell_default_sec": 0.0,
+      "map_id": "map_opt",
+      "notes": "示例模板坐标（运行时优先读取 ~/.config/odin_brain/places.json）"
+    },
+    {
+      "id": "office.seat_a",
+      "name": "小A工位",
+      "aliases": ["小A", "A工位"],
+      "pose": {"x": 3.0, "y": 4.0, "yaw": 1.57},
+      "dwell_default_sec": 0.0,
+      "map_id": "map_opt",
+      "notes": "示例模板坐标"
+    },
+    {
+      "id": "office.meeting",
+      "name": "会议室",
+      "aliases": ["大会议室"],
+      "pose": {"x": 5.0, "y": 6.0, "yaw": 0.0},
+      "dwell_default_sec": 0.0,
+      "map_id": "map_opt",
+      "notes": "示例模板坐标"
+    }
+  ]
+}

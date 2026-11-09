@@ -1,0 +1,29 @@
+# Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#   http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SLAM navigation filtering is opt-in: --cloud-filter=on (default: off).
+# Voxel persistence + near-field blind-spot point cloud filter (single-threaded subscription to cloud_slam and odometry).
+odin_cloud_temporal_filter:
+  ros__parameters:
+    enable: true
+    input: /odin1/cloud_slam
+    odom: /odin1/odometry
+    output_topic: /odin1/cloud_filtered
+    single_shot_topic: ~/cloud_single_shot
+    near_topic: ~/cloud_near
+    trace_topic: /odin_cloud_temporal_filter/trace
+    expected_input_frame: odom
+    res: 0.02
+    window: 5
+    persist: 2
+    near_radius: 0.5
+    active_radius: 2.0
+    log_period_sec: 2.0

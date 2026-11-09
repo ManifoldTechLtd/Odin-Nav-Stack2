@@ -1,0 +1,180 @@
+#!/usr/bin/python3
+# Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#   http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Self-check utility for the odin_brain LLM endpoint (validates multi-step JSON parsing and latency)."""
+
+import argparse
+import json
+import os
+import statistics
+import sys
+import time
+from typing import List, Optional
+
+try:
+    from odin_brain.llm_client import LLMClient, LLMConfig, LLMError, load_llm_env
+    from odin_brain.places import PlaceError, PlaceStore
+except ImportError:  # pragma: no cover
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+    from odin_brain.llm_client import LLMClient, LLMConfig, LLMError, load_llm_env
+    from odin_brain.places import PlaceError, PlaceStore
+
+DEFAULT_PLACES = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "..", "config", "places.json")
+
+# (input_text, expected_place_names, expected_dwell_seconds)
+CASES = [
+    ("去厕所", ["厕所"], [0]),
+    ("先去厕所待五秒，然后再去小A工位", ["厕所", "小A工位"], [5, 0]),
+    ("带我去卫生间", ["厕所"], [0]),
+    ("去厕所，等3秒，再去会议室", ["厕所", "会议室"], [3, 0]),
+    ("带我去会议室", ["会议室"], [0]),
+]
+
+
+def _mask(secret: str) -> str:
+    if not secret:
+        return "(空)"
+    if len(secret) <= 8:
+        return secret[:2] + "***"
+    return secret[:6] + "..." + secret[-4:]
+
+
+def _check_case(client: LLMClient, store: PlaceStore, text: str,
+                want_places: List[str], want_dwell: List[float]):
+    started = time.time()
+    try:
+        plan = client.plan(text, store)
+    except LLMError as exc:
+        return False, "调用失败：%s" % exc, 0.0
+    except Exception as exc:
+        return False, "异常：%s" % exc, 0.0
+    elapsed = time.time() - started
+
+    got_places = []
+    got_dwell = []
+    for step in plan.steps:
+        if step.kind == "home":
+            got_places.append("<home>")
+            got_dwell.append(0.0)
+        else:
+            got_places.append(step.place.name if step.place else "?")
+            got_dwell.append(float(step.dwell_sec))
+
+    ok = got_places == want_places
+    if ok:
+        for got, want in zip(got_dwell, want_dwell):
+            if abs(got - want) > 0.51:
+                ok = False
+                break
+    detail = "地点 %s%s 停留 %s" % (
+        got_places,
+        "" if got_places == want_places else "（期望 %s）" % want_places,
+        ["%.0fs" % value for value in got_dwell],
+    )
+    return ok, detail, elapsed
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(prog="check_llm", description="LLM 端点自检")
+    parser.add_argument("--places", default="", help="地点库路径")
+    parser.add_argument("--base-url", default="", help="覆盖 ODIN_LLM_BASE_URL")
+    parser.add_argument("--api-key", default="", help="覆盖 ODIN_LLM_API_KEY")
+    parser.add_argument("--model", default="", help="覆盖 ODIN_LLM_MODEL")
+    parser.add_argument("--rounds", type=int, default=1, help="重复轮数（每轮 5 条）")
+    parser.add_argument("--json", action="store_true", help="以 JSON 输出结果")
+    args = parser.parse_args(argv)
+
+    env_file = load_llm_env()
+    if args.base_url:
+        os.environ["ODIN_LLM_BASE_URL"] = args.base_url
+    if args.api_key:
+        os.environ["ODIN_LLM_API_KEY"] = args.api_key
+    if args.model:
+        os.environ["ODIN_LLM_MODEL"] = args.model
+
+    config = LLMConfig.from_env()
+    if not config.enabled:
+        print("[fail] 未配置：需要 ODIN_LLM_BASE_URL 与 ODIN_LLM_MODEL（或用 --base-url/--model）")
+        print("       配置文件位置（自动读取）：~/.config/odin_brain/llm.env")
+        return 2
+
+    print("=== 配置 ===")
+    print("配置文件   : %s" % (env_file or "(未使用配置文件，仅环境变量)"))
+    print("base_url   : %s" % config.base_url)
+    print("model      : %s" % config.model)
+    print("api_key    : %s" % _mask(config.api_key))
+    print("timeout    : %.0fs" % config.timeout_sec)
+
+    places_path = args.places or os.environ.get("ODIN_BRAIN_PLACES", "") or DEFAULT_PLACES
+    places_path = os.path.abspath(places_path)
+    try:
+        store = PlaceStore(places_path)
+    except PlaceError as exc:
+        print("[fail] 地点库读取失败：%s" % exc)
+        return 2
+    print("地点库     : %s（map_id=%s，%d 个地点）" % (places_path, store.map_id, len(store.places)))
+
+    client = LLMClient(config)
+    print("\n=== 连通性 ===")
+    started = time.time()
+    try:
+        client.plan("去厕所", store)
+        print("首次调用 : OK（%.2fs）" % (time.time() - started))
+    except LLMError as exc:
+        print("首次调用 : 失败 — %s" % exc)
+        print("\n可能原因：key 无效 / 模型名不对 / 端点路径不是 /v1 风格 / 网络不可达")
+        return 2
+
+    print("\n=== 解析用例（每轮 %d 条）===" % len(CASES))
+    results = []
+    latencies = []
+    total_ok = 0
+    total = 0
+    for round_index in range(max(1, args.rounds)):
+        if args.rounds > 1:
+            print("-- 第 %d 轮 --" % (round_index + 1))
+        for text, want_places, want_dwell in CASES:
+            ok, detail, elapsed = _check_case(client, store, text, want_places, want_dwell)
+            total += 1
+            total_ok += 1 if ok else 0
+            if elapsed > 0:
+                latencies.append(elapsed)
+            results.append({"text": text, "ok": ok, "detail": detail,
+                            "latency_ms": int(elapsed * 1000)})
+            print("  %s  %-24s %s  %5.0fms  %s" % (
+                "PASS" if ok else "FAIL", text, "", elapsed * 1000, detail))
+
+    print("\n=== 汇总 ===")
+    rate = 100.0 * total_ok / total if total else 0.0
+    print("通过率     : %d/%d（%.0f%%）" % (total_ok, total, rate))
+    if latencies:
+        p50 = statistics.median(latencies)
+        p95 = sorted(latencies)[max(0, int(len(latencies) * 0.95) - 1)]
+        print("延迟       : P50=%.0fms  P95=%.0fms  max=%.0fms" % (
+            p50 * 1000, p95 * 1000, max(latencies) * 1000))
+    verdict = "可用" if rate >= 90.0 else ("勉强可用（建议换模型）" if rate >= 70.0 else "不可用")
+    print("结论       : %s" % verdict)
+    if rate < 100.0:
+        print("建议       : 先看 FAIL 行；若多为 JSON 格式问题，换支持 structured output 的模型；")
+        print("             若未命中地点，检查模型是否严格按地点清单输出 name。")
+
+    if args.json:
+        print(json.dumps({"rate": rate, "ok": total_ok, "total": total,
+                          "latency_ms": [int(value * 1000) for value in latencies],
+                          "cases": results}, ensure_ascii=False, indent=2))
+
+    return 0 if total_ok == total else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

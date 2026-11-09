@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="cell_decay_sec" default="8.0"/>
+  <arg name="use_footprint_polygon" default="false"/>
+  <arg name="footprint_radius_m" default="0.35"/>
+  <arg name="footprint_length_m" default="0.0"/>
+  <arg name="footprint_width_m" default="0.0"/>
+  <arg name="footprint_margin_m" default="0.10"/>
+  <arg name="follow_target_enable" default="false"/>
+
+  <node pkg="sliding_map" type="sliding_map_node" name="sliding_map_node" output="screen"
+        respawn="true" respawn_delay="3">
+    <param name="map_frame" value="odom"/>
+    <param name="cell_decay_sec" value="$(arg cell_decay_sec)"/>
+    <param name="base_frame" value="odin1_base_link"/>
+    <param name="input_scan_topic" value="/scan"/>
+    <param name="range_min" value="0.05"/>
+    <param name="resolution" value="0.05"/>
+    <param name="width" value="400"/>
+    <param name="height" value="400"/>
+    <param name="use_footprint_polygon" value="$(arg use_footprint_polygon)"/>
+    <param name="footprint_radius_m" value="$(arg footprint_radius_m)"/>
+    <param if="$(arg use_footprint_polygon)" name="footprint_frame" value="base_link"/>
+    <param if="$(arg use_footprint_polygon)" name="footprint_length_m" value="$(arg footprint_length_m)"/>
+    <param if="$(arg use_footprint_polygon)" name="footprint_width_m" value="$(arg footprint_width_m)"/>
+    <param if="$(arg use_footprint_polygon)" name="footprint_margin_m" value="$(arg footprint_margin_m)"/>
+    <param if="$(arg use_footprint_polygon)" name="trace_period_sec" value="5.0"/>
+    <param if="$(arg use_footprint_polygon)" name="follow_target_enable" value="$(arg follow_target_enable)"/>
+    <param if="$(arg use_footprint_polygon)" name="follow_target_topic" value="/waypoint_manager/follow_target"/>
+    <param if="$(arg use_footprint_polygon)" name="dynamic_goal_topic" value="/waypoint_manager/dynamic_goal"/>
+    <param if="$(arg use_footprint_polygon)" name="follow_stale_sec" value="2.0"/>
+  </node>
+</launch>

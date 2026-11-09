@@ -1,0 +1,18 @@
+# Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#   http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# System-wide health status published on /system_health (transient_local).
+# Monitored nodes: odin / odin_cloud / relocalization / map_planner /
+#                  bridge / neupan / mission_manager
+builtin_interfaces/Time stamp  # Generation timestamp
+bool all_ok                    # True when all monitored nodes report OK
+NodeStatus[] nodes             # Per-node health entries (see NodeStatus.msg)
+string system_note             # Optional system-level diagnostic note

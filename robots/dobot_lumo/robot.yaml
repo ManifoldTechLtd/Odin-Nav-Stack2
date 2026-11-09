@@ -1,0 +1,130 @@
+schema_version: 1
+name: dobot_lumo
+display_name: Dobot Lumo
+
+frames:
+  map: map
+  odom: odom
+  base: base_link
+  sensor: odin1_base_link
+
+topics:
+  odom: /odin1/odometry
+  scan: /scan
+  scan_360: /scan_360
+  cmd_vel: /cmd_vel
+
+geometry:
+  footprint:
+    # Compatibility values copied from the legacy SW01 bringup; replace after Dobot Lumo hardware calibration.
+    mode: polygon
+    length: 0.96
+    width: 0.55
+    margin: 0.10
+  sensor_mount:
+    # Compatibility values copied from the legacy SW01 bringup; replace after Dobot Lumo hardware calibration.
+    parent: odin1_base_link
+    child: base_link
+    x: -0.42
+    y: 0.0
+    z: 0.12
+    yaw: 0.0
+  supports_strafe: false
+
+bridge:
+  common:
+    cmd_vel_topic: /cmd_vel
+    max_linear_vel: 1.0
+    max_angular_vel: 1.0
+    cmd_vel_timeout: 0.5
+  ros1:
+    package: dobot_ros_control
+    launch: dobot_control_py.launch
+    backend: python
+    dry_run: true
+    allow_walk_switch: false
+  native:
+    max_linear_backward: 0.5
+    cmd_vel_decay_window: 0.2
+    setvel_duration_s: 1.0
+    connection:
+      robot_ip: 192.168.5.2
+      robot_port: 51234
+      rpc_timeout: 1.0
+    deadband:
+      linear: 0.43
+      angular: 0.40
+      policy: boost
+    rates:
+      control_rate: 20.0
+      fsm_watch_hz: 2.0
+    fsm:
+      damping: 1
+      prepare: 100
+      standing: 300
+      walk: 304
+      require_walk_state: true
+      forbidden: "1,2,100,310,311,312,313"
+      switch_guard_ms: 800
+    action:
+      topic: /dobot/action
+      requires_standing: true
+      max_sec: 30.0
+      poll_hz: 5.0
+    topics:
+      estop: /estop
+      state: /base/state
+      reset: /dobot/reset
+
+navigation:
+  # Compatibility values copied from the legacy SW01 nav_params_sw01.yaml / whole_astrall.launch; replace after Dobot Lumo calibration.
+  inflation_radius: 0.35
+  obstacle_cost_safe_distance: 0.80
+  obstacle_cost_weight: 8.0
+  line_of_sight_safe_distance: 0.35
+  smoothing_iterations: 40
+  smoothing_max_deviation_m: 0.35
+  min_height: -0.3
+  max_height: 0.3
+  local_planner: neupan
+  navigation_mode: replan_periodic
+  periodic_replan_sec: 2.0
+
+mission:
+  enable_alignment: true
+  angular_tolerance: 0.3491
+  route_segment_enable: true
+  route_segment_length_m: 10.0
+  route_segment_overlap_m: 3.0
+
+global_planner:
+  backend: map_planner
+  backends:
+    map_planner:
+      plan_service: /map_planner/plan
+
+local_planner:
+  backend: neupan
+  backends:
+    neupan:
+      interface:
+        mode: action
+        path_topic: /initial_path
+        scan_topic: /scan_360
+        odom_topic: /odin1/odometry
+        cmd_vel_topic: /cmd_vel
+        nav_path_action: /neupan/nav_path
+        stop_topic: /neupan/stop
+      # Compatibility NeuPAN config copied from SW01 into robots/dobot_lumo/neupan/.
+      config: neupan/config.yaml
+      planner: neupan/planner.yaml
+    sru:
+      interface:
+        mode: goal_pose
+        goal_topic: /sru/goal_pose
+        cmd_vel_topic: /sru/cmd_vel
+        enable_topic: /sru/cmd_vel_enable
+        relay_output: /cmd_vel
+        odom_topic: /odin1/odometry
+      package: sru_nav_go2_ros1
+      launch: sru_nav_go2.launch

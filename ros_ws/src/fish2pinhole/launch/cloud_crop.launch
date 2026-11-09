@@ -1,0 +1,36 @@
+<!--
+  Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<launch>
+    <!-- Cloud crop node for converting point cloud to laser scan -->
+    <node pkg="fish2pinhole" type="cloud_crop_node" name="cloud_crop_node" output="screen">
+        <!-- Point cloud filtering parameters -->
+        <param name="min_confidence" value="60" />
+        <param name="z_min_ratio" value="-0.1" />  <!-- z >= -0.2 -->
+        <param name="z_max_ratio" value="0.1" />   <!-- z <= 0.2 -->
+
+        <!-- Laser scan parameters -->
+        <param name="scan_angle_range" value="45.0" />  <!-- ±40 degrees -->
+        <param name="scan_min_range" value="0.2" />
+        <param name="scan_max_range" value="4.0" />
+        <param name="scan_resolution" value="0.5" />  <!-- 0.5 degree resolution -->
+        
+        <!-- Topic names -->
+        <param name="input_topic" value="/odin1/cloud_raw" />
+        <param name="output_topic" value="/scan" />
+        <param name="frame_id" value="odin1_base_link" />
+        
+        <!-- Remap topics if needed -->
+        <remap from="/odin1/cloud_raw" to="/odin1/cloud_raw" />
+        <remap from="/scan" to="/scan" />
+    </node>
+</launch>

@@ -1,0 +1,76 @@
+# Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#   http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# dobot_ros_control node parameters (ROS 1 private parameters, flat keys).
+
+# Connection
+backend: sdk                   # sdk: official libclient_rpc.a; raw: built-in JSON-RPC
+robot_ip: "192.168.5.2"
+robot_port: 51234
+connect_timeout_ms: 3000
+control_mode: 2                # 0=gamepad, 1=app, 2=third-party
+
+# Top-level switches
+dry_run: true                  # Default read-only: polls GetFsmId without sending velocity or mode commands
+auto_start: false              # Automatically transition INIT -> PREPARE -> WALK on startup
+
+# ---------------- Velocity & acceleration limits ----------------
+max_linear_vel: 1.0          # Forward velocity limit (m/s, must be > deadband_lin)
+max_linear_backward: 0.5     # Backward velocity limit (m/s)
+max_angular_vel: 0.50        # Angular velocity limit (rad/s)
+max_accel: 0.40              # Linear acceleration limit (m/s^2)
+max_yaw_accel: 1.00          # Angular acceleration limit (rad/s^2)
+enable_strafe: false         # Lateral motion disabled (vy = 0)
+
+# ---------------- Deadband ----------------
+deadband_lin: 0.43             # Minimum linear velocity (m/s) required for stepping
+min_effective_lin: 0.10        # Minimum command magnitude treated as intentional motion
+below_deadband_policy: boost   # boost: lift non-zero commands below deadband to the threshold
+deadband_ang: 0.40             # Minimum angular velocity (rad/s) required for turning
+
+# ---------------- Command freshness ----------------
+cmd_vel_timeout: 0.40          # Zero-velocity timeout (s)
+cmd_vel_decay_window: 0.15     # Linear decay window before timeout (s, 0=disabled)
+cmd_vel_damp_timeout: 1.00     # Damping timeout after zero-velocity (s)
+setvel_duration_s: 1.0         # Duration parameter passed to RPC SetVel (s)
+
+# Control loop rates
+control_rate: 20.0             # SetVel command dispatch frequency (Hz)
+fsm_watch_hz: 2.0              # GetFsmId polling frequency (Hz)
+fsm_watch_fail_limit: 3        # Consecutive polling failures before transitioning to DAMPED
+
+# ---------------- FSM IDs ----------------
+fsm_damping: 1                 # Damping (emergency stop state)
+fsm_prepare: 100               # Prepare standing
+fsm_standing: 300              # Standing (action playback allowed, no walking)
+fsm_walk: 304                  # Humanoid walking (required for SetVel commands)
+
+# ---- Mode ownership ----
+# Mode transitions are owned by the operator gamepad; code only switches between
+# balanced standing (300) and walking (304) when allow_walk_switch=true, and
+# never enters forbidden_fsm_csv states (damping 1, debug 2, prepare 100, etc.).
+allow_walk_switch: true       # Allow automatic 300 <-> 304 transition on fresh cmd_vel
+fsm_switch_guard_ms: 800      # Minimum hold time (ms) after switching to 304
+forbidden_fsm_csv: "1,2,100,310,311,312,313"
+require_walk_state: true      # Reject velocity commands when FSM != 304
+
+# Action playback
+action_topic: "/dobot/action"
+action_requires_standing: true # Switch to standing (300) before playing an action
+action_max_sec: 30.0           # Maximum wait time for a single action (s)
+action_poll_hz: 5.0
+action_whitelist: []
+
+# Topics
+cmd_vel_topic: "/cmd_vel"
+estop_topic: "/estop"
+state_topic: "/base/state"
+publish_state: true

@@ -1,0 +1,75 @@
+<!--
+  Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!-- YOLO detection and query system launch file -->
+<launch>
+  <arg name="rgb_topic" default="/odin1/image/undistorted" />
+  <arg name="depth_topic" default="/odin1/depth_img_competetion" />
+  <arg name="auto_nav_mode" default="false" />
+  <arg name="camera_frame" default="camera_link" />
+  <!-- Target frame (set to map to use dynamic TF chain map->odom->odin1_base_link) -->
+  <arg name="target_frame" default="map" />
+  <arg name="use_rviz" default="false" />
+  <arg name="publish_tf" default="true" />
+  <arg name="use_latest_tf" default="true" />
+  <arg name="depth_mode" default="z" />
+
+  <!-- TF relay node - publish static extrinsics using sensor timestamps -->
+  <!-- TF timestamp sync explanation: 
+       1. Odin publishes: map -> odom -> odin1_base_link -> odin1_lidar_link -> odin1_camera_link -> odin1_camera_cv_link
+       2. tf_relay_node publishes: odin1_base_link -> lidar_link -> camera_link
+  -->
+  <node if="$(arg publish_tf)" pkg="yolo_ros" type="tf_relay_node.py" name="tf_relay_node" output="screen"/>
+
+  <!-- YOLO detector node -->
+  <node name="yolo_detector" pkg="yolo_ros" type="yolo_detector.py" output="screen">
+    <param name="rgb_topic" value="$(arg rgb_topic)" />
+    <param name="depth_topic" value="$(arg depth_topic)" />
+    <param name="auto_nav_mode" value="$(arg auto_nav_mode)" />
+    <param name="camera_frame" value="$(arg camera_frame)" />
+    <param name="target_frame" value="$(arg target_frame)" />
+    <param name="use_latest_tf" value="$(arg use_latest_tf)" />
+    <param name="depth_mode" value="$(arg depth_mode)" />
+  </node>
+
+  <node pkg="yolo_ros" type="object_query_node.py" name="object_query_node" output="screen">
+     <!-- whether to enable voice query -->
+     <param name="enable_voice" value="true"/>
+     <!-- voice recognition model path, need to download. download reference: setup_yolo_env.sh -->
+     <param name="voice_model_path" value="$(find yolo_ros)/scripts/voicemodel"/>
+     <!-- voice recognition sample rate -->
+     <param name="voice_sample_rate" value="16000"/>
+     <!-- voice recognition interval time -->
+     <param name="voice_interval_sec" value="2.0"/>
+     <!-- voice end silence -->
+     <param name="voice_end_silence" value="1.2"/>
+     <!-- minimum duration -->
+     <param name="voice_min_duration" value="1.5"/>
+     <!-- maximum duration -->
+     <param name="voice_max_duration" value="5.0"/>
+     <!-- cooldown time after recognition -->
+     <param name="voice_debounce" value="1.0"/>
+    <param name="home_frame" value="odom"/> <!-- odin's home point -->
+    <param name="home_x" value="0.0"/>
+    <param name="home_y" value="0.0"/>
+    <param name="home_yaw" value="0.0"/>
+    <!-- distance between target and object, in meter -->
+    <param name="direction_distance" value="0.5"/>
+
+</node>
+
+  <!-- RViz visualization -->
+  <node if="$(arg use_rviz)" name="rviz" pkg="rviz" type="rviz" 
+        args="-d $(find yolo_ros)/config/yolo_visualization.rviz"/>
+
+
+</launch>

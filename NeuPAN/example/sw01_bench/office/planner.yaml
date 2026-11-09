@@ -1,0 +1,85 @@
+# Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#   http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SW01 benchmark - office
+adjust:
+  solver: 'SCS'
+  bk: 0.4
+  d_max: 0.15
+  d_min: 0.05
+  eta: 10.0
+  p_u: 1.0
+  p_w: 0.8
+  p_w_cross: 0.0
+  q_s: 1.0
+  q_theta: 1.0
+  ro_obs: 400
+collision_threshold: 0.05
+device: cpu
+ipath:
+  arrive_index_threshold: 1
+  arrive_threshold: 0.25
+  close_threshold: 0.1
+  curve_style: line
+  ind_range: 30
+  loop: false
+  min_radius: 0.2
+  waypoints:
+  - - 2
+    - -0.5
+    - 0
+  - - 3.5
+    - -0.8
+    - 0
+  - - 5
+    - -0.8
+    - 0
+  - - 6.5
+    - -0.65
+    - 0
+  - - 8
+    - -0.3
+    - 0
+  - - 9.5
+    - 0
+    - 0
+  - - 11
+    - 0
+    - 0
+  - - 12.5
+    - 0
+    - 0
+  - - 14
+    - 0
+    - 0
+  - - 14.5
+    - 0
+    - 0
+pan:
+  dune_checkpoint: example/dune_train/model/sw01/model_5000.pth
+  dune_max_num: 100
+  iter_num: 2
+  iter_threshold: 0.1
+  nrmp_max_num: 10
+receding: 10
+ref_speed: 0.5
+robot:
+  kinematics: diff
+  length: 0.96
+  max_acce:
+  - 0.5
+  - 0.5
+  max_speed:
+  - 1.0
+  - 1.0
+  width: 0.55
+step_time: 0.1
+time_print: false

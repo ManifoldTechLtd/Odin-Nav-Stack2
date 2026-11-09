@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<!--
+  Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!--
+  dobot_ros_control launch file (ROS 1).
+
+  Read-only health check (default, no motion commands sent):
+    roslaunch dobot_ros_control dobot_control.launch
+
+  Active control mode:
+    roslaunch dobot_ros_control dobot_control.launch dry_run:=false auto_start:=true
+
+  Override robot IP:
+    roslaunch dobot_ros_control dobot_control.launch robot_ip:=192.168.5.2
+-->
+<launch>
+  <arg name="dry_run"     default="true"/>
+  <arg name="auto_start"  default="false"/>
+  <arg name="backend"     default="sdk"/>
+  <arg name="robot_ip"    default="192.168.5.2"/>
+  <arg name="robot_port"  default="51234"/>
+  <!-- Default FSM state IDs (1=damping, 100=prepare, 300=standing, 304=walk). -->
+  <arg name="fsm_prepare" default="100"/>
+  <arg name="fsm_walk"    default="304"/>
+  <arg name="fsm_standing" default="300"/>
+  <arg name="config"      default="$(find dobot_ros_control)/config/dobot_control.yaml"/>
+
+  <node pkg="dobot_ros_control" type="dobot_cmd_vel_bridge"
+        name="dobot_cmd_vel_bridge" output="screen" required="false">
+    <!-- Load YAML defaults first, then override with launch arguments -->
+    <rosparam command="load" file="$(arg config)"/>
+    <param name="dry_run"      value="$(arg dry_run)"/>
+    <param name="auto_start"   value="$(arg auto_start)"/>
+    <param name="backend"      value="$(arg backend)"/>
+    <param name="robot_ip"     value="$(arg robot_ip)"/>
+    <param name="robot_port"   value="$(arg robot_port)"/>
+    <param name="fsm_prepare"  value="$(arg fsm_prepare)"/>
+    <param name="fsm_walk"    value="$(arg fsm_walk)"/>
+    <param name="fsm_standing" value="$(arg fsm_standing)"/>
+  </node>
+</launch>

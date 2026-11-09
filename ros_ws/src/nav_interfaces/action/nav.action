@@ -1,0 +1,5 @@
+geometry_msgs/PoseStamped target_pose
+---
+int32 status
+---
+float32 distance_remaining

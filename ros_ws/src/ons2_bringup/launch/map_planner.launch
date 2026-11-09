@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="map_file_name" default="map_opt"/>
+  <arg name="map_topic" default="/map"/>
+  <arg name="goal_topic" default="/move_base_simple/goal"/>
+  <arg name="path_topic" default="/initial_path"/>
+  <arg name="inflated_map_topic" default="/inflated_map"/>
+  <arg name="inflation_radius" default=""/>
+  <arg name="obstacle_cost_safe_distance" default=""/>
+  <arg name="obstacle_cost_weight" default=""/>
+  <arg name="line_of_sight_safe_distance" default=""/>
+  <arg name="smoothing_iterations" default=""/>
+  <arg name="smoothing_max_deviation_m" default=""/>
+
+  <node pkg="map_planner" type="map_planner" name="map_planner" output="screen"
+        respawn="true" respawn_delay="3">
+    <rosparam file="$(find map_planner)/config/nav_params.yaml" command="load"/>
+    <param name="map_file_name" value="$(arg map_file_name)"/>
+    <param if="$(eval arg('inflation_radius') != '')" name="inflation_radius" value="$(arg inflation_radius)"/>
+    <param if="$(eval arg('obstacle_cost_safe_distance') != '')" name="obstacle_cost_safe_distance" value="$(arg obstacle_cost_safe_distance)"/>
+    <param if="$(eval arg('obstacle_cost_weight') != '')" name="obstacle_cost_weight" value="$(arg obstacle_cost_weight)"/>
+    <param if="$(eval arg('line_of_sight_safe_distance') != '')" name="line_of_sight_safe_distance" value="$(arg line_of_sight_safe_distance)"/>
+    <param if="$(eval arg('smoothing_iterations') != '')" name="smoothing_iterations" value="$(arg smoothing_iterations)"/>
+    <param if="$(eval arg('smoothing_max_deviation_m') != '')" name="smoothing_max_deviation_m" value="$(arg smoothing_max_deviation_m)"/>
+    <remap from="map" to="$(arg map_topic)"/>
+    <remap from="/move_base_simple/goal" to="$(arg goal_topic)"/>
+    <remap from="initial_path" to="$(arg path_topic)"/>
+    <remap from="inflated_map" to="$(arg inflated_map_topic)"/>
+  </node>
+</launch>

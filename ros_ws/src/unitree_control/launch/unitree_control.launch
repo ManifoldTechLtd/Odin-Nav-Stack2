@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="cmd_vel_topic" default="/cmd_vel"/>
+  <node pkg="unitree_control" type="unitree_vel_controller" name="vel_to_sdk" output="screen"
+        respawn="true" respawn_delay="3">
+    <remap from="/cmd_vel" to="$(arg cmd_vel_topic)"/>
+  </node>
+</launch>

@@ -1,0 +1,49 @@
+# Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#   http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Shared global A* (map_planner) and mission defaults (ROS 2).
+# Per-robot overrides in robots/<robot>/robot.yaml take precedence over this file.
+
+# --- Global A* clearance & smoothing defaults (overridden per robot in robot.yaml) ---
+inflation_radius: 0.35                # [m] Hard obstacle inflation radius
+obstacle_cost_safe_distance: 0.80     # [m] Soft obstacle-proximity cost decay radius
+obstacle_cost_weight: 8.0             # Soft obstacle-proximity cost weight in A*
+line_of_sight_safe_distance: 0.35     # [m] Minimum obstacle clearance during line-of-sight shortcutting
+smoothing_iterations: 40              # Iterative path smoothing passes
+smoothing_max_deviation_m: 0.35       # [m] Maximum allowed deviation from raw A* path during smoothing
+
+# --- Shared A* algorithm parameters (common across all robots) ---
+obstacle_threshold: 50                # OccupancyGrid value [0..100] above which a cell is treated as occupied
+sliding_map_max_age_sec: 2.0             # [s] Max allowed age of /sliding_map before rejecting dynamic planning
+require_fresh_sliding_map: true          # Require a fresh /sliding_map from sliding_map before planning
+path_max_start_offset_m: 0.20         # [m] Max distance between robot pose and path start
+turn_penalty_weight: 0.5              # Penalty weight for heading changes in A* search
+inflated_map_publish_period_sec: 1.0  # [s] Publish period for /inflated_map visualization
+inflated_map_window_m: 15.0           # [m] Local window size for /inflated_map visualization
+use_global_memory: false              # Enable persistent global obstacle memory grid
+global_memory_res: 0.20               # [m] Resolution of global obstacle memory grid
+global_memory_inflation_radius: 0.35  # [m] Inflation radius for global obstacle memory
+global_memory_exempt_radius_m: 0.0    # [m] Radius around robot exempt from global memory obstacles
+path_initial_heading_tol_deg: 45.0    # [deg] Heading tolerance for initial path segment protection
+path_protect_initial_m: 1.0           # [m] Length of initial path segment protected during replanning
+path_validate_enable: true            # Enable continuous path obstacle validation
+path_min_clear_m: 0.10                # [m] Minimum clearance required by path validation
+
+# --- PointCloud-to-LaserScan height slice defaults (overridden per robot in robot.yaml) ---
+min_height: -0.3                      # [m] Lower Z bound in sensor frame
+max_height: 0.3                       # [m] Upper Z bound in sensor frame
+
+# --- Mission manager defaults ---
+local_planner: neupan                 # Active local planner backend key
+navigation_mode: replan_periodic      # replan_periodic | escape | neupan_only
+periodic_replan_sec: 2.0              # [s] Periodic global replanning interval
+sru_arrive_threshold_m: 0.7           # [m] Goal arrival distance threshold in goal_pose (SRU) mode
+sru_robot_frame: odin1_base_link      # Frame used for distance checks in goal_pose (SRU) mode

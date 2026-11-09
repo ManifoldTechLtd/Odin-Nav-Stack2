@@ -1,0 +1,54 @@
+<!--
+  Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<!--
+  Topic and TF compatibility layer mapping Odin1Lite driver v3.7.0 (odin_ros_driver_rev1,
+  /{prefix}/device{N}/xxx) to base_inspection legacy topic and frame names.
+
+  Usage:
+    roslaunch odin_ros_driver_rev1 odin1_compat.launch
+    roslaunch odin_ros_driver_rev1 odin1_compat.launch prefix:=odin1
+-->
+<launch>
+  <arg name="prefix" default="odin1"/>
+  <arg name="device" default="device0"/>
+
+  <!-- Core navigation topics -->
+  <node pkg="topic_tools" type="relay" name="relay_odometry"
+        args="/$(arg prefix)/$(arg device)/odometry_lf /$(arg prefix)/odometry" output="screen"/>
+  <node pkg="topic_tools" type="relay" name="relay_cloud_slam"
+        args="/$(arg prefix)/$(arg device)/cloud/slam /$(arg prefix)/cloud_slam" output="screen"/>
+
+  <!-- Diagnostics and visualization topics -->
+  <node pkg="topic_tools" type="relay" name="relay_odometry_hf"
+        args="/$(arg prefix)/$(arg device)/odometry_hf /$(arg prefix)/odometry_highfreq" output="screen"/>
+  <node pkg="topic_tools" type="relay" name="relay_cloud_raw"
+        args="/$(arg prefix)/$(arg device)/cloud/raw /$(arg prefix)/cloud_raw" output="screen"/>
+  <node pkg="topic_tools" type="relay" name="relay_imu"
+        args="/$(arg prefix)/$(arg device)/imu /$(arg prefix)/imu" output="screen"/>
+
+  <!-- Camera image topics -->
+  <node pkg="topic_tools" type="relay" name="relay_image_compressed"
+        args="/$(arg prefix)/$(arg device)/camera0/compressed /$(arg prefix)/image/compressed" output="screen"/>
+  <node pkg="topic_tools" type="relay" name="relay_image_undistorted"
+        args="/$(arg prefix)/$(arg device)/camera0/undistort /$(arg prefix)/image/undistorted" output="screen"/>
+
+  <!-- Static identity TF bridges (unidirectional: device0/xxx -> xxx) -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="dev0_odom_to_odom"
+        args="0 0 0 0 0 0 $(arg device)/odom odom" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="dev0_imu_to_imu"
+        args="0 0 0 0 0 0 $(arg device)/imu imu" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="dev0_lidar_to_lidar"
+        args="0 0 0 0 0 0 $(arg device)/lidar lidar" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="dev0_cam0_to_camera0"
+        args="0 0 0 0 0 0 $(arg device)/camera0 camera0" />
+</launch>

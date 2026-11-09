@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="enable" default="false"/>
+
+  <node pkg="map_planner" type="scan_temporal_filter.py" name="scan_temporal_filter" output="screen"
+        respawn="true" respawn_delay="3">
+    <param name="enable" value="$(arg enable)"/>
+    <param name="input_topic" value="/scan_raw"/>
+    <param name="output_topic" value="/scan"/>
+    <param name="history_frames" value="5"/>
+    <param name="min_hits" value="3"/>
+    <param name="sector_min_deg" value="30.0"/>
+    <param name="sector_max_deg" value="50.0"/>
+    <param name="max_range_m" value="0.60"/>
+    <param name="immediate_cluster_points" value="3"/>
+    <param name="angle_tolerance_deg" value="2.5"/>
+    <param name="range_tolerance_m" value="0.15"/>
+  </node>
+</launch>

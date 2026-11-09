@@ -1,0 +1,132 @@
+# ============================================================================
+# NeuPAN ROS Node Configuration Template (`robots/<robot>/neupan/config.yaml`)
+# ============================================================================
+# Consumed by `neupan_ros` (ROS 1 `neupan_upstream_action_node.py` / ROS 2
+# `neupan_action_node.py`). Loaded automatically from `robot.yaml` via
+# `local_planner.backends.neupan.config`.
+# ============================================================================
+
+# Relative path to the MPC/DUNE solver configuration file in the same directory.
+planner_config_file: "planner.yaml"
+
+# Relative path (under `<repo>/NeuPAN/`) to the trained DUNE checkpoint for your
+# robot footprint. Only required when `pan.dune_use_analytic: false` in planner.yaml.
+dune_checkpoint: "example/dune_train/model/go2/model_5000.pth"
+
+refresh_initial_path: True            # Re-initialize reference trajectory when a new `/initial_path` arrives
+flip_angle: False                     # Set True if LaserScan angles are inverted
+include_initial_path_direction: False # Use waypoint orientations from `/initial_path` directly
+
+# ----------------------------------------------------------------------------
+# TF Frames & ROS Topics
+# ----------------------------------------------------------------------------
+frame:
+  map: "map"                          # Global map frame
+  base: "base_link"                   # Robot base frame
+  lidar: "odin1_base_link"            # Sensor frame for LaserScan projection
+
+topic:
+  scan: "/scan_360"                   # Input LaserScan (`/scan` or `/scan_360`)
+  cmd_vel: "/cmd_vel"                 # Output Twist command
+  path: "/initial_path"               # Input global reference path (`nav_msgs/Path`)
+  waypoints: "/waypoints"             # Optional waypoint marker topic
+  goal: "/neupan/goal"                # Direct PoseStamped goal topic
+  arrive: "/neupan/arrive"            # Arrival notification topic
+  replan: "/neupan/replan"            # Replan request trigger topic emitted to `mission_manager`
+  odom: "/odin1/odometry"             # Input odometry topic
+
+# ----------------------------------------------------------------------------
+# Closed-Loop Velocity Feedback & Lag Compensation
+# ----------------------------------------------------------------------------
+odom_feedback:
+  enable: false                       # Feed measured chassis velocity back into the MPC initial state
+  stale_threshold_sec: 0.2            # [s] Max age of odometry message before falling back to open-loop
+  linear_is_body_frame: false         # false: rotate world-frame twist.linear into body frame via yaw
+
+smith_predictor:
+  enable: false                       # Forward-predict robot pose over transport + MPC solve lag
+  fixed_lag_sec: 0.10                 # [s] Measured chassis actuation transport delay
+  use_solve_time: true                # Add rolling median MPC solve time to predicted lag
+  max_tau_sec: 0.25                   # [s] Upper clamp on total predicted lag
+  velocity_source: "odom"             # `odom` | `cmd`
+
+# ----------------------------------------------------------------------------
+# Command Post-Processing & Scan Filtering
+# ----------------------------------------------------------------------------
+output_gain:
+  enable: false                       # Scale raw MPC velocity output to compensate chassis tracking gain
+  w_gain: 1.0                         # Angular velocity multiplier
+  v_fwd_gain: 1.0                     # Forward linear velocity multiplier
+  v_bwd_gain: 1.0                     # Backward linear velocity multiplier
+
+scan_range: [0.2, 4.5]                # [m] [min_range, max_range] of LaserScan points fed into NeuPAN
+scan_angle: [-3.14, 3.14]             # [rad] [min_angle, max_angle] field of view
+scan_downsample: 1                    # Keep every N-th scan beam (1 = no downsampling)
+
+marker_size: 0.05                     # [m] RViz/Foxglove visualization marker scale
+marker_z: 0.3                         # [m] Z height of visualization markers
+
+cmd_w_lpf_alpha: 0.0                  # Low-pass filter alpha on angular velocity (0.0 = disabled)
+
+# Hysteresis deadband on angular velocity during straight-line tracking in open space.
+w_deadband:
+  enable: false
+  enter_rad: 0.03                     # [rad/s] Suppress |w| below this threshold when straight-line gates pass
+  exit_rad: 0.067                     # [rad/s] Exit deadband when |w| exceeds this threshold
+  straight_heading_err_max_deg: 8.0   # [deg] Max heading error to allow deadband
+  straight_curvature_max: 0.15        # [1/m] Max path curvature to allow deadband
+  straight_obstacle_min_dist_m: 0.9   # [m] Min obstacle distance required to allow deadband
+  straight_lookahead_m: 1.0           # [m] Lookahead distance used to evaluate path curvature
+
+# Curvature-based forward speed cap: v_cap = clamp(sqrt(a_lat_max / kappa), v_min, ref_speed).
+curvature_speed:
+  enable: false
+  a_lat_max: 0.5                      # [m/s^2] Max lateral acceleration in turns
+  v_min: 0.3                          # [m/s] Minimum forward speed cap in tight turns
+  lookahead_sec: 1.0                  # [s] Curvature lookahead horizon
+  lp_alpha: 0.2                       # Smoothing factor on speed cap
+
+# Dynamic adjustment of `adjust.d_max` based on lateral corridor clearance.
+adaptive_d_max:
+  enable: false
+  min: 0.10                           # [m] Lower bound on d_max in tight corridors
+  max: 0.25                           # [m] Upper bound on d_max in open space
+  safety_margin: 0.05                 # [m] Extra clearance subtracted from half-corridor width
+  forward_window_m: 2.0               # [m] Forward ROI length for corridor width estimation
+  lateral_window_m: 2.0               # [m] Lateral ROI half-width
+  update_period_sec: 0.5              # [s] Re-estimation period
+
+# ----------------------------------------------------------------------------
+# Stuck Detection & Escape Recovery
+# ----------------------------------------------------------------------------
+recovery_contract:
+  shadow_enable: true
+  behavior_enable: true
+  request_count: 5                    # Emit `/neupan/replan` after N consecutive stall frames
+  side_min_clearance: 0.57            # [m] Minimum clearance required for side recovery
+  retry_sec: 0.2                      # [s] Cooldown between replan requests
+
+stuck_escape:
+  enable: true                        # Enable local backup/rotation recovery when stalled
+  criterion: progress                 # `progress` (arc-length along path) | `displacement` (Euclidean)
+  displacement_window_sec: 1.0        # [s] Sliding window for stall detection
+  displacement_threshold_m: 0.05      # [m] Min Euclidean movement required within window
+  progress_threshold_m: 0.05          # [m] Min path arc-length progress required within window
+  v_eps: 0.15                         # [m/s] Linear command threshold considered near-zero
+  w_eps: 0.30                         # [rad/s] Angular command threshold considered near-zero
+  trigger_frames: 10                  # Consecutive stalled frames before triggering escape
+  front_obs_threshold: 1.0            # [m] Front obstacle distance threshold
+  cone_half_width_rad: 0.9            # [rad] Half-angle of front obstacle detection cone
+  back_speed: 0.15                    # [m/s] Reverse speed during backup recovery
+  rotate_speed: 0.5                   # [rad/s] Angular speed during rotation recovery
+  rotate_gate_enable: true            # Check surrounding clearance before rotating in place
+  rotate_clearance_m: 0.85            # [m] Clearance required for unconstrained rotation
+  duration_sec: 2.4                   # [s] Escape maneuver duration
+  exit_obs_distance: 1.3              # [m] Front clearance to terminate escape early
+
+# Dynamic follow-target obstacle masking (disabled by default)
+follow_target:
+  enable: false
+  topic: "/waypoint_manager/follow_target"
+  stale_sec: 2.0
+  suspend_escape: true

@@ -1,0 +1,72 @@
+# ============================================================================
+# NeuPAN MPC & DUNE Planner Template (`robots/<robot>/neupan/planner.yaml`)
+# ============================================================================
+# Consumed by the upstream NeuPAN core (`NeuPAN/neupan/`). Referenced by
+# `planner_config_file: "planner.yaml"` in `robots/<robot>/neupan/config.yaml`.
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Model Predictive Control (MPC) Horizon
+# ----------------------------------------------------------------------------
+receding: 10                          # Number of MPC prediction steps (horizon T = receding * step_time)
+step_time: 0.1                        # [s] Discretization time step per MPC stage
+ref_speed: 0.50                       # [m/s] Nominal reference tracking speed along the global path
+device: 'cpu'                         # PyTorch device (`cpu` or `cuda`)
+time_print: False                     # Print per-step MPC solve time to stdout
+collision_threshold: 0.05             # [m] Minimum distance below which NeuPAN triggers an immediate stop
+
+# ----------------------------------------------------------------------------
+# Robot Kinematics & Bounding Box (used for obstacle distance geometry)
+# ----------------------------------------------------------------------------
+robot:
+  kinematics: 'diff'                  # `diff` (differential / quadruped) | `acker` (Ackermann) | `omni`
+  max_speed: [0.50, 0.80]             # [v_max (m/s), w_max (rad/s)] upper velocity bounds in MPC
+  max_acce: [0.50, 0.80]              # [a_v_max (m/s^2), a_w_max (rad/s^2)] acceleration bounds
+  length: 0.70                        # [m] Robot bounding-box length
+  width: 0.40                         # [m] Robot bounding-box width
+
+# ----------------------------------------------------------------------------
+# Initial Reference Path Discretization (`ipath`)
+# ----------------------------------------------------------------------------
+ipath:
+  interval: 0.1                       # [m] Spatial sampling interval along the reference path
+  waypoints: []                       # Default static waypoints (overridden at runtime by `/initial_path`)
+  curve_style: 'line'                 # Path interpolation style: `line` | `dubins` | `reeds`
+  min_radius: 0.2                     # [m] Minimum turning radius for Dubins/Reeds-Shepp curves
+  loop: False                         # Loop reference path continuously
+  arrive_threshold: 0.30              # [m] Euclidean distance threshold to declare goal arrival
+  close_threshold: 0.10               # [m] Lookahead switching threshold along reference waypoints
+  ind_range: 30                       # Search window (number of indices) for closest reference point
+  arrive_index_threshold: 1           # Remaining waypoint index margin required to trigger arrival
+
+# ----------------------------------------------------------------------------
+# Proximal Alternating Minimization Network (`pan`: DUNE + NRMP)
+# ----------------------------------------------------------------------------
+pan:
+  iter_num: 2                         # Alternating minimization iterations per control cycle
+  dune_max_num: 100                   # Max obstacle points retained after DUNE filtering
+  nrmp_max_num: 10                    # Max active obstacle constraints fed into the NRMP QP solver
+  iter_threshold: 0.1                 # Early-stopping convergence threshold between PAN iterations
+  dune_checkpoint: 'example/dune_train/model/go2/model_5000.pth'
+  # Set `true` to use the exact analytical convex-polygon dual solution instead of
+  # MLP checkpoint inference (~10x faster on CPU and works for any rectangular robot:
+  #length/width without retraining a `.pth` model).
+  dune_use_analytic: true
+
+# ----------------------------------------------------------------------------
+# MPC Cost Weights & Safety Distance Band (`adjust`)
+# ----------------------------------------------------------------------------
+adjust:
+  solver: 'SCS'                       # Conic QP solver (`SCS` or `ECOS`)
+  q_s: 1.0                            # Position tracking weight along the reference path
+  q_theta: 2.0                        # Heading alignment weight along the reference path
+  p_u: 1.0                            # Linear velocity control effort / reference speed tracking weight
+  p_w: 0.8                            # Angular velocity damping weight (higher = smoother yaw)
+  p_w_cross: 0.0                      # Cross-coupling penalty between v and w
+  eta: 10.0                           # Clearance reward weight (higher = stays further from obstacles, slower in narrow aisles)
+  ro_obs: 400                         # Obstacle slack penalty weight (higher = stricter obstacle avoidance)
+  d_max: 0.15                         # [m] Outer safety margin where obstacle repulsion begins
+  d_min: 0.02                         # [m] Inner hard safety margin to robot polygon boundary
+  bk: 0.4                             # Backward velocity ratio (`v_min = -bk * v_max`; set 0.0 to forbid reversing)
+  nrmp_inference_only: true           # Run NRMP layer in inference-only mode (no gradient graph)
+  nrmp_warm_start: true               # Warm-start conic solver from previous cycle solution

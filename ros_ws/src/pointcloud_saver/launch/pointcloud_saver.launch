@@ -1,0 +1,32 @@
+<!--
+  Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<launch>
+  <arg name="cloud_topic" default="/odin1/cloud_slam" />
+  <!-- Accumulate in the continuous odom frame to avoid map-frame jumps from loop closure. -->
+  <arg name="target_frame" default="odom" />
+  <arg name="save_dir" default="$(find pcd2pgm)/maps" />
+  <arg name="max_points" default="10000000" />
+  <arg name="auto_publish" default="true" />
+  
+  <node name="pointcloud_saver" pkg="pointcloud_saver" type="pointcloud_saver_node.py" output="screen">
+    <param name="cloud_topic" value="$(arg cloud_topic)"/>
+    <param name="target_frame" value="$(arg target_frame)"/>
+    <param name="save_dir" value="$(arg save_dir)"/>
+    <param name="max_points" value="$(arg max_points)"/>
+    <param name="online_voxel_size" value="0.10"/>
+    <param name="save_rgb" value="true"/>
+    <param name="auto_publish" value="true"/>
+    <param name="pcd_binary" value="false"/>
+    <param name="max_stat_points" value="150000"/>
+  </node>
+</launch>

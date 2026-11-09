@@ -1,0 +1,123 @@
+<!--
+  Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<launch>
+  <!-- Optional overrides (empty defaults defer to config/nav_params.yaml) -->
+  <arg name="navigation_mode" default="" />
+  <!-- Local planner backend name (neupan or custom backend key in robot.yaml) and interface mode (action | goal_pose) -->
+  <arg name="local_planner" default="" />
+  <arg name="local_planner_mode" default="" />
+  <arg name="periodic_replan_sec" default="" />
+  <arg name="map_frame" default="map" />
+  <arg name="base_frame" default="base_link" />
+  <arg name="odom_frame" default="odom" />
+  <arg name="plan_service" default="/map_planner/plan" />
+  <arg name="nav_path_action" default="/neupan/nav_path" />
+  <arg name="stop_topic" default="/neupan/stop" />
+  <arg name="goal_topic" default="/sru/goal_pose" />
+  <arg name="enable_topic" default="/sru/cmd_vel_enable" />
+  <arg name="planner_cmd_vel_topic" default="/sru/cmd_vel" />
+  <arg name="enable_alignment" default="true" />
+  <arg name="enable_atomic_move" default="true" />
+  <arg name="route_segment_enable" default="true" />
+  <arg name="route_segment_length_m" default="10.0" />
+  <arg name="route_segment_overlap_m" default="3.0" />
+  <arg name="recovery_shadow_enable" default="true" />
+  <arg name="recovery_behavior_enable" default="true" />
+  <!-- Dynamic target following mode (disabled by default) -->
+  <arg name="enable_dynamic_mode" default="false" />
+  <arg name="dynamic_replan_cooldown_sec" default="0.5" />
+  <arg name="dynamic_goal_topic" default="/waypoint_manager/dynamic_goal" />
+  <!-- Target-loss in-place rotation search (substate of DYNAMIC, disabled by default) -->
+  <arg name="enable_follow_search" default="false" />
+  <arg name="follow_search_clearance_m" default="0.60" />
+  <arg name="follow_search_step_deg" default="90.0" />
+  <arg name="follow_search_step_pause_sec" default="0.3" />
+  <arg name="follow_search_timeout_sec" default="0.0" />
+  <arg name="follow_search_total_limit_deg" default="0.0" />
+  <arg name="follow_search_turn_service" default="/atomic_move/turn" />
+  <arg name="follow_search_scan_topic" default="/scan_360" />
+
+  <!-- Periodic replan install gate (pass install_gate_shadow:=true for shadow-only logging) -->
+  <arg name="install_gate_enable" default="false" />
+
+  <node pkg="mission_manager" type="mission_manager_node" name="mission_manager" output="screen"
+        respawn="true" respawn_delay="3">
+    <param name="map_frame" value="$(arg map_frame)" />
+    <param name="base_frame" value="$(arg base_frame)" />
+    <param name="odom_frame" value="$(arg odom_frame)" />
+    <rosparam file="$(find map_planner)/config/nav_params.yaml" command="load" />
+    <param name="navigation_mode" value="$(arg navigation_mode)"
+           if="$(eval arg('navigation_mode') != '')" />
+    <param name="local_planner" value="$(arg local_planner)"
+           if="$(eval arg('local_planner') != '')" />
+    <param name="local_planner_mode" value="$(arg local_planner_mode)"
+           if="$(eval arg('local_planner_mode') != '')" />
+    <param name="periodic_replan_sec" value="$(arg periodic_replan_sec)"
+           if="$(eval arg('periodic_replan_sec') != '')" />
+    <param name="route_segment_enable" value="$(arg route_segment_enable)"
+           if="$(eval arg('route_segment_enable') != '')" />
+    <param name="plan_service" value="$(arg plan_service)" />
+    <param name="nav_path_action" value="$(arg nav_path_action)" />
+    <param name="stop_topic" value="$(arg stop_topic)" />
+    <param name="goal_topic" value="$(arg goal_topic)" />
+    <param name="enable_topic" value="$(arg enable_topic)" />
+    <param name="planner_cmd_vel_topic" value="$(arg planner_cmd_vel_topic)" />
+    <param name="enable_alignment" value="$(arg enable_alignment)" />
+    <param name="route_segment_enable" value="$(arg route_segment_enable)" />
+    <param name="route_segment_length_m" value="$(arg route_segment_length_m)" />
+    <param name="route_segment_overlap_m" value="$(arg route_segment_overlap_m)" />
+    <param name="install_gate_enable" value="$(arg install_gate_enable)" />
+    <param name="recovery_shadow_enable" value="$(arg recovery_shadow_enable)" />
+    <param name="recovery_behavior_enable" value="$(arg recovery_behavior_enable)" />
+    <param name="enable_dynamic_mode" value="$(arg enable_dynamic_mode)" />
+    <param name="dynamic_replan_cooldown_sec" value="$(arg dynamic_replan_cooldown_sec)" />
+    <param name="dynamic_goal_topic" value="$(arg dynamic_goal_topic)" />
+    <param name="enable_follow_search" value="$(arg enable_follow_search)" />
+    <param name="follow_search_clearance_m" value="$(arg follow_search_clearance_m)" />
+    <param name="follow_search_step_deg" value="$(arg follow_search_step_deg)" />
+    <param name="follow_search_step_pause_sec" value="$(arg follow_search_step_pause_sec)" />
+    <param name="follow_search_timeout_sec" value="$(arg follow_search_timeout_sec)" />
+    <param name="follow_search_total_limit_deg" value="$(arg follow_search_total_limit_deg)" />
+    <param name="follow_search_turn_service" value="$(arg follow_search_turn_service)" />
+    <param name="follow_search_scan_topic" value="$(arg follow_search_scan_topic)" />
+  </node>
+
+  <node if="$(arg enable_atomic_move)" pkg="atomic_move" type="atomic_move_node" name="atomic_move" output="screen"
+        respawn="true" respawn_delay="3">
+    <param name="control_frame" value="$(arg map_frame)" />
+    <param name="base_frame" value="$(arg base_frame)" />
+    <param name="linear_kp" value="1.0" />
+    <param name="linear_ki" value="0.02" />
+    <param name="linear_kd" value="0.02" />
+    <param name="linear_min_vel" value="0.15" />
+    <!-- Approach-phase tolerance (final-yaw phase uses 1.5x this value to prevent hysteresis deadlock). -->
+    <param name="linear_tolerance" value="0.20" />
+    <param name="linear_max_duration" value="30.0" />
+    <param name="linear_fine_window" value="0.12" />
+    <param name="linear_pulse_duration" value="0.08" />
+    <param name="linear_settle_duration" value="0.15" />
+    <param name="angular_kp" value="1.0" />
+    <param name="angular_ki" value="0.01" />
+    <param name="angular_kd" value="0.03" />
+    <param name="angular_min_vel" value="0.45" />
+    <!-- 20 deg (0.3491 rad): must stay >= smallest yaw correction Go2 can execute cleanly. -->
+    <param name="angular_tolerance" value="0.3491" />
+    <param name="angular_fine_window" value="0.35" />
+    <param name="angular_pulse_duration" value="0.08" />
+    <param name="angular_settle_duration" value="0.15" />
+    <param name="angular_max_duration" value="30.0" />
+    <param name="alignment_heading_tolerance" value="0.35" />
+    <param name="alignment_max_duration" value="20.0" />
+    <param name="angular_kick_duration" value="0.25" />
+  </node>
+</launch>

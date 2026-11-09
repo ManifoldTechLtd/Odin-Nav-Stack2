@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="min_height"/>
+  <arg name="max_height"/>
+  <arg name="scan_topic" default="/scan"/>
+  <arg name="cloud_topic" default="/odin1/cloud_slam"/>
+
+  <node pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node" name="pc_to_scan" output="screen"
+        respawn="true" respawn_delay="3">
+    <param name="target_frame"        value="odin1_base_link"/>
+    <param name="transform_tolerance" value="0.1"/>
+    <param name="min_height"          value="$(arg min_height)"/>
+    <param name="max_height"          value="$(arg max_height)"/>
+
+    <param name="angle_min"           value="-0.7853"/>
+    <param name="angle_max"           value="0.7853"/>
+    <param name="angle_increment"     value="0.017"/>
+    <param name="scan_time"           value="0.1"/>
+
+    <param name="range_min"           value="0.2"/>
+    <param name="range_max"           value="5.0"/>
+
+    <remap from="cloud_in" to="$(arg cloud_topic)"/>
+    <remap from="scan"     to="$(arg scan_topic)"/>
+  </node>
+</launch>

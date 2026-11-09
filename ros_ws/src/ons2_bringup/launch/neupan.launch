@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="config"/>
+  <arg name="navigation_mode" default="replan_periodic"/>
+  <arg name="odom_topic" default="/odin1/odometry"/>
+  <arg name="odom_feedback" default="false"/>
+  <arg name="launch_prefix" default=""/>
+
+  <param name="/navigation_mode" value="$(arg navigation_mode)"/>
+
+  <node pkg="neupan_ros" type="neupan_upstream_action_node.py"
+        name="neupan_action_compat" output="screen"
+        respawn="true" respawn_delay="3"
+        launch-prefix="$(arg launch_prefix)">
+    <env name="NEUPAN_ROS_CONFIG" value="$(arg config)"/>
+    <env name="NEUPAN_ODOM_TOPIC" value="$(arg odom_topic)"/>
+    <env name="NEUPAN_ODOM_FEEDBACK" value="$(arg odom_feedback)"/>
+  </node>
+</launch>

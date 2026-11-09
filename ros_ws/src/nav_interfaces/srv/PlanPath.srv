@@ -1,0 +1,6 @@
+geometry_msgs/PoseStamped goal
+bool shadow_only
+---
+bool success
+string message
+nav_msgs/Path path

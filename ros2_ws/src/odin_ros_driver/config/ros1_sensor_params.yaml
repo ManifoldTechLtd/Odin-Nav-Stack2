@@ -1,0 +1,8 @@
+register_keys:
+  senddepth: 0
+  sendreprojection: 0
+  sendoverlay: 0
+  overlay_reprojected_topic: "/odin1/reprojected_image"
+  overlay_camera_topic: "/odin1/image/undistorted"
+  overlay_output_topic: "/odin1/overlay_image"
+  overlay_alpha: 0.6

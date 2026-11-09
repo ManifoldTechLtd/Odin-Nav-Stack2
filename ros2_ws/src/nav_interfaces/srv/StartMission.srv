@@ -1,0 +1,7 @@
+nav_interfaces/Waypoint[] waypoints
+bool loop
+bool temporary
+---
+bool success
+string message
+string mission_id

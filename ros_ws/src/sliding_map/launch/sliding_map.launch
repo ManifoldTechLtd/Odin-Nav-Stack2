@@ -1,0 +1,27 @@
+<!--
+  Copyright 2026 Manifold Tech Ltd.(www.manifoldtech.com.co)
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<launch>
+  <node pkg="sliding_map" type="sliding_map_node" name="sliding_map_node" output="screen">  
+    <param name="map_frame" value="odom" />
+    <param name="base_frame" value="odin1_base_link" />
+    <param name="input_scan_topic" value="/scan" />
+    <param name="fake_scan_topic" value="/scan_360" />
+    <param name="map_topic" value="/sliding_map" />
+    <param name="range_min" value="0.05" />
+    <param name="max_fake_range" value="4.5" />
+    <param name="output_points" value="360" />
+    <param name="resolution" value="0.05" />
+    <param name="width" value="400" />
+    <param name="height" value="400" />
+  </node>
+</launch>

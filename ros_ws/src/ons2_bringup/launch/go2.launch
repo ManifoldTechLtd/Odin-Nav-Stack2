@@ -1,0 +1,94 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="map_file_name" default="map_opt"/>
+  <arg name="navigation_mode" default="replan_periodic"/>
+  <arg name="bridge_pkg" default="unitree_control"/>
+  <arg name="bridge_launch" default="unitree_control.launch"/>
+  <arg name="bridge_cmd_vel_topic" default="/cmd_vel"/>
+  <arg name="global_planner" default="map_planner"/>
+  <arg name="global_planner_pkg" default=""/>
+  <arg name="global_planner_launch" default=""/>
+  <arg name="local_planner" default="neupan"/>
+  <arg name="local_planner_pkg" default=""/>
+  <arg name="local_planner_launch" default=""/>
+  <arg name="neupan_config" default=""/>
+  <arg name="mount_x"/>
+  <arg name="mount_y"/>
+  <arg name="mount_z"/>
+  <arg name="mount_yaw"/>
+  <arg name="use_footprint_polygon"/>
+  <arg name="footprint_radius_m"/>
+  <arg name="footprint_length_m"/>
+  <arg name="footprint_width_m"/>
+  <arg name="footprint_margin_m"/>
+  <arg name="min_height" default="-0.1"/>
+  <arg name="max_height" default="0.3"/>
+  <arg name="inflation_radius" default=""/>
+  <arg name="obstacle_cost_safe_distance" default=""/>
+  <arg name="obstacle_cost_weight" default=""/>
+  <arg name="line_of_sight_safe_distance" default=""/>
+  <arg name="smoothing_iterations" default=""/>
+  <arg name="smoothing_max_deviation_m" default=""/>
+
+  <!-- Static TF: sensor mount injected from robots/go2/robot.yaml. -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="imu_to_odin1_base"
+        args="0 0 0 0 0 0 imu odin1_base_link" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="odin1_to_base"
+        args="$(arg mount_x) $(arg mount_y) $(arg mount_z) $(arg mount_yaw) 0 0 odin1_base_link base_link" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="odin1_to_lidar"
+        args="0.00347 0.03447 0.02174 0 0 0 1 odin1_base_link odin1_lidar_link" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="lidar_to_camera"
+        args="0.02055 0.0004 -0.00735 0.497 -0.499 0.499 0.504 odin1_lidar_link odin1_camera_link" />
+
+  <!-- Chassis bridge (injected from robots/<robot>/robot.yaml -> bridge.ros1) -->
+  <include if="$(eval arg('bridge_pkg') != '' and arg('bridge_launch') != '')"
+           file="$(eval find(arg('bridge_pkg')) + '/launch/' + arg('bridge_launch'))">
+    <arg name="cmd_vel_topic" value="$(arg bridge_cmd_vel_topic)"/>
+  </include>
+
+  <!-- Map / scan / planner -->
+  <include file="$(find ons2_bringup)/launch/map_server.launch">
+    <arg name="map_file_name" value="$(arg map_file_name)"/>
+  </include>
+
+  <include file="$(find ons2_bringup)/launch/pc_to_scan.launch">
+    <arg name="min_height" value="$(arg min_height)"/>
+    <arg name="max_height" value="$(arg max_height)"/>
+    <arg name="scan_topic" value="/scan"/>
+    <arg name="cloud_topic" value="/odin1/cloud_slam"/>
+  </include>
+
+  <include file="$(find ons2_bringup)/launch/sliding_map.launch">
+    <arg name="cell_decay_sec" value="8.0"/>
+    <arg name="use_footprint_polygon" value="$(arg use_footprint_polygon)"/>
+    <arg name="footprint_radius_m" value="$(arg footprint_radius_m)"/>
+    <arg name="footprint_length_m" value="$(arg footprint_length_m)"/>
+    <arg name="footprint_width_m" value="$(arg footprint_width_m)"/>
+    <arg name="footprint_margin_m" value="$(arg footprint_margin_m)"/>
+  </include>
+
+  <include if="$(eval arg('global_planner') == 'map_planner')"
+           file="$(find ons2_bringup)/launch/map_planner.launch">
+    <arg name="map_file_name" value="$(arg map_file_name)"/>
+    <arg name="inflation_radius" value="$(arg inflation_radius)"/>
+    <arg name="obstacle_cost_safe_distance" value="$(arg obstacle_cost_safe_distance)"/>
+    <arg name="obstacle_cost_weight" value="$(arg obstacle_cost_weight)"/>
+    <arg name="line_of_sight_safe_distance" value="$(arg line_of_sight_safe_distance)"/>
+    <arg name="smoothing_iterations" value="$(arg smoothing_iterations)"/>
+    <arg name="smoothing_max_deviation_m" value="$(arg smoothing_max_deviation_m)"/>
+  </include>
+
+  <include if="$(eval arg('global_planner') != 'map_planner' and arg('global_planner_pkg') != '' and arg('global_planner_launch') != '')"
+           file="$(eval find(arg('global_planner_pkg')) + '/launch/' + arg('global_planner_launch'))"/>
+
+  <include if="$(eval arg('local_planner') == 'neupan')"
+           file="$(find ons2_bringup)/launch/neupan.launch">
+    <arg name="config" value="$(arg neupan_config)"/>
+    <arg name="navigation_mode" value="$(arg navigation_mode)"/>
+    <arg name="odom_topic" value="/odin1/odometry"/>
+    <arg name="odom_feedback" value="false"/>
+  </include>
+
+  <include if="$(eval arg('local_planner') != 'neupan' and arg('local_planner_pkg') != '' and arg('local_planner_launch') != '')"
+           file="$(eval find(arg('local_planner_pkg')) + '/launch/' + arg('local_planner_launch'))"/>
+</launch>
