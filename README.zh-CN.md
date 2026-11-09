@@ -78,8 +78,8 @@ Unitree Go2 仅由 ROS1 栈支持。
 
 # 局部规划器：NeuPAN 或 SRU
 
-!!! Note
-    SRU 将在近期发布。敬请期待！
+> [!NOTE]
+> SRU 将在近期发布。敬请期待！
 
 默认情况下，该栈在全局 A\* 路径上使用 **NeuPAN**（解析 DUNE + NRMP MPC）。ONS2 也可以用 **SRU** 端到端策略替代 NeuPAN，后者直接将深度图像和目标映射为速度指令。
 
@@ -268,7 +268,7 @@ bash scripts/ons2_sw01.sh --map=NAME                           # ASTRALL SW01 (R
 - 调优指南（详细）：[docs/TUNING_GUIDE.md](docs/TUNING_GUIDE.md)
 - 系统架构：[docs/architecture/ONS2_ARCHITECTURE.md](docs/architecture/ONS2_ARCHITECTURE.md)
 - 模块数据流与诊断：[docs/architecture/MODULE_DATAFLOW.md](docs/architecture/MODULE_DATAFLOW.md)
-- PCD → PGM 转换：[scripts/map_processing/](scripts/map_processing/)（`pcd_to_pgm.py`）
+- Q9000 扫描建图与 PCD → PGM 转换教程：[docs/Q9000-tutorial/Q9000-tutorial.md](docs/Q9000-tutorial/Q9000-tutorial.md)（`scripts/map_processing/pcd_to_pgm.py`）
 - 机器人档案规范：[docs/architecture/ROBOT_PROFILE.md](docs/architecture/ROBOT_PROFILE.md)
 - 巡检感知（Florence-2）及其与导航栈的集成指南：[Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception)
 - Docker（Jetson，ROS1）：[docker/docker-compose.yml](docker/docker-compose.yml)

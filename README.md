@@ -78,8 +78,8 @@ Unitree Go2 is supported by the ROS1 stack only.
 
 # Local Planner: NeuPAN or SRU
 
-!!! Note
-    SRU will be released soon. Please stay tuned!
+> [!NOTE]
+> SRU will be released soon. Please stay tuned!
 
 By default the stack uses **NeuPAN** (analytic DUNE + NRMP MPC) on a global A\* path. ONS2 can also replace NeuPAN with the **SRU** end-to-end policy, which maps the depth image and the goal directly to velocity commands.
 
@@ -268,7 +268,7 @@ Other references:
 - Tuning guide (detailed): [docs/TUNING_GUIDE.md](docs/TUNING_GUIDE.md)
 - Architecture: [docs/architecture/ONS2_ARCHITECTURE.md](docs/architecture/ONS2_ARCHITECTURE.md)
 - Module dataflow & diagnostics: [docs/architecture/MODULE_DATAFLOW.md](docs/architecture/MODULE_DATAFLOW.md)
-- PCD → PGM conversion: [scripts/map_processing/](scripts/map_processing/) (`pcd_to_pgm.py`)
+- Q9000 map scanning & PCD → PGM tutorial: [docs/Q9000-tutorial/Q9000-tutorial.md](docs/Q9000-tutorial/Q9000-tutorial.md) (`scripts/map_processing/pcd_to_pgm.py`)
 - Robot profiles: [docs/architecture/ROBOT_PROFILE.md](docs/architecture/ROBOT_PROFILE.md)
 - Inspection perception (Florence-2) and its navigation-stack integration guide: [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception)
 - Docker (Jetson, ROS1): [docker/docker-compose.yml](docker/docker-compose.yml)
