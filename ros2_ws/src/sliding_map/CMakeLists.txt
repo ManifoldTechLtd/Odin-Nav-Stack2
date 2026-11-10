@@ -57,6 +57,12 @@ if(BUILD_TESTING)
     TIMEOUT 60
     APPEND_ENV PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
   )
+  ament_add_pytest_test(
+    sliding_map_scan_update_contract_test
+    test/test_scan_update_contract.py
+    TIMEOUT 120
+    APPEND_ENV PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+  )
 endif()
 
 ament_package()

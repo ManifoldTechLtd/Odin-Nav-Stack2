@@ -40,6 +40,8 @@
     dynamic_input_topic: "/scan_dynamic"
     dynamic_require_vacated: true    # Apply short decay only after the dynamic target has vacated the cell
     footprint_clear_enable: false    # Optional zero-margin robot footprint clearing (default false)
+    no_return_keep_near_m: 0.30      # No-return (+inf) beams keep cells closer than this to the sensor
+                                     # (obstacles inside the 0.2 m pc_to_scan blind zone also return +inf)
 
     # Robot footprint self-filter (overridden from robots/<robot>/robot.yaml by ons2_bringup)
     use_footprint_polygon: true      # true = base_link rectangle; false = radial filter

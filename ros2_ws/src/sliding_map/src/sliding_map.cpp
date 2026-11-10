@@ -67,6 +67,7 @@ SlidingMapNode::SlidingMapNode() : rclcpp::Node("sliding_map_node") {
   dynamic_input_topic_ = this->declare_parameter("dynamic_input_topic", std::string(""));
   dynamic_require_vacated_ = this->declare_parameter("dynamic_require_vacated", true);
   footprint_clear_enable_ = this->declare_parameter("footprint_clear_enable", false);
+  no_return_keep_near_m_ = this->declare_parameter("no_return_keep_near_m", no_return_keep_near_m_);
 
   const size_t total_cells = static_cast<size_t>(width) * static_cast<size_t>(height);
   cell_stamp_.assign(total_cells, zeroTime());
@@ -248,35 +249,64 @@ void SlidingMapNode::updateMap(const sensor_msgs::msg::LaserScan& scan,
   }
   std::vector<std::pair<double, double>> frame_hits;
 
+  // Pass 1: analyse every beam against the map as it was before this frame, so a later beam
+  // cannot erase a hit written by an earlier beam and the dynamic classification is not
+  // polluted by this frame's own clearing. Pass 2 clears, pass 3 writes hits (occupied wins).
+  struct AcceptedHit {
+    int mx;
+    int my;
+    bool is_dyn;
+  };
+  std::vector<std::pair<int, int>> free_cells;
+  std::vector<AcceptedHit> accepted_hits;
+
   for (size_t i = 0; i < scan.ranges.size(); ++i) {
     const float raw_range = scan.ranges[i];
-    if (std::isnan(raw_range)) {
+    // NaN is invalid; -inf means "object closer than range_min" (REP 117): neither proves free space.
+    if (std::isnan(raw_range) || (std::isinf(raw_range) && raw_range < 0.0f)) {
       continue;
     }
-    double range = std::isfinite(raw_range) ? static_cast<double>(raw_range)
-                                            : scan.range_max;
-    bool has_hit = std::isfinite(raw_range) && raw_range >= scan.range_min &&
-                   raw_range < scan.range_max;
+    const bool finite = std::isfinite(raw_range);
+    double range = finite ? static_cast<double>(raw_range) : scan.range_max;
+    bool has_hit = finite && raw_range >= scan.range_min && raw_range < scan.range_max;
     double angle =
         scan.angle_min + static_cast<double>(i) * scan.angle_increment;
 
     tf2::Vector3 direction(std::cos(angle), std::sin(angle), 0.0);
     double traveled = std::min(static_cast<double>(scan.range_max), range);
 
-    std::vector<std::pair<int, int>> ray_cells;
-    ray_cells.emplace_back(origin_mx, origin_my);
+    tf2::Vector3 hit_point;
+    int hit_mx = -1;
+    int hit_my = -1;
+    if (has_hit) {
+      hit_point = tf_map_laser * (direction * static_cast<double>(raw_range));
+      if (!worldToMap(hit_point.x(), hit_point.y(), hit_mx, hit_my)) {
+        hit_mx = -1;
+        hit_my = -1;
+      }
+    }
 
+    // A no-return beam may come from an obstacle inside the blind zone, so keep the near cells.
+    const double clear_from = finite ? 0.0 : std::max(0.0, no_return_keep_near_m_);
+    if (clear_from <= 0.0) {
+      free_cells.emplace_back(origin_mx, origin_my);
+    }
     double free_limit = has_hit ? std::max(range - 1e-3, 0.0) : traveled;
     for (double dist = ray_step_; dist <= free_limit; dist += ray_step_) {
+      if (dist < clear_from) {
+        continue;
+      }
       tf2::Vector3 point = tf_map_laser * (direction * dist);
       int mx, my;
       if (!worldToMap(point.x(), point.y(), mx, my)) {
         continue;
       }
-      ray_cells.emplace_back(mx, my);
+      // Never clear the cell holding this beam's own return (also when the return is filtered).
+      if (mx == hit_mx && my == hit_my) {
+        continue;
+      }
+      free_cells.emplace_back(mx, my);
     }
-
-    setFree(ray_cells, stamp);
 
     // Three-stage hit filtering: range bound, robot footprint self-filter, and follow-target mask.
     if (has_hit) {
@@ -284,8 +314,6 @@ void SlidingMapNode::updateMap(const sensor_msgs::msg::LaserScan& scan,
       if (raw_range > max_fake_range_) {
         ++cnt_drop_far_;
       } else {
-        tf2::Vector3 hit_point =
-            tf_map_laser * (direction * static_cast<double>(raw_range));
         bool in_footprint;
         if (use_footprint_polygon_ && have_tf_map_base) {
           const tf2::Vector3 hb = tf_map_base.inverse() * hit_point;
@@ -302,31 +330,33 @@ void SlidingMapNode::updateMap(const sensor_msgs::msg::LaserScan& scan,
         } else if (follow_target_enable_ &&
                    insideActiveMask(hit_point.x(), hit_point.y())) {
           ++cnt_drop_mask_;
-        } else {
-          int mx, my;
-          if (worldToMap(hit_point.x(), hit_point.y(), mx, my)) {
-            const int cidx = index(mx, my);
-            bool is_dyn = false;
-            if (dynamic_memory_enable_) {
-              if (have_dyn_input) {
-                is_dyn = (latest_dynamic_scan_->intensities[i] >= 0.5f);
-                // Do not classify a newly observed cell (transitioning directly from UNKNOWN) as vacated dynamic.
-                if (dynamic_require_vacated_ && cidx >= 0 && !cell_seen_free_[cidx] &&
-                    map_.data[cidx] == -1) {
-                  is_dyn = false;
-                }
-              } else if (cidx >= 0 && cell_seen_free_[cidx] && map_.data[cidx] != 100) {
-                is_dyn = true;
+        } else if (hit_mx >= 0) {
+          const int cidx = index(hit_mx, hit_my);
+          bool is_dyn = false;
+          if (dynamic_memory_enable_) {
+            if (have_dyn_input) {
+              is_dyn = (latest_dynamic_scan_->intensities[i] >= 0.5f);
+              // Do not classify a newly observed cell (transitioning directly from UNKNOWN) as vacated dynamic.
+              if (dynamic_require_vacated_ && cidx >= 0 && !cell_seen_free_[cidx] &&
+                  map_.data[cidx] == -1) {
+                is_dyn = false;
               }
-              if (is_dyn) {
-                frame_hits.emplace_back(hit_point.x(), hit_point.y());
-              }
+            } else if (cidx >= 0 && cell_seen_free_[cidx] && map_.data[cidx] != 100) {
+              is_dyn = true;
             }
-            setOccupied(mx, my, stamp, is_dyn);
+            if (is_dyn) {
+              frame_hits.emplace_back(hit_point.x(), hit_point.y());
+            }
           }
+          accepted_hits.push_back(AcceptedHit{hit_mx, hit_my, is_dyn});
         }
       }
     }
+  }
+
+  setFree(free_cells, stamp);
+  for (const AcceptedHit& hit : accepted_hits) {
+    setOccupied(hit.mx, hit.my, stamp, hit.is_dyn);
   }
 
   if (dynamic_memory_enable_ || footprint_clear_enable_) {
@@ -434,10 +464,11 @@ void SlidingMapNode::publishFakeScan(const rclcpp::Time& stamp) {
   sensor_msgs::msg::LaserScan scan;
   scan.header.stamp = stamp;
   scan.header.frame_id = base_frame_;
+  // Beams sit at angle_min + i * angle_increment, so angle_max is the last beam (not +pi);
+  // consumers that interpolate between angle_min and angle_max then get the same angles.
   scan.angle_min = -kPi;
-  scan.angle_max = kPi;
-  scan.angle_increment =
-      (scan.angle_max - scan.angle_min) / static_cast<double>(output_points_);
+  scan.angle_increment = (2.0 * kPi) / static_cast<double>(output_points_);
+  scan.angle_max = scan.angle_min + static_cast<double>(output_points_ - 1) * scan.angle_increment;
   scan.range_min = range_min_;
   scan.range_max = max_fake_range_;
   scan.ranges.assign(output_points_, kNoReturn);
@@ -631,16 +662,20 @@ void SlidingMapNode::decayStaleCells(const rclcpp::Time& now) {
     if (map_.data[i] != 100) continue;
     if (timeIsZero(cell_stamp_[i])) continue;
     double timeout_sec = cell_decay_sec_;
+    bool vacated_hold = false;
     if (dynamic_memory_enable_) {
       if (cell_state_[i] == kCellVacatedDynamic) {
-        timeout_sec = (dynamic_min_hold_sec_ > 0.0) ? dynamic_min_hold_sec_
-                                                    : dynamic_decay_sec_;
+        timeout_sec = dynamic_decay_sec_;
+        // Keep a vacated dynamic cell for dynamic_min_hold_sec counted from the vacate time
+        vacated_hold = dynamic_min_hold_sec_ > 0.0 && !timeIsZero(cell_dyn_since_[i]) &&
+                       (now - cell_dyn_since_[i]) <
+                           rclcpp::Duration::from_seconds(dynamic_min_hold_sec_);
       } else if (cell_state_[i] == kCellDynamic && !dynamic_require_vacated_) {
         timeout_sec = dynamic_decay_sec_;
       }
     }
     const rclcpp::Duration timeout = rclcpp::Duration::from_seconds(timeout_sec);
-    if ((now - cell_stamp_[i]) > timeout) {
+    if (!vacated_hold && (now - cell_stamp_[i]) > timeout) {
       if (cell_state_[i] == kCellStatic) {
         ++cnt_decay_static_;
       } else {

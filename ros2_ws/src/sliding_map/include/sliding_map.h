@@ -99,6 +99,9 @@ private:
   std::string dynamic_input_topic_{""};
   bool dynamic_require_vacated_{true};
   bool footprint_clear_enable_{false};
+  // No-return (+inf) beams do not clear cells closer than this to the sensor: obstacles inside
+  // the sensor blind zone (< range_min) also report no return and must stay in memory.
+  double no_return_keep_near_m_{0.30};
   sensor_msgs::msg::LaserScan::SharedPtr latest_dynamic_scan_;
   long cnt_decay_static_{0};
   long cnt_decay_dynamic_{0};
