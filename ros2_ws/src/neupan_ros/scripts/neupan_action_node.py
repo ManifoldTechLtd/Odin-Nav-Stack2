@@ -233,13 +233,14 @@ class NeupanActionCompat(UpstreamNeupanCore, rclpy.node.Node):
             self._control_enabled = False
             self._control_generation += 1
             self._preinstalled_path_handle = None
+            # Stop first so a failing planner reset cannot skip the zero command.
+            self.vel_pub.publish(Twist())
             # Retain waypoints for an in-flight solve, but never regenerate them
             # while stopped. Only an explicit new path/goal reopens the gate.
             self.neupan_planner.reset(reset_velocity=True, clear_path=True)
             self.goal = None
             self.arrive = False
             self.last_arrive_flag = False
-            self.vel_pub.publish(Twist())
 
     def _control_cycle_token(self):
         with self._lock:

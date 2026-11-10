@@ -1409,7 +1409,7 @@ class neupan_core:
         ref = (getattr(self.neupan_planner, "info", None) or {}).get(
             "ref_state_list"
         )
-        if pts is None or not ref:
+        if pts is None or not ref or np.size(pts) == 0:
             return False
         dmin_sq = float("inf")
         for st in ref[:5]:

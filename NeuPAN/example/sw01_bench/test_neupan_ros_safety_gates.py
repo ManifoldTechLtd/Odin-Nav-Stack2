@@ -157,3 +157,42 @@ def test_missing_config_fails_fast(ros_context, monkeypatch):
             neupan_core()
     finally:
         node.destroy_node()
+
+
+def test_empty_obstacle_array_does_not_break_the_cycle(core):
+    _set_tf(core)
+    core._control_cycle()
+    _set_path(core)
+    _feed_scan(core)
+    core._control_cycle()
+    core.obstacle_points = np.zeros((2, 0))
+    _set_tf(core)
+    core._control_cycle()
+    assert core.test_modes[-1] == "MPC"
+
+
+def test_clear_navigation_stops_even_if_planner_reset_fails(ros_context, monkeypatch):
+    import importlib.util
+    from neupan.ros import ros2_shim
+
+    monkeypatch.setenv("NEUPAN_ROS_CONFIG", str(CONFIG))
+    script = ROOT.parent / "ros2_ws" / "src" / "neupan_ros" / "scripts" / "neupan_action_node.py"
+    spec = importlib.util.spec_from_file_location("neupan_action_node_under_test", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    node = module.NeupanActionCompat()
+    try:
+        published = []
+        monkeypatch.setattr(node.vel_pub, "publish", published.append)
+
+        def failing_reset(*args, **kwargs):
+            raise RuntimeError("reset failed")
+
+        monkeypatch.setattr(node.neupan_planner, "reset", failing_reset)
+        with pytest.raises(RuntimeError):
+            node._clear_navigation("test")
+        assert published and _is_zero(published[-1])
+        assert node._control_cycle_token() is None
+    finally:
+        node.destroy_node()
+        ros2_shim.bind_node(None)
