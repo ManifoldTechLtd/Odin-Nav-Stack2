@@ -2,13 +2,14 @@
 
 **English** | [中文](remote_monitoring.zh-CN.md)
 
+> [!NOTE]
+> **ROS 2 only.** The monitor is written against `rclpy`, so it runs on ROS 2 platforms only
+> (ASTRALL SW01 today). **ROS 1 platforms (Go2, Dobot Lumo) are not supported**: the ROS 1
+> launchers cannot start it, and no ROS 1 port is provided in this release.
+
 `ros2_ws/scripts/remote_monitor.py` — a single-process, single-port web console for operating
 an ONS2 robot from a browser anywhere: live status, on-demand camera, audio intercom, and
 navigation control with an emergency stop.
-
-> **ROS 2 only — ASTRALL SW01 today.** The monitor is written against `rclpy`, so it runs on
-> the ROS 2 platforms. **ROS 1 platforms (Go2, Dobot Lumo) are not supported for now**: the
-> ROS 1 launchers cannot start it, and no ROS 1 port is provided in this release.
 
 ---
 

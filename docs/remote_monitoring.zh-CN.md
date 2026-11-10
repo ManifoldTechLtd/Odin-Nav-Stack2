@@ -2,12 +2,12 @@
 
 [English](remote_monitoring.md) | **中文**
 
+> [!NOTE]
+> **仅支持 ROS 2。** 本监控台基于 `rclpy` 实现，只能运行在 ROS 2 平台（当前即 ASTRALL SW01）。
+> **ROS 1 平台（Go2、Dobot Lumo）不支持**：ROS 1 的启动脚本不会拉起它，本版本也不提供 ROS 1 适配。
+
 `ros2_ws/scripts/remote_monitor.py` —— 单进程、单端口的 Web 控制台，可以在任何地方用浏览器
 操作 ONS2 机器人：查看状态、按需开相机、语音喊话、控制导航并急停。
-
-> **仅支持 ROS 2 —— 目前即 ASTRALL SW01。** 本监控台基于 `rclpy` 实现，只能跑在 ROS 2 平台上。
-> **ROS 1 平台（Go2、Dobot Lumo）暂不支持**：ROS 1 的启动脚本无法拉起它，本版本也不提供
-> ROS 1 适配。
 
 ---
 
