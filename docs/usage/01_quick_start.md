@@ -164,9 +164,6 @@ The launcher already starts `foxglove_bridge`; nothing extra to install.
    (the dedicated capture channel) — **not** `/move_base_simple/goal`, or the robot starts
    moving on every drag.
 
-📹 **Video walkthrough:** _open-source terminal demo_ — link to be added on the
-[project page](https://manifoldtechltd.github.io/Odin-Nav-Stack2-Webpage/).
-
 ### 5.2 3DGS navigation console — optional, contact us
 
 For production inspection we provide a **separate, actively maintained control terminal**
@@ -175,12 +172,12 @@ fleet-ready dashboards. **It supports both ROS 1 and ROS 2**, so it also covers 
 where the open-source monitor above is not available yet (Go2, Dobot Lumo). It is not part of
 this open-source release — **please contact us to obtain it**.
 
-📹 **Video walkthrough:** _3DGS console demo_ — link to be added on the
-[project page](https://manifoldtechltd.github.io/Odin-Nav-Stack2-Webpage/).
-
-> Both videos are hosted on the project page. If you are evaluating which frontend to start
-> with: begin with Foxglove (free, zero setup), and move to the 3DGS console when you need
-> production-grade mission management.
+> 📹 **Video demos of both frontends** are on the
+> [ONS2 project page](https://manifoldtechltd.github.io/Odin-Nav-Stack2-Webpage/), in the
+> **"Navigation in 3DGS Reconstructed Scenes"** section.
+>
+> If you are evaluating which frontend to start with: begin with Foxglove (free, zero setup),
+> and move to the 3DGS console when you need production-grade mission management.
 
 ## 6. Check Before Trusting the Robot
 
