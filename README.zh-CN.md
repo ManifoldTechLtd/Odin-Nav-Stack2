@@ -341,8 +341,8 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 | **在仿真中复现场景**（Real2Sim） | [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
 | **用 Docker 部署**（Jetson，ROS1） | [docker/docker-compose.yml](docker/docker-compose.yml) |
 
-> **中英文档：** 调参指南、NeuPAN 优化说明、远程监控均提供 `*.zh-CN.md` 中文版，与英文版同目录。
-> README 本身也有[英文版](README.md)。
+> **中英文档：** 本仓所有指南都提供 `*.zh-CN.md` 中文版与英文版同目录并排（使用指南、调参指南、
+> NeuPAN 优化说明、远程监控），README 本身也有[英文版](README.md)。
 
 ## 核心指南
 

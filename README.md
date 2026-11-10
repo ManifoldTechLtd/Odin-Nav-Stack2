@@ -341,8 +341,8 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | **Reproduce a scenario in simulation** (Real2Sim) | [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
 | **Deploy with Docker** (Jetson, ROS1) | [docker/docker-compose.yml](docker/docker-compose.yml) |
 
-> **Chinese docs:** the tuning guide, NeuPAN notes and remote monitor are also available as
-> `*.zh-CN.md` next to each English file. The README itself has a [中文版](README.zh-CN.md).
+> **Chinese docs:** every guide in this repository has a `*.zh-CN.md` sibling (usage guides,
+> tuning guide, NeuPAN notes, remote monitor), and the README itself has a [中文版](README.zh-CN.md).
 
 ## Core guides
 

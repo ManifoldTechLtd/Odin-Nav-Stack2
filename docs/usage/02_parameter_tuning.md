@@ -1,5 +1,7 @@
 # 02 · Parameter Tuning
 
+**English** | [中文](02_parameter_tuning.zh-CN.md)
+
 This guide lists the parameters that matter for each supported platform, the order in which to change them, and a symptom table. Values below are the ones in the repository today. Read the full rationale in the [tuning guide](../TUNING_GUIDE.md) before changing anything that is not listed here.
 
 ## 1. Where the parameters live

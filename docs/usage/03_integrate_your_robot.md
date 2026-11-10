@@ -1,5 +1,7 @@
 # 03 · Integrate Your Own Robot
 
+**English** | [中文](03_integrate_your_robot.zh-CN.md)
+
 This guide describes the interface the stack expects from a robot, and the minimum steps to connect a new one. The only robot-specific code you must write is a **chassis bridge** that turns `/cmd_vel` into your robot's motion commands.
 
 Read [02 · Parameter Tuning](02_parameter_tuning.md) after the first run.
