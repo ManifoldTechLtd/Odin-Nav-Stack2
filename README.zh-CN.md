@@ -118,6 +118,8 @@ NeuPAN 是默认的局部规划器（`--local-planner=neupan`），适配新机�
   bash scripts/ons2_dobot_lumo.sh --map=NAME
   ```
 
+> `--map=NAME`（例如 `--map=parkinglot`）用于指定建好的地图前缀（对应同名的 `NAME.yaml`、`NAME.pgm` 和 `customer_file/NAME.bin` 三个文件）。关于地图扫描、转换与存放目录的详细说明，请参考 [Q9000 扫描建图与处理指南](docs/Q9000-tutorial/Q9000-tutorial.md)。
+
 参数调优（速度、底盘尺寸、安全间隙、脱困策略）请参见 [02 · 参数调优](docs/usage/02_parameter_tuning.md)。
 
 ## 运行 SRU

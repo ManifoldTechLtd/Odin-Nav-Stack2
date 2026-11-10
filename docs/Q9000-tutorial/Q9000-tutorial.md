@@ -82,11 +82,20 @@ Once processing completes, export two files:
 
 ### 4.1 Copy `.pcd` and `.bin` to the Robot
 
+> [!IMPORTANT]
+> The `customer_file/` directory at the repository root (`/path/to/base_inspection/customer_file/`) is ignored by Git and **does not exist in a fresh clone**. You must **create it manually** before copying `.bin` files into it:
+> ```bash
+> mkdir -p /path/to/base_inspection/customer_file
+> ```
+
 Transfer the exported `.pcd` and `.bin` files to your robot using either a USB flash drive or `scp`:
 
 **Option A — Via USB Flash Drive:**
 
 ```bash
+# Ensure customer_file/ exists at the repository root
+mkdir -p /path/to/base_inspection/customer_file
+
 # Enter the USB drive mount directory
 cd /media/Upan
 
@@ -102,6 +111,9 @@ ls /path/to/base_inspection/customer_file/parkinglot.bin
 **Option B — Via `scp` over the Network:**
 
 ```bash
+# First, create customer_file/ on the robot if it does not exist yet:
+ssh unitree@192.168.123.18 "mkdir -p /path/to/base_inspection/customer_file"
+
 # Copy the point cloud (.pcd) to map_planner/maps/
 scp parkinglot.pcd \
     unitree@192.168.123.18:/path/to/base_inspection/ros_ws/src/map_planner/maps/
@@ -174,4 +186,22 @@ Drag `parkinglot.pgm` into GIMP:
 
 ---
 
-Once `parkinglot.pgm`, `parkinglot.yaml`, and `parkinglot.bin` are in place, you are ready to launch the navigation stack—see [01 · Quick Start](../usage/01_quick_start.md).
+## 5. Launch Navigation with `--map=<map_name>`
+
+Once the map files are ready, pass `--map=<map_name>` to the launcher script:
+
+```bash
+bash /path/to/base_inspection/scripts/ons2_go2.sh --map=<map_name>    # e.g., --map=parkinglot
+# On ROS 2 (SW01): bash /path/to/base_inspection/scripts/ons2_sw01.sh --map=parkinglot
+# On Dobot Lumo:   bash /path/to/base_inspection/scripts/ons2_dobot_lumo.sh --map=parkinglot
+```
+
+Here `--map=<map_name>` selects the built map by its base name. Every map consists of **three files that must share the exact same base name** (for example, `parkinglot.yaml`, `parkinglot.pgm`, and `parkinglot.bin`):
+
+| File | Required Directory | Notes |
+|---|---|---|
+| `<map_name>.yaml` | `/path/to/base_inspection/ros_ws/src/map_planner/maps/`<br/>*(or `ros2_ws/src/map_planner/maps/` on ROS 2)* | 2D map metadata (`resolution`, `origin`, thresholds) |
+| `<map_name>.pgm` | `/path/to/base_inspection/ros_ws/src/map_planner/maps/`<br/>*(or `ros2_ws/src/map_planner/maps/` on ROS 2)* | 2D occupancy grid image |
+| `<map_name>.bin` | `/path/to/base_inspection/customer_file/` | Odin1 3D relocalization map (**note:** `customer_file/` does not exist by default in a fresh clone—create it manually with `mkdir -p /path/to/base_inspection/customer_file`) |
+
+For full mission control and patrol instructions after startup, see [01 · Quick Start](../usage/01_quick_start.md).

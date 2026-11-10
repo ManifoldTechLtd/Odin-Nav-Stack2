@@ -118,6 +118,8 @@ NeuPAN is the default local planner (`--local-planner=neupan`) and requires no n
   bash scripts/ons2_dobot_lumo.sh --map=NAME
   ```
 
+> `--map=NAME` (e.g., `--map=parkinglot`) selects your map triplet (`NAME.yaml`, `NAME.pgm`, and `customer_file/NAME.bin`). For how to build, convert, and place these map files, see the [Q9000 Map Scanning & Processing Guide](docs/Q9000-tutorial/Q9000-tutorial.md).
+
 For parameter tuning (speed, footprint, safety clearance, stuck escape), see [02 · Parameter Tuning](docs/usage/02_parameter_tuning.md).
 
 ## Running SRU
