@@ -361,6 +361,7 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 | 巡检感知（Florence-2，独立仓） | ✅ | ✅ |
 | 自然语言控制（`odin_brain`） | ✅ | ✅ |
 | 远程 Web 监控（相机 / 喊话 / 急停） | ❌ 暂不支持 | ✅ SW01 |
+| 3DGS 导航控制台 *（可选，联系获取）* | ✅ | ✅ |
 
 ## 自然语言控制（odin_brain）
 

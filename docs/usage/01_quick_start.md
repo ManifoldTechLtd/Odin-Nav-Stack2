@@ -171,8 +171,9 @@ The launcher already starts `foxglove_bridge`; nothing extra to install.
 
 For production inspection we provide a **separate, actively maintained control terminal**
 with a 3D Gaussian Splatting scene view: much richer visualisation, mission editing, and
-fleet-ready dashboards. It is not part of this open-source release — **please contact us to
-obtain it**.
+fleet-ready dashboards. **It supports both ROS 1 and ROS 2**, so it also covers the platforms
+where the open-source monitor above is not available yet (Go2, Dobot Lumo). It is not part of
+this open-source release — **please contact us to obtain it**.
 
 📹 **Video walkthrough:** _3DGS console demo_ — link to be added on the
 [project page](https://manifoldtechltd.github.io/Odin-Nav-Stack2-Webpage/).

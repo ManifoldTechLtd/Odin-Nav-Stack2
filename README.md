@@ -361,6 +361,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | Inspection perception (Florence-2, separate repo) | ✅ | ✅ |
 | Natural-language control (`odin_brain`) | ✅ | ✅ |
 | Remote web monitor (camera / intercom / e-stop) | ❌ not yet | ✅ SW01 |
+| 3DGS navigation console *(optional, on request)* | ✅ | ✅ |
 
 ## Natural-Language Control (odin_brain)
 
