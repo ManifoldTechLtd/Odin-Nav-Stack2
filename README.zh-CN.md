@@ -298,7 +298,29 @@ bash scripts/ons2_sw01.sh --map=NAME                           # ASTRALL SW01 (R
 
 # 文档
 
-三份指南覆盖主要任务：
+## 功能索引 —— 从你想做的事开始
+
+| 我想… | 看这篇 |
+|---|---|
+| **在现有机器人上跑巡检任务** | [01 · 快速开始](docs/usage/01_quick_start.md) |
+| **用浏览器驱动机器人**（Foxglove，或可选的 3DGS 控制台） | [快速开始 § 5 · Web 控制前端](docs/usage/01_quick_start.md#5-web-control-frontend) |
+| **通过 4G / 内网穿透远程操作** —— *仅 ROS 2（SW01），ROS 1 暂不支持* | [远程 Web 监控](docs/remote_monitoring.zh-CN.md) |
+| **搞懂或重调局部规划器** —— 优化了什么、为什么 | [NeuPAN 优化说明](docs/neuPAN_optimisation.zh-CN.md) |
+| **按名字查参数**，或根据症状排障 | [高级调参与排障指南](docs/TUNING_GUIDE.zh-CN.md) |
+| **选用或编写平台档案** | [机器人档案规范](docs/architecture/ROBOT_PROFILE.md) |
+| **加入自动巡检** —— 清单结论、标注图像 | [感知指南](perception/README.zh-CN.md) → [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) |
+| **接入一台新机器人** —— 接口契约、底盘桥、TF、启动 | [03 · 接入你自己的机器人](docs/usage/03_integrate_your_robot.md) |
+| **向 VLM 提问场景理解问题** | [VLM 场景理解](#vlm-场景理解) |
+| **用自然语言控制机器人** | [自然语言控制（odin_brain）](#自然语言控制odin_brain) |
+| **了解架构与模块数据流** | [系统架构](docs/architecture/ONS2_ARCHITECTURE.md) · [模块数据流](docs/architecture/MODULE_DATAFLOW.md) |
+| **扫描现场并建导航地图**（Q9000） | [Q9000 教程](docs/Q9000-tutorial/Q9000-tutorial.md) · [`pcd_to_pgm.py`](scripts/map_processing/pcd_to_pgm.py) |
+| **在仿真中复现场景**（Real2Sim） | [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
+| **用 Docker 部署**（Jetson，ROS1） | [docker/docker-compose.yml](docker/docker-compose.yml) |
+
+> **中英文档：** 调参指南、NeuPAN 优化说明、远程监控均提供 `*.zh-CN.md` 中文版，与英文版同目录。
+> README 本身也有[英文版](README.md)。
+
+## 核心指南
 
 | # | 指南 | 用途 |
 |---|---|---|
@@ -306,15 +328,15 @@ bash scripts/ons2_sw01.sh --map=NAME                           # ASTRALL SW01 (R
 | 2 | [参数调优](docs/usage/02_parameter_tuning.md) | 为各平台调整速度、底盘尺寸、间隙和跟踪参数 |
 | 3 | [接入你自己的机器人](docs/usage/03_integrate_your_robot.md) | 接入新机器人：接口契约、底盘桥接、TF、启动 |
 
-其他参考：
+## 功能在哪个版本可用
 
-- 调优指南（详细）：[docs/TUNING_GUIDE.md](docs/TUNING_GUIDE.md)
-- 系统架构：[docs/architecture/ONS2_ARCHITECTURE.md](docs/architecture/ONS2_ARCHITECTURE.md)
-- 模块数据流与诊断：[docs/architecture/MODULE_DATAFLOW.md](docs/architecture/MODULE_DATAFLOW.md)
-- Q9000 扫描建图与 PCD → PGM 转换教程：[docs/Q9000-tutorial/Q9000-tutorial.md](docs/Q9000-tutorial/Q9000-tutorial.md)（`scripts/map_processing/pcd_to_pgm.py`）
-- 机器人档案规范：[docs/architecture/ROBOT_PROFILE.md](docs/architecture/ROBOT_PROFILE.md)
-- 巡检感知（Florence-2）及其与导航栈的集成指南：[Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception)
-- Docker（Jetson，ROS1）：[docker/docker-compose.yml](docker/docker-compose.yml)
+| 能力 | ROS 1（Noetic） | ROS 2（Jazzy） |
+|---|---|---|
+| 巡检导航、全局/局部规划 | ✅ | ✅ |
+| Web 控制台（Foxglove） | ✅ | ✅ |
+| 巡检感知（Florence-2，独立仓） | ✅ | ✅ |
+| 自然语言控制（`odin_brain`） | ✅ | ✅ |
+| 远程 Web 监控（相机 / 喊话 / 急停） | ❌ 暂不支持 | ✅ SW01 |
 
 ## 自然语言控制（odin_brain）
 

@@ -6,9 +6,9 @@
 an ONS2 robot from a browser anywhere: live status, on-demand camera, audio intercom, and
 navigation control with an emergency stop.
 
-> **ROS 2 only.** The monitor is written against `rclpy`, so it runs on the ROS 2 platforms
-> (e.g. ASTRALL SW01). The ROS 1 launchers (`ons2_go2.sh`, `ons2_dobot_lumo.sh`) cannot drive
-> it as-is — porting it means rewriting the node layer from `rclpy` to `rospy`.
+> **ROS 2 only — ASTRALL SW01 today.** The monitor is written against `rclpy`, so it runs on
+> the ROS 2 platforms. **ROS 1 platforms (Go2, Dobot Lumo) are not supported for now**: the
+> ROS 1 launchers cannot start it, and no ROS 1 port is provided in this release.
 
 ---
 

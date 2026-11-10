@@ -298,7 +298,29 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 
 # Documentation
 
-Three guides cover the main tasks:
+## Feature index — start from what you want to do
+
+| I want to… | Read |
+|---|---|
+| **Run a patrol mission** on an existing robot | [01 · Quick Start](docs/usage/01_quick_start.md) |
+| **Drive it from a browser** (Foxglove, or the optional 3DGS console) | [Quick Start § 5 · Web Control Frontend](docs/usage/01_quick_start.md#5-web-control-frontend) |
+| **Operate it remotely over 4G / NAT** — *ROS 2 (SW01) only; ROS 1 not supported yet* | [Remote Web Monitor](docs/remote_monitoring.md) |
+| **Understand or retune the local planner** — what was optimised and why | [NeuPAN Optimisation Notes](docs/neuPAN_optimisation.md) |
+| **Look up a parameter by name**, or debug a symptom | [Advanced Tuning & Troubleshooting](docs/TUNING_GUIDE.md) |
+| **Pick or write a platform profile** | [Robot Profiles](docs/architecture/ROBOT_PROFILE.md) |
+| **Add automated inspection** — checklist verdicts, annotated frames | [Perception guide](perception/README.md) → [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) |
+| **Connect a new robot** — interface contract, chassis bridge, TF, launch | [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md) |
+| **Ask a VLM questions about the scene** | [VLM Scene Understanding](#vlm-scene-understanding) |
+| **Control the robot in natural language** | [Natural-Language Control (odin_brain)](#natural-language-control-odin_brain) |
+| **Understand the architecture / module dataflow** | [Architecture](docs/architecture/ONS2_ARCHITECTURE.md) · [Module Dataflow](docs/architecture/MODULE_DATAFLOW.md) |
+| **Scan a site and build a navigation map** (Q9000) | [Q9000 Tutorial](docs/Q9000-tutorial/Q9000-tutorial.md) · [`pcd_to_pgm.py`](scripts/map_processing/pcd_to_pgm.py) |
+| **Reproduce a scenario in simulation** (Real2Sim) | [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
+| **Deploy with Docker** (Jetson, ROS1) | [docker/docker-compose.yml](docker/docker-compose.yml) |
+
+> **Chinese docs:** the tuning guide, NeuPAN notes and remote monitor are also available as
+> `*.zh-CN.md` next to each English file. The README itself has a [中文版](README.zh-CN.md).
+
+## Core guides
 
 | # | Guide | Use it to |
 |---|---|---|
@@ -306,15 +328,15 @@ Three guides cover the main tasks:
 | 2 | [Parameter Tuning](docs/usage/02_parameter_tuning.md) | Change speed, footprint, clearance, and tracking for each platform |
 | 3 | [Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md) | Connect a new robot: interface contract, chassis bridge, TF, launch |
 
-Other references:
+## Feature status at a glance
 
-- Tuning guide (detailed): [docs/TUNING_GUIDE.md](docs/TUNING_GUIDE.md)
-- Architecture: [docs/architecture/ONS2_ARCHITECTURE.md](docs/architecture/ONS2_ARCHITECTURE.md)
-- Module dataflow & diagnostics: [docs/architecture/MODULE_DATAFLOW.md](docs/architecture/MODULE_DATAFLOW.md)
-- Q9000 map scanning & PCD → PGM tutorial: [docs/Q9000-tutorial/Q9000-tutorial.md](docs/Q9000-tutorial/Q9000-tutorial.md) (`scripts/map_processing/pcd_to_pgm.py`)
-- Robot profiles: [docs/architecture/ROBOT_PROFILE.md](docs/architecture/ROBOT_PROFILE.md)
-- Inspection perception (Florence-2) and its navigation-stack integration guide: [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception)
-- Docker (Jetson, ROS1): [docker/docker-compose.yml](docker/docker-compose.yml)
+| Capability | ROS 1 (Noetic) | ROS 2 (Jazzy) |
+|---|---|---|
+| Patrol navigation, local/global planning | ✅ | ✅ |
+| Web control console (Foxglove) | ✅ | ✅ |
+| Inspection perception (Florence-2, separate repo) | ✅ | ✅ |
+| Natural-language control (`odin_brain`) | ✅ | ✅ |
+| Remote web monitor (camera / intercom / e-stop) | ❌ not yet | ✅ SW01 |
 
 ## Natural-Language Control (odin_brain)
 
