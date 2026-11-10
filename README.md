@@ -51,7 +51,8 @@
   Plans substantially faster even on low-compute platforms, with smoother execution and nimbler obstacle avoidance.  
   See the [NeuPAN optimisation notes](docs/neuPAN_optimisation.md) for what was changed and the measured gains.
 - **Upgraded VLM, bring your own model**  
-  Connect a more capable vision-language model to your own workstation for richer scene understanding.
+  Connect a more capable vision-language model to your own workstation for richer scene understanding.  
+  See the [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) tutorial for web links and documentation.
 - **Built for industrial inspection**  
   Extensive optimizations tuned to real industrial inspection scenarios and long patrol routes.
 - **End-to-end, fully open source**  

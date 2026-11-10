@@ -2,8 +2,8 @@
 
 **English** | [中文](neuPAN_optimisation.zh-CN.md)
 
-ONS2 uses **NeuPAN** as its local planner. NeuPAN is a penalty-based MPC that alternates
-between two blocks every control tick:
+**NeuPAN** is one of ONS2's local planners: a penalty-based MPC that alternates between two
+blocks every control tick:
 
 - **DUNE** — maps the robot shape into a latent point space,
 - **NRMP** — solves a nonlinear receding-horizon QP in that latent space.
@@ -15,19 +15,16 @@ hardware. The optimisations below are what make ONS2 viable on a Jetson-class ma
 
 ## Measured performance
 
-Numbers below are from **Jetson Orin NX 8 GB**, `receding = 8`, measured through the full
-ROS stack (not a micro-benchmark), and rounded deliberately — treat them as ballpark, not
-as vendor spec sheets.
+After the optimisations, same parameters, **single planning computation**:
 
-| Stage | Share of a planning tick |
+| Platform | Single planning computation |
 |---|---|
-| **Whole planning tick** | **≈150 ms** |
-| NRMP solve | ≈90 ms |
-| DUNE encode | ≈30 ms |
-| Point-cloud pre-processing | ≈20 ms |
+| Jetson Orin NX 8 GB | **30–40 ms** |
+| Intel NUC (x86) | **15–30 ms** |
 
-The exact figure depends on scene complexity, obstacle count and horizon settings; enable
-the planner's own timing logs if you need per-scene numbers.
+> This is the planner's own computation time and excludes perception, transport and the
+> control chain. End-to-end tick time also depends on scene complexity, obstacle count and
+> host load — measure it on your target machine with the planner's own timing logs.
 
 ---
 
@@ -43,6 +40,8 @@ set, the same mapping can be expressed **analytically**.
 - Faster **and** more accurate: the analytic form reproduces the network's mapping to a
   much tighter tolerance than the network itself, so the latent geometry is cleaner.
 - This is the single largest change in the DUNE path.
+- **Trade-off:** the analytic form cannot self-tune the way the trained network could —
+  real-robot parameters have to be tuned by hand per platform.
 
 ### 1.2 NRMP: solver migration (ECOS → SCS)
 
@@ -86,27 +85,20 @@ solve, with no added collisions.
 
 ### 2.2 Narrow-corridor deadlock fix
 
-In a corridor whose clear width left almost no margin per side, the planner would enter a
-repeated escape/reverse cycle. The root cause was **not** the escape logic: the obstacle
-influence distance exceeded the available side clearance, so every tick the planner saw
-the walls as unavoidable. Fixing the adaptive distance (2.1) removed the trigger; the
-escape logic was left untouched.
+In a corridor whose clear width left almost no margin per side, the planner would fall into
+repeated reversing. The root cause was **not** the reversing logic: the obstacle influence
+distance exceeded the available side clearance, so every tick the planner saw the walls as
+unavoidable. Fixing the adaptive distance (2.1) removed the trigger; the reversing logic was
+left untouched.
 
-### 2.3 Corridor-aware escape gating
+### 2.3 Rotation clearance gate
 
-Escape/reverse behaviour is now gated by corridor state: inside a corridor the planner
-only escapes on genuine standstill, not on the transient slow-downs that a narrow passage
-legitimately produces. This removed the false triggers that made the robot reverse for no
-reason.
-
-### 2.4 Rotation clearance gate
-
-When the robot must rotate in place (escape or re-alignment), the planner checks the
+When the robot must rotate in place (alignment or re-planning), the planner checks the
 **geometric footprint circle** against the current scan before rotating. In tight spaces it
 backs off instead of turning into a wall corner. This measurably reduced oscillation in
 doorways and narrow corridors.
 
-### 2.5 Wall-clearance cost in global planning
+### 2.4 Wall-clearance cost in global planning
 
 The global planner's Theta\* cost includes a soft penalty for hugging obstacles, which
 reduces corner scraping and gives the local planner a cleaner reference path to track.
@@ -119,8 +111,7 @@ reduces corner scraping and gives the local planner a cleaner reference path to 
 |---|---|
 | **CPU affinity** | Pinning the planner to dedicated cores keeps its latency floor stable instead of competing with perception |
 | **Power mode** | Raising the Jetson power mode keeps clocks from throttling mid-mission |
-| **Latency compensation (Smith predictor)** | The chassis applies velocity with a delay; a first-order predictor compensates it so tracking stays tight |
-| **Real/sim strategy parity** | Escape and adaptive strategies are shared between simulation and robot, so tuning done in sim transfers instead of silently diverging |
+| **Real/sim strategy parity** | Strategies and adaptive behaviour are shared between simulation and robot, so tuning done in sim transfers instead of silently diverging |
 
 ---
 
@@ -131,7 +122,7 @@ Planner settings live in `NeuPAN/neupan/ros/configs/`:
 | File | Contents |
 |---|---|
 | `planner*.yaml` | Robot footprint, horizon (`receding`), DUNE sample count, limits, costs |
-| `config*.yaml` | Adaptive behaviour, escape gates, latency compensation, debug switches |
+| `config*.yaml` | Adaptive behaviour, rotation clearance, latency compensation, debug switches |
 
 Profiles are selected per platform, so you can change speed/clearance behaviour without
 touching code. See `README_档位说明.md` in the same directory for the profile semantics.

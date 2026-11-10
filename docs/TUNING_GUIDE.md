@@ -74,10 +74,45 @@ Practical parameter dictionary and symptom-based troubleshooting guide for the O
 |---|---|---|---|
 | `topic.scan` | `/scan_360` / `/scan` | Obstacle scan input topic. | `/scan_360` includes `sliding_map` short-term blind-spot memory; `/scan` is live forward FOV only. |
 | `scan_range` | `[0.2, 4.5]` | `[min_m, max_m]` laser range filter. | Keep `max <= 4.5` aligned with `sliding_map`. |
-| `w_deadband.enable` | `true` / `false` | Hysteresis angular-velocity deadband on straight segments. | Suppresses `|w| < enter_rad` (`0.03`) until `|w| > exit_rad` (`0.067`) when heading error `< 8 deg`, curvature `< 0.15`, and obstacle clearance `> 0.9 m`. Eliminates straight-line yaw hunting. |
-| `odom_feedback.enable` | `false` | Feed measured chassis twist into MPC initial state. | Enable alongside `smith_predictor` if compensating large actuation transport delay. |
-| `smith_predictor.enable` | `false` | Forward-predict robot pose over `fixed_lag_sec` + MPC solve time. | Compensates transport lag (`max_tau_sec: 0.25`). |
-| `output_gain.enable` | `false` | Inverse velocity gain (`v_fwd_gain`, `v_bwd_gain`, `w_gain`). | Used when open-loop chassis velocity tracking exhibits a constant scale factor. |
+| `w_deadband.enable` | `true` / `false` | **Software** hysteresis angular-velocity deadband on straight segments. | Suppresses `|w| < enter_rad` (`0.03`) until `|w| > exit_rad` (`0.067`) when heading error `< 8 deg`, curvature `< 0.15`, and obstacle clearance `> 0.9 m`. Its purpose is to stop a **highly responsive** chassis from reacting to sub-threshold jitter around zero angular velocity — the symptom is straight-line yaw hunting / S-shaped drift. **If your chassis already implements its own velocity deadband (most vendor SDKs do), leave this `false`** — stacking two deadbands makes slow corrections feel sticky. |
+| `odom_feedback.enable` | `false` | Feed measured chassis twist into the MPC initial state. | Default `false`. Only worth enabling (together with `smith_predictor`) if you have **measured** a large actuation transport delay and want the MPC to start from the measured state instead of the commanded one. |
+| `smith_predictor.enable` | `false` | Forward-predict robot pose over `fixed_lag_sec` + MPC solve time. | Default `false` — the shipped profiles do **not** enable it. It is a compensation aid for chassis with pronounced transport lag; if you have not measured a lag curve, enabling it can make tracking worse rather than better. |
+| `output_gain.enable` | `false` | Inverse velocity gain (`v_fwd_gain`, `v_bwd_gain`, `w_gain`). | **Do not tune this by eye.** Run a **step-response test** on the chassis first (command a known velocity, log the achieved steady-state velocity), then set the gain from the measured scale factor. Without a step-response measurement the numbers are guesswork. |
+
+### 3.1b Point-Cloud Height Slicing (`min_height` / `max_height`)
+
+These two live in the **launch file** (the `pc_to_scan` node), not in `config.yaml` — they
+depend on how the sensor is mounted on your robot, not on planner behaviour.
+
+The slice is expressed **relative to the sensor frame** (e.g. `odin1_base_link`), so the
+same numbers mean different physical heights on different robots. Convert to
+**ground-relative** height first:
+
+```
+ground_height = sensor_mount_height + min_height / max_height
+```
+
+Choose the band from what your robot can actually hit:
+
+| Constraint | Rule of thumb |
+|---|---|
+| **Lower bound** | A little above the floor — typically **0.10–0.20 m ground-relative**. Slicing at floor level picks up ground texture, ramps and suspension bounce as obstacles. |
+| **Upper bound** | Slightly **above the robot's own body height**. Anything that can physically stop the chassis — a step, a pallet edge, a low cart — must fall inside the band. |
+| **Band width** | Cover the **whole collision envelope**, not just the sensor's own height. A too-narrow band is the most common cause of "the robot saw the wall but still hit it". |
+
+Worked example (Go2): sensor mounted at `0.545 m`, `min_height = -0.1`, `max_height = 0.3`
+→ obstacles **0.445 – 0.845 m above the floor** count as obstacles.
+
+Adjust in these cases:
+
+- Driving on **reflective, glassy or sloping** floors, or with noticeable pitch/bounce → raise
+  the lower bound.
+- Encountering **tall obstacles whose base sits above** the current band (shelving, table tops,
+  truck beds) → raise the upper bound.
+- Robot has a **low skirt / bumper** that will hit before the body does → lower the lower bound
+  so that skirt-level obstacles are seen.
+
+These are launch-time parameters: change them and restart the node, **no rebuild needed**.
 
 ### 3.2 Adaptive Safety Band (`adaptive_d_max:`)
 
@@ -91,6 +126,14 @@ Estimates local corridor half-width from scan slices and dynamically clamps `d_m
 | `guard_min_dist_m` / `guard_frames` | `0.05` / `3` | Safety net: if obstacle distance drops below `0.05 m` for 3 frames, snap `d_max` back to baseline for `guard_cooldown_sec` (`5.0 s`). | `★★` |
 
 ### 3.3 Stuck Detection & Escape Recovery (`stuck_escape:`)
+
+> **This section is legacy.** The parameters below describe an older escape implementation
+> and are documented for reference only. **We do not recommend tuning them.**
+>
+> **Leave `enable: true`** (the shipped default) and let the planner's own correction handle
+> stalled situations. Only work through the individual parameters below if you must debug
+> escape behaviour on your specific platform — and expect the shipped defaults to already be
+> the better answer for most robots.
 
 | Parameter | Default | Purpose | Priority |
 |---|---|---|---|

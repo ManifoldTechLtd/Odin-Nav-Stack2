@@ -146,7 +146,42 @@ ros2 service call /waypoint_manager/pause std_srvs/srv/Trigger "{}"
 ros2 topic echo /waypoint_manager/status --once
 ```
 
-## 5. Check Before Trusting the Robot
+## 5. Web Control Frontend
+
+Beyond the terminal console, ONS2 exposes the robot over a WebSocket bridge, so you can
+drive and watch it from a browser.
+
+### 5.1 Open-source frontend (Foxglove) — included
+
+The launcher already starts `foxglove_bridge`; nothing extra to install.
+
+1. Open [Foxglove Studio](https://foxglove.dev/) in a browser (or the desktop app).
+2. Connect to **Foxglove WebSocket** → `ws://<robot-ip>:8765`
+   (the bridge listens on `0.0.0.0`, so both the wired and WiFi addresses work).
+3. Add panels: **3D** (point cloud + TF), **Image** (`/odin1/image/undistorted`),
+   **Plot**, and **Raw Message** for `/waypoint_manager/status`.
+4. Publish a goal from Foxglove: set the *2D Pose* publish topic to `/waypoint_pick`
+   (the dedicated capture channel) — **not** `/move_base_simple/goal`, or the robot starts
+   moving on every drag.
+
+📹 **Video walkthrough:** _open-source terminal demo_ — link to be added on the
+[project page](https://manifoldtechltd.github.io/Odin-Nav-Stack2-Webpage/).
+
+### 5.2 3DGS navigation console — optional, contact us
+
+For production inspection we provide a **separate, actively maintained control terminal**
+with a 3D Gaussian Splatting scene view: much richer visualisation, mission editing, and
+fleet-ready dashboards. It is not part of this open-source release — **please contact us to
+obtain it**.
+
+📹 **Video walkthrough:** _3DGS console demo_ — link to be added on the
+[project page](https://manifoldtechltd.github.io/Odin-Nav-Stack2-Webpage/).
+
+> Both videos are hosted on the project page. If you are evaluating which frontend to start
+> with: begin with Foxglove (free, zero setup), and move to the 3DGS console when you need
+> production-grade mission management.
+
+## 6. Check Before Trusting the Robot
 
 1. **TF**: `map → odom → odin1_base_link → base_link` must be connected (see the FAQ in the [README](../../README.md#faq)).
 2. **Sign convention**: `+linear.x` forward, `+angular.z` counter-clockwise. Call the `move` and `turn` services of `atomic_move` (0.5 m forward, 90° left) and check the direction.
