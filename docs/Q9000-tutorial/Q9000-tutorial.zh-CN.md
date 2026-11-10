@@ -87,11 +87,20 @@
 
 ### 4.1 把 `.pcd` 与 `.bin` 拷到机器人上
 
+> [!IMPORTANT]
+> 仓库根目录下的 `customer_file/`（`/path/to/base_inspection/customer_file/`）默认被 Git 忽略，**新克隆的仓库里没有这个文件夹**。拷贝 `.bin` 重定位地图前，请先**手动创建该文件夹**：
+> ```bash
+> mkdir -p /path/to/base_inspection/customer_file
+> ```
+
 用 U 盘或 `scp` 把导出的 `.pcd` 和 `.bin` 传到机器人：
 
 **方式 A —— 用 U 盘：**
 
 ```bash
+# 确保仓库根目录下的 customer_file/ 已创建
+mkdir -p /path/to/base_inspection/customer_file
+
 # 进入 U 盘挂载目录
 cd /media/Upan
 
@@ -107,6 +116,9 @@ ls /path/to/base_inspection/customer_file/parkinglot.bin
 **方式 B —— 通过网络用 `scp`：**
 
 ```bash
+# 先在机器人端创建 customer_file/ 目录（若尚未创建）
+ssh unitree@192.168.123.18 "mkdir -p /path/to/base_inspection/customer_file"
+
 # 把点云（.pcd）拷到 map_planner/maps/
 scp parkinglot.pcd \
     unitree@192.168.123.18:/path/to/base_inspection/ros_ws/src/map_planner/maps/
@@ -179,4 +191,22 @@ gimp
 
 ---
 
-等 `parkinglot.pgm`、`parkinglot.yaml`、`parkinglot.bin` 三者就位后，就可以启动导航栈了 —— 见 [01 · 快速开始](../usage/01_quick_start.zh-CN.md)。
+## 5. 使用 `--map=<地图名>` 启动导航
+
+地图文件准备就绪后，在启动脚本中通过 `--map=<地图名>` 指定要加载的地图：
+
+```bash
+bash /path/to/base_inspection/scripts/ons2_go2.sh --map=<地图名>    # 例如 --map=parkinglot
+# ROS 2 (SW01)：bash /path/to/base_inspection/scripts/ons2_sw01.sh --map=parkinglot
+# Dobot Lumo：  bash /path/to/base_inspection/scripts/ons2_dobot_lumo.sh --map=parkinglot
+```
+
+其中，`--map` 用于选中建好的地图名。每张地图包含**三个必须同名的文件**：`<地图名>.yaml`、`<地图名>.pgm` 和 `<地图名>.bin`（例如 `parkinglot.yaml`、`parkinglot.pgm`、`parkinglot.bin`），存放位置如下：
+
+| 文件 | 存放目录 | 说明 |
+|---|---|---|
+| `<地图名>.yaml` | `/path/to/base_inspection/ros_ws/src/map_planner/maps/`<br/>*（ROS 2 为 `ros2_ws/src/map_planner/maps/`）* | 2D 栅格地图元数据配置 |
+| `<地图名>.pgm` | `/path/to/base_inspection/ros_ws/src/map_planner/maps/`<br/>*（ROS 2 为 `ros2_ws/src/map_planner/maps/`）* | 2D 占据栅格地图图像 |
+| `<地图名>.bin` | `/path/to/base_inspection/customer_file/` | Odin1 3D 重定位地图（**注意：** 新克隆的仓库下默认没有 `customer_file/` 文件夹，需手动执行 `mkdir -p /path/to/base_inspection/customer_file` 创建） |
+
+启动后的完整巡检与控制流程请参见 [01 · 快速开始](../usage/01_quick_start.zh-CN.md)。
