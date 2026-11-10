@@ -12,7 +12,7 @@
  */
 
 /**
- * @file sw01_cmd_vel_bridge.cpp
+ * @file sw01_bridge.cpp
  * @brief ROS 2 Twist -> Hypertron SW01 (ASTRALL SDK) velocity bridge node.
  *
  * Data flow:
@@ -28,10 +28,10 @@
  *   3. Dedicated heartbeat thread (heartbeat_rate)
  *   4. Graceful SIGINT/SIGTERM shutdown: send zero velocity before SDK deinit
  *   5. Control authority verification before sending motion commands
+ *   6. Explicit motion enable (~/enable); start-up, authority loss, link loss and faults disable motion
  */
 #include "sw01_ros_control/sw01_bridge.h"
 
-#include <csignal>
 #include <cmath>
 #include <cstdio>
 #include <algorithm>
@@ -43,10 +43,25 @@
 namespace sw01_ros_control
 {
 
-Sw01Bridge::Sw01Bridge(const rclcpp::Node::SharedPtr& node) : node_(node)
+namespace
 {
-  last_cmd_time_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
-  last_auth_retry_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+constexpr auto kAuthRetryInterval = std::chrono::seconds(2);
+constexpr auto kStatusPollInterval = std::chrono::milliseconds(500);
+// SDK requires a new motion command within 50ms or it stops automatically
+constexpr double kSendIntervalWarnMs = 50.0;
+constexpr double kMotionEpsilon = 1e-3;
+
+double secondsBetween(std::chrono::steady_clock::time_point later,
+                      std::chrono::steady_clock::time_point earlier)
+{
+  return std::chrono::duration<double>(later - earlier).count();
+}
+}  // namespace
+
+Sw01Bridge::Sw01Bridge(const rclcpp::Node::SharedPtr& node, std::shared_ptr<ChassisSdk> sdk,
+                       SteadyClockFn now_fn)
+  : node_(node), sdk_(std::move(sdk)), now_fn_(std::move(now_fn))
+{
 }
 
 Sw01Bridge::~Sw01Bridge()
@@ -128,6 +143,9 @@ void Sw01Bridge::loadParams()
   params_.auto_enter_move_mode = node_->declare_parameter(
       "auto_enter_move_mode", params_.auto_enter_move_mode);
   params_.publish_status = node_->declare_parameter("publish_status", params_.publish_status);
+  params_.require_enable = node_->declare_parameter("require_enable", params_.require_enable);
+  params_.blocking_error_mask =
+      node_->declare_parameter("blocking_error_mask", params_.blocking_error_mask);
 
   // Clamp parameters to safe bounds
   const double kHardLinearLimit = 1.0;   // SDK range [-1.0, 1.0] m/s
@@ -157,16 +175,23 @@ void Sw01Bridge::loadParams()
                 params_.cmd_vel_decay_window);
     params_.cmd_vel_decay_window = 0.0;
   }
+  if (params_.cmd_vel_decay_window > params_.cmd_vel_timeout)
+  {
+    RCLCPP_WARN(node_->get_logger(),
+                "cmd_vel_decay_window=%.3f 大于 cmd_vel_timeout=%.3f，已截断为 %.3f",
+                params_.cmd_vel_decay_window, params_.cmd_vel_timeout, params_.cmd_vel_timeout);
+    params_.cmd_vel_decay_window = params_.cmd_vel_timeout;
+  }
   if (params_.heartbeat_rate < 2.0 || params_.heartbeat_rate > 100.0)
   {
     RCLCPP_WARN(node_->get_logger(), "heartbeat_rate=%.1f 超出建议范围 [2, 100]Hz，已强制为 10Hz",
                 params_.heartbeat_rate);
     params_.heartbeat_rate = 10.0;
   }
-  if (params_.control_rate < 10.0 || params_.control_rate > 250.0)
+  if (params_.control_rate < 25.0 || params_.control_rate > 250.0)
   {
     // SDK requires a new motion command within 50ms (>= 20Hz) or it stops automatically
-    RCLCPP_WARN(node_->get_logger(), "control_rate=%.1f 超出建议范围 [10, 250]Hz，已强制为 50Hz",
+    RCLCPP_WARN(node_->get_logger(), "control_rate=%.1f 超出建议范围 [25, 250]Hz，已强制为 50Hz",
                 params_.control_rate);
     params_.control_rate = 50.0;
   }
@@ -175,10 +200,18 @@ void Sw01Bridge::loadParams()
     RCLCPP_WARN(node_->get_logger(), "sdk_timeout=%d 过小，已强制为 10000ms", params_.sdk_timeout);
     params_.sdk_timeout = 10000;
   }
-  if (params_.auth_timeout < 100)
+  if (params_.auth_timeout < 50)
   {
-    RCLCPP_WARN(node_->get_logger(), "auth_timeout=%d 过小，已强制为 2000ms", params_.auth_timeout);
-    params_.auth_timeout = 2000;
+    RCLCPP_WARN(node_->get_logger(), "auth_timeout=%d 过小，已强制为 200ms", params_.auth_timeout);
+    params_.auth_timeout = 200;
+  }
+  else if (params_.auth_timeout > 400)
+  {
+    // The SDK holds its send lock while waiting, so heartbeats stall for the whole request
+    RCLCPP_WARN(node_->get_logger(),
+                "auth_timeout=%d 过大（申请期间心跳被阻塞，SDK 心跳容限 500ms），已限制为 400ms",
+                params_.auth_timeout);
+    params_.auth_timeout = 400;
   }
   if (params_.move_timeout < 5)
   {
@@ -190,6 +223,12 @@ void Sw01Bridge::loadParams()
     RCLCPP_WARN(node_->get_logger(), "heartbeat_timeout=%d 过小，已强制为 20ms",
                 params_.heartbeat_timeout);
     params_.heartbeat_timeout = 20;
+  }
+  if (params_.blocking_error_mask < 0 || params_.blocking_error_mask > 0xFFFFFFFFLL)
+  {
+    RCLCPP_WARN(node_->get_logger(), "blocking_error_mask=%lld 非法，已强制为 0",
+                static_cast<long long>(params_.blocking_error_mask));
+    params_.blocking_error_mask = 0;
   }
 
   RCLCPP_INFO(node_->get_logger(), "---------------- sw01_cmd_vel_bridge 参数 ----------------");
@@ -208,6 +247,10 @@ void Sw01Bridge::loadParams()
               params_.require_move_mode ? "true" : "false");
   RCLCPP_INFO(node_->get_logger(), "  auto_enter_move_mode     : %s",
               params_.auto_enter_move_mode ? "true" : "false");
+  RCLCPP_INFO(node_->get_logger(), "  require_enable           : %s",
+              params_.require_enable ? "true" : "false");
+  RCLCPP_INFO(node_->get_logger(), "  blocking_error_mask      : 0x%08llX",
+              static_cast<unsigned long long>(params_.blocking_error_mask));
   RCLCPP_INFO(node_->get_logger(), "---------------------------------------------------------");
 }
 
@@ -222,16 +265,17 @@ bool Sw01Bridge::init()
     authority_pub_ = node_->create_publisher<std_msgs::msg::Bool>(
         "~/control_authority", rclcpp::QoS(1).transient_local());
   }
+  enabled_pub_ = node_->create_publisher<std_msgs::msg::Bool>(
+      "~/motion_enabled", rclcpp::QoS(1).transient_local());
   cmd_sent_pub_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>("~/cmd_sent", 100);
   control_trace_pub_ = node_->create_publisher<std_msgs::msg::String>("~/control_trace", 100);
 
   // Initialize SDK
-  AstrallConfig cfg;
-  cfg.heartbeatCb = [this](void* /*data*/, uint16_t /*len*/) {
+  sdk_cfg_.heartbeatCb = [this](void* /*data*/, uint16_t /*len*/) {
     RCLCPP_DEBUG_THROTTLE(node_->get_logger(), *node_->get_clock(), 5000,
                           "收到 SW01 心跳应答 / heartbeat ack from SW01");
   };
-  cfg.sdkStatusCb = [this](void* data, uint16_t len) {
+  sdk_cfg_.sdkStatusCb = [this](void* data, uint16_t len) {
     if (data == nullptr || len < sizeof(AstrallSdkStatus))
     {
       return;
@@ -253,7 +297,7 @@ bool Sw01Bridge::init()
               "请确认：1) NX 与 SW01 SDK 网口连通 (SW01: 10.18.0.100, UDP 3600)；"
               "2) SW01 处于阻尼模式或锁定趴下状态，否则 SDK 无法建立连接");
 
-  uint16_t res = AstrallSdkInit(cfg, static_cast<uint32_t>(params_.sdk_timeout));
+  uint16_t res = sdk_->init(sdk_cfg_, static_cast<uint32_t>(params_.sdk_timeout));
   if (res != ASTRALL_RES_SUCCESSED)
   {
     RCLCPP_ERROR(node_->get_logger(), "ASTRALL SDK 初始化失败 / SDK init failed: 0x%04X %s",
@@ -265,15 +309,24 @@ bool Sw01Bridge::init()
     return false;
   }
   sdk_initialized_.store(true);
+  sdk_linked_.store(true);
   ::setenv("EC_NODE", "sw01_cmd_vel_bridge", 1);
   EC_TRACE(ec::NODE_READY, "startup", "ASTRALL SDK initialized ok");
   RCLCPP_INFO(node_->get_logger(), "ASTRALL SDK 初始化成功 / SDK initialized");
+
+  // Keep the link alive before any query or authority request that may block
+  {
+    std::lock_guard<std::mutex> lock(sdk_mutex_);
+    sdk_->heartbeat(static_cast<uint32_t>(params_.heartbeat_timeout));
+  }
+  running_.store(true);
+  heartbeat_thread_ = std::thread(&Sw01Bridge::heartbeatLoop, this);
 
   // Log device, battery, and system status
   {
     std::lock_guard<std::mutex> lock(sdk_mutex_);
     AstrallDeviceInfo info;
-    uint16_t info_res = AstrallGetDeviceInfo(info, 200);
+    uint16_t info_res = sdk_->deviceInfo(info, 200);
     if (info_res == ASTRALL_RES_SUCCESSED)
     {
       RCLCPP_INFO(node_->get_logger(), "设备信息 / device: version=%s sn=%s model=%u",
@@ -286,7 +339,7 @@ bool Sw01Bridge::init()
     }
 
     AstrallPowerStatus power;
-    if (AstrallGetPowerStatus(power) == ASTRALL_RES_SUCCESSED)
+    if (sdk_->powerStatus(power) == ASTRALL_RES_SUCCESSED)
     {
       RCLCPP_INFO(node_->get_logger(), "电池状态 / battery: soc=%.1f%% voltage=%.1fV temp=%.1f℃",
                   power.soc, power.voltage, power.temp);
@@ -298,7 +351,7 @@ bool Sw01Bridge::init()
     }
 
     AstrallSystemStatus sys;
-    if (AstrallGetSystemStatus(sys) == ASTRALL_RES_SUCCESSED)
+    if (sdk_->systemStatus(sys) == ASTRALL_RES_SUCCESSED)
     {
       RCLCPP_INFO(node_->get_logger(),
                   "系统状态 / system: sysStatus=%u errorCode=0x%08X warnCode=0x%08X",
@@ -313,6 +366,7 @@ bool Sw01Bridge::init()
       }
     }
   }
+  pollSystemStatus(now_fn_(), true);
 
   // Request and verify control authority
   if (params_.request_control_authority)
@@ -334,7 +388,7 @@ bool Sw01Bridge::init()
   // Check current sport mode
   {
     std::lock_guard<std::mutex> lock(sdk_mutex_);
-    uint16_t sport = AstrallGetSportStatus();
+    uint16_t sport = sdk_->sportStatus();
     RCLCPP_INFO(node_->get_logger(), "当前运动状态 / sport status: 0x%04X %s", sport,
                 sportStatusToString(sport));
     if (sport != ASTRALL_SPORT_STATUS_MOVE)
@@ -345,14 +399,22 @@ bool Sw01Bridge::init()
     }
   }
 
-  // Start heartbeat thread and velocity subscription
-  running_.store(true);
-  heartbeat_thread_ = std::thread(&Sw01Bridge::heartbeatLoop, this);
+  motion_enabled_.store(!params_.require_enable);
 
   cmd_vel_sub_ = node_->create_subscription<geometry_msgs::msg::Twist>(
       params_.cmd_vel_topic, rclcpp::QoS(1),
       std::bind(&Sw01Bridge::cmdVelCallback, this, std::placeholders::_1));
+  enable_srv_ = node_->create_service<std_srvs::srv::SetBool>(
+      "~/enable", std::bind(&Sw01Bridge::enableCallback, this, std::placeholders::_1,
+                            std::placeholders::_2));
   RCLCPP_INFO(node_->get_logger(), "已订阅速度话题 / subscribed: %s", params_.cmd_vel_topic.c_str());
+  if (params_.require_enable)
+  {
+    RCLCPP_WARN(node_->get_logger(),
+                "底盘运动未使能 / motion disabled：确认现场安全后执行 "
+                "ros2 service call %s/enable std_srvs/srv/SetBool \"{data: true}\"",
+                node_->get_fully_qualified_name());
+  }
   RCLCPP_INFO(node_->get_logger(), "桥接节点就绪 / bridge ready");
   publishStatus();
   return true;
@@ -361,7 +423,7 @@ bool Sw01Bridge::init()
 bool Sw01Bridge::requestControlAuthority()
 {
   std::lock_guard<std::mutex> lock(sdk_mutex_);
-  uint16_t res = AstrallAuthControl(ASTRALL_AUTH_SDK, static_cast<uint32_t>(params_.auth_timeout));
+  uint16_t res = sdk_->requestAuthority(static_cast<uint32_t>(params_.auth_timeout));
   if (res == ASTRALL_RES_SUCCESSED)
   {
     has_authority_.store(true);
@@ -407,8 +469,82 @@ void Sw01Bridge::cmdVelCallback(const geometry_msgs::msg::Twist::ConstSharedPtr&
   cmd_vx_ = vx;
   cmd_vy_ = vy;
   cmd_vyaw_ = vyaw;
-  last_cmd_time_ = node_->now();
+  last_cmd_time_ = now_fn_();
   cmd_received_ = true;
+}
+
+void Sw01Bridge::enableCallback(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                                std::shared_ptr<std_srvs::srv::SetBool::Response> response)
+{
+  std::lock_guard<std::mutex> gate(gate_mutex_);
+  if (!request->data)
+  {
+    if (motion_enabled_.exchange(false))
+    {
+      RCLCPP_WARN(node_->get_logger(), "底盘运动已由操作员解除使能 / motion disabled by operator");
+    }
+    response->success = true;
+    response->message = "motion disabled";
+    publishStatus();
+    return;
+  }
+
+  std::string reason;
+  if (!sdk_initialized_.load())
+  {
+    reason = "SDK not initialized";
+  }
+  else if (!sdk_linked_.load())
+  {
+    reason = "SDK link is down";
+  }
+  else if (!has_authority_.load())
+  {
+    reason = "no SDK control authority (release the remote controller first)";
+  }
+  else if (fault_active_.load())
+  {
+    reason = "robot fault active (check sysStatus / errorCode)";
+  }
+  if (!reason.empty())
+  {
+    response->success = false;
+    response->message = "enable rejected: " + reason;
+    RCLCPP_WARN(node_->get_logger(), "使能被拒绝 / enable rejected: %s", reason.c_str());
+    return;
+  }
+
+  {
+    // Only commands received after enabling may move the robot
+    std::lock_guard<std::mutex> lock(cmd_mutex_);
+    cmd_received_ = false;
+    cmd_vx_ = 0.0;
+    cmd_vy_ = 0.0;
+    cmd_vyaw_ = 0.0;
+  }
+  motion_enabled_.store(true);
+  response->success = true;
+  response->message = "motion enabled; only commands received from now on are executed";
+  RCLCPP_WARN(node_->get_logger(), "底盘运动已使能，只执行此后收到的速度指令 / motion enabled");
+  publishStatus();
+}
+
+void Sw01Bridge::disableMotion(const std::string& reason)
+{
+  if (!params_.require_enable)
+  {
+    return;
+  }
+  std::lock_guard<std::mutex> gate(gate_mutex_);
+  if (!motion_enabled_.exchange(false))
+  {
+    return;
+  }
+  RCLCPP_WARN(node_->get_logger(),
+              "底盘运动已解除使能 / motion disabled: %s。确认安全后重新使能: "
+              "ros2 service call %s/enable std_srvs/srv/SetBool \"{data: true}\"",
+              reason.c_str(), node_->get_fully_qualified_name());
+  publishStatus();
 }
 
 void Sw01Bridge::heartbeatLoop()
@@ -423,7 +559,7 @@ void Sw01Bridge::heartbeatLoop()
     uint16_t res;
     {
       std::lock_guard<std::mutex> lock(sdk_mutex_);
-      res = AstrallHeartbeat(static_cast<uint32_t>(params_.heartbeat_timeout));
+      res = sdk_->heartbeat(static_cast<uint32_t>(params_.heartbeat_timeout));
     }
 
     if (res == ASTRALL_RES_SUCCESSED)
@@ -453,42 +589,98 @@ void Sw01Bridge::heartbeatLoop()
   RCLCPP_INFO(node_->get_logger(), "心跳线程已退出 / heartbeat thread stopped");
 }
 
-bool Sw01Bridge::motionAllowed()
+bool Sw01Bridge::ensureAuthority(std::chrono::steady_clock::time_point now)
 {
-  if (!has_authority_.load())
-  {
-    RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
-                         "当前没有 SDK 控制权，运动指令被丢弃 / no control authority");
-
-    if (params_.request_control_authority)
-    {
-      const rclcpp::Time now = node_->now();
-      if (last_auth_retry_.nanoseconds() == 0 ||
-          (now - last_auth_retry_).seconds() >= 2.0)
-      {
-        last_auth_retry_ = now;
-        requestControlAuthority();
-      }
-    }
-    return has_authority_.load();
-  }
-
-  if (!params_.require_move_mode)
+  if (has_authority_.load())
   {
     return true;
   }
+  disableMotion("失去 SDK 控制权 / control authority lost");
+  RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
+                       "当前没有 SDK 控制权，运动指令被丢弃 / no control authority");
 
-  uint16_t sport;
+  if (params_.request_control_authority &&
+      (!auth_retry_started_ || now - last_auth_retry_ >= kAuthRetryInterval))
+  {
+    auth_retry_started_ = true;
+    last_auth_retry_ = now;
+    requestControlAuthority();
+  }
+  return has_authority_.load();
+}
+
+void Sw01Bridge::pollSystemStatus(std::chrono::steady_clock::time_point now, bool force)
+{
+  if (!force && status_polled_ && now - last_status_poll_ < kStatusPollInterval)
+  {
+    return;
+  }
+  status_polled_ = true;
+  last_status_poll_ = now;
+
+  AstrallSystemStatus sys;
+  uint16_t res;
   {
     std::lock_guard<std::mutex> lock(sdk_mutex_);
-    sport = AstrallGetSportStatus();
+    res = sdk_->systemStatus(sys);
   }
-  if (sport == ASTRALL_SPORT_STATUS_MOVE)
+  if (res != ASTRALL_RES_SUCCESSED)
   {
-    return true;
+    return;
   }
+  const uint32_t error_bits = static_cast<uint32_t>(sys.errorCode);
+  const uint32_t mask = static_cast<uint32_t>(params_.blocking_error_mask);
+  const bool fault = (sys.sysStatus == ASTRALL_SYSTEM_CODE_ERROR) || (error_bits & mask) != 0;
+  if (fault != fault_active_.exchange(fault))
+  {
+    if (fault)
+    {
+      RCLCPP_ERROR(node_->get_logger(),
+                   "机器人故障，禁止运动 / robot fault: sysStatus=%u errorCode=0x%08X "
+                   "(blocking_error_mask=0x%08X)",
+                   static_cast<unsigned>(sys.sysStatus), error_bits, mask);
+    }
+    else
+    {
+      RCLCPP_INFO(node_->get_logger(), "机器人故障已清除，需重新使能 / robot fault cleared");
+    }
+  }
+}
 
-  if (params_.auto_enter_move_mode &&
+Sw01Bridge::CommandSample Sw01Bridge::sampleCommand(std::chrono::steady_clock::time_point now)
+{
+  CommandSample sample;
+  std::lock_guard<std::mutex> lock(cmd_mutex_);
+  sample.ever_received = cmd_received_;
+  if (!cmd_received_)
+  {
+    return sample;
+  }
+  const double dt = secondsBetween(now, last_cmd_time_);
+  sample.age_sec = dt;
+  if (dt > params_.cmd_vel_timeout)
+  {
+    return sample;
+  }
+  sample.timed_out = false;
+  double frac = 1.0;
+  if (params_.cmd_vel_decay_window > 0.0 &&
+      dt > (params_.cmd_vel_timeout - params_.cmd_vel_decay_window))
+  {
+    frac = (params_.cmd_vel_timeout - dt) / params_.cmd_vel_decay_window;
+  }
+  sample.vx = cmd_vx_ * frac;
+  sample.vy = cmd_vy_ * frac;
+  sample.vyaw = cmd_vyaw_ * frac;
+  return sample;
+}
+
+void Sw01Bridge::handleNonMoveState(uint16_t sport, bool motion_ok, const CommandSample& cmd)
+{
+  const bool wants_motion =
+      !cmd.timed_out &&
+      (std::fabs(cmd.vx) + std::fabs(cmd.vy) + std::fabs(cmd.vyaw)) > kMotionEpsilon;
+  if (params_.auto_enter_move_mode && motion_ok && wants_motion &&
       (sport == ASTRALL_SPORT_STATUS_FIXEDSTAND || sport == ASTRALL_SPORT_STATUS_DAMPING))
   {
     RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
@@ -498,30 +690,29 @@ bool Sw01Bridge::motionAllowed()
     if (sport == ASTRALL_SPORT_STATUS_DAMPING)
     {
       // Transition from DAMPING requires FIXEDSTAND before entering MOVE
-      uint16_t stand_res = AstrallSportModeControl(ASTRALL_SPORT_MODE_CMD_FIXEDSTAND,
+      uint16_t stand_res = sdk_->sportModeControl(ASTRALL_SPORT_MODE_CMD_FIXEDSTAND,
                                                   static_cast<uint32_t>(params_.move_timeout));
       RCLCPP_WARN(node_->get_logger(), "下发「锁定站立」指令: 0x%04X %s", stand_res,
                   resultToString(stand_res));
-      return false;
+      return;
     }
-    uint16_t move_res = AstrallSportModeControl(ASTRALL_SPORT_MODE_CMD_MOVE,
+    uint16_t move_res = sdk_->sportModeControl(ASTRALL_SPORT_MODE_CMD_MOVE,
                                                static_cast<uint32_t>(params_.move_timeout));
     RCLCPP_WARN(node_->get_logger(), "下发「行走」指令: 0x%04X %s", move_res,
                 resultToString(move_res));
-    return false;
+    return;
   }
 
   RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
                        "机器人当前状态为 0x%04X %s，非 MOVE(行走) 状态，速度指令被忽略。"
                        "请先让机器人站立并进入行走模式",
                        sport, sportStatusToString(sport));
-  return false;
 }
 
 uint16_t Sw01Bridge::sendMove(float vx, float vy, float vyaw)
 {
   std::lock_guard<std::mutex> lock(sdk_mutex_);
-  uint16_t res = AstrallMove(vx, vy, vyaw, static_cast<uint32_t>(params_.move_timeout));
+  uint16_t res = sdk_->move(vx, vy, vyaw, static_cast<uint32_t>(params_.move_timeout));
   if (res != ASTRALL_RES_SUCCESSED)
   {
     if (res == ASTRALL_RES_WITHOUT_AUTH)
@@ -551,16 +742,32 @@ void Sw01Bridge::sendZeroVelocity(int repeat)
   {
     return;
   }
+  int failures = 0;
   for (int i = 0; i < repeat; ++i)
   {
     std::lock_guard<std::mutex> lock(sdk_mutex_);
-    AstrallMove(0.0f, 0.0f, 0.0f, static_cast<uint32_t>(params_.move_timeout));
+    if (sdk_->move(0.0f, 0.0f, 0.0f, static_cast<uint32_t>(params_.move_timeout)) !=
+        ASTRALL_RES_SUCCESSED)
+    {
+      ++failures;
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  if (failures > 0)
+  {
+    RCLCPP_WARN(node_->get_logger(), "零速指令下发失败 %d/%d 次 / zero velocity not acknowledged",
+                failures, repeat);
   }
 }
 
 void Sw01Bridge::publishStatus()
 {
+  if (enabled_pub_)
+  {
+    std_msgs::msg::Bool enabled_msg;
+    enabled_msg.data = motion_enabled_.load();
+    enabled_pub_->publish(enabled_msg);
+  }
   if (!params_.publish_status)
   {
     return;
@@ -574,9 +781,9 @@ void Sw01Bridge::publishStatus()
   authority_pub_->publish(auth_msg);
 }
 
-void Sw01Bridge::publishControlTrace(float vx, float vy, float vyaw, double cmd_age,
-                                     bool timed_out, bool motion_allowed,
-                                     bool move_attempted, uint16_t move_result)
+void Sw01Bridge::publishControlTrace(float vx, float vy, float vyaw, const CommandSample& cmd,
+                                     bool motion_ok, bool move_attempted, uint16_t move_result,
+                                     double send_interval_ms)
 {
   if (move_attempted)
   {
@@ -592,14 +799,20 @@ void Sw01Bridge::publishControlTrace(float vx, float vy, float vyaw, double cmd_
   std::ostringstream json;
   json << std::boolalpha << std::fixed << std::setprecision(6)
        << "{\"stamp\":" << node_->now().seconds()
-       << ",\"cmd_age_sec\":" << cmd_age
-       << ",\"selected_vx\":" << vx
-       << ",\"selected_vy\":" << vy
-       << ",\"selected_wz\":" << vyaw
-       << ",\"timed_out\":" << timed_out
-       << ",\"motion_allowed\":" << motion_allowed
+       << ",\"cmd_age_sec\":" << cmd.age_sec
+       << ",\"selected_vx\":" << cmd.vx
+       << ",\"selected_vy\":" << cmd.vy
+       << ",\"selected_wz\":" << cmd.vyaw
+       << ",\"sent_vx\":" << vx
+       << ",\"sent_vy\":" << vy
+       << ",\"sent_wz\":" << vyaw
+       << ",\"timed_out\":" << cmd.timed_out
+       << ",\"motion_allowed\":" << motion_ok
        << ",\"move_attempted\":" << move_attempted
        << ",\"move_result\":" << move_result
+       << ",\"send_interval_ms\":" << send_interval_ms
+       << ",\"motion_enabled\":" << motion_enabled_.load()
+       << ",\"fault_active\":" << fault_active_.load()
        << ",\"sdk_linked\":" << sdk_linked_.load()
        << ",\"control_authority\":" << has_authority_.load()
        << "}";
@@ -608,85 +821,120 @@ void Sw01Bridge::publishControlTrace(float vx, float vy, float vyaw, double cmd_
   control_trace_pub_->publish(trace);
 }
 
+void Sw01Bridge::step()
+{
+  pollSystemStatus(now_fn_(), false);
+  if (fault_active_.load())
+  {
+    disableMotion("机器人故障 / robot fault");
+  }
+  if (!sdk_linked_.load())
+  {
+    disableMotion("SDK 链路断开 / SDK link lost");
+  }
+  const bool authority = ensureAuthority(now_fn_());
+
+  // Select the command only after the (possibly blocking) authority request
+  const auto now = now_fn_();
+  const CommandSample cmd = sampleCommand(now);
+  if (cmd.timed_out && !cmd_timed_out_.exchange(true))
+  {
+    if (cmd.ever_received)
+    {
+      RCLCPP_WARN(node_->get_logger(),
+                  "超过 %.2fs 未收到 %s 消息，已切换为零速输出 / cmd_vel timeout -> zero velocity",
+                  params_.cmd_vel_timeout, params_.cmd_vel_topic.c_str());
+    }
+  }
+  else if (!cmd.timed_out && cmd_timed_out_.exchange(false))
+  {
+    RCLCPP_INFO(node_->get_logger(), "重新收到速度指令 / cmd_vel resumed");
+  }
+
+  const bool enabled = motion_enabled_.load();
+  const bool motion_ok = enabled && !fault_active_.load() && sdk_linked_.load();
+  const bool wants_motion =
+      !cmd.timed_out &&
+      (std::fabs(cmd.vx) + std::fabs(cmd.vy) + std::fabs(cmd.vyaw)) > kMotionEpsilon;
+  if (wants_motion && !motion_ok)
+  {
+    if (!enabled)
+    {
+      RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
+                           "收到速度指令但底盘运动未使能，指令被忽略。确认安全后执行: "
+                           "ros2 service call %s/enable std_srvs/srv/SetBool \"{data: true}\"",
+                           node_->get_fully_qualified_name());
+    }
+    else
+    {
+      RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
+                           "收到速度指令但存在故障或 SDK 链路断开，指令被忽略 / "
+                           "command ignored: fault or link lost");
+    }
+  }
+
+  bool move_attempted = false;
+  uint16_t move_result = 0;
+  double send_interval_ms = -1.0;
+  float out_vx = 0.0f;
+  float out_vy = 0.0f;
+  float out_vyaw = 0.0f;
+  if (authority)
+  {
+    uint16_t sport = ASTRALL_SPORT_STATUS_MOVE;
+    if (params_.require_move_mode)
+    {
+      std::lock_guard<std::mutex> lock(sdk_mutex_);
+      sport = sdk_->sportStatus();
+    }
+    if (params_.require_move_mode && sport != ASTRALL_SPORT_STATUS_MOVE)
+    {
+      handleNonMoveState(sport, motion_ok, cmd);
+    }
+    else
+    {
+      if (motion_ok)
+      {
+        out_vx = static_cast<float>(cmd.vx);
+        out_vy = static_cast<float>(cmd.vy);
+        out_vyaw = static_cast<float>(cmd.vyaw);
+      }
+      if (have_last_move_)
+      {
+        send_interval_ms = 1000.0 * secondsBetween(now, last_move_time_);
+        if (send_interval_ms > kSendIntervalWarnMs)
+        {
+          RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
+                               "运动指令实际发送间隔 %.1f ms 超过 %.0f ms / move interval too long",
+                               send_interval_ms, kSendIntervalWarnMs);
+        }
+      }
+      have_last_move_ = true;
+      last_move_time_ = now;
+      move_attempted = true;
+      move_result = sendMove(out_vx, out_vy, out_vyaw);
+    }
+  }
+  if (!move_attempted)
+  {
+    have_last_move_ = false;
+  }
+  publishControlTrace(out_vx, out_vy, out_vyaw, cmd, motion_ok, move_attempted, move_result,
+                      send_interval_ms);
+
+  if (++status_tick_ >= static_cast<int>(params_.control_rate))
+  {
+    status_tick_ = 0;
+    publishStatus();
+  }
+}
+
 void Sw01Bridge::spin()
 {
   rclcpp::WallRate rate(params_.control_rate);
-  const int status_publish_interval = static_cast<int>(params_.control_rate);
-  int tick = 0;
-
   while (rclcpp::ok() && !stop_requested_.load())
   {
-    double vx = 0.0;
-    double vy = 0.0;
-    double vyaw = 0.0;
-    bool timed_out = false;
-    bool ever_received = false;
-    double cmd_age = -1.0;
-    {
-      std::lock_guard<std::mutex> lock(cmd_mutex_);
-      const rclcpp::Time now = node_->now();
-      ever_received = cmd_received_;
-      if (!cmd_received_)
-      {
-        timed_out = true;
-      }
-      else
-      {
-        const double dt = (now - last_cmd_time_).seconds();
-        cmd_age = dt;
-        if (dt > params_.cmd_vel_timeout)
-        {
-          timed_out = true;
-        }
-        else if (params_.cmd_vel_decay_window > 0.0 &&
-                 dt > (params_.cmd_vel_timeout - params_.cmd_vel_decay_window))
-        {
-          const double frac = (params_.cmd_vel_timeout - dt) /
-                              params_.cmd_vel_decay_window;
-          vx = cmd_vx_ * frac;
-          vyaw = cmd_vyaw_ * frac;
-        }
-        else
-        {
-          vx = cmd_vx_;
-          vy = cmd_vy_;
-          vyaw = cmd_vyaw_;
-        }
-      }
-    }
-
-    if (timed_out && !cmd_timed_out_.exchange(true))
-    {
-      if (ever_received)
-      {
-        RCLCPP_WARN(node_->get_logger(),
-                    "超过 %.2fs 未收到 %s 消息，已切换为零速输出 / cmd_vel timeout -> zero velocity",
-                    params_.cmd_vel_timeout, params_.cmd_vel_topic.c_str());
-      }
-    }
-    else if (!timed_out && cmd_timed_out_.exchange(false))
-    {
-      RCLCPP_INFO(node_->get_logger(), "重新收到速度指令 / cmd_vel resumed");
-    }
-
-    const bool motion_allowed = motionAllowed();
-    bool move_attempted = false;
-    uint16_t move_result = 0;
-    if (motion_allowed)
-    {
-      move_attempted = true;
-      move_result = sendMove(static_cast<float>(vx), static_cast<float>(vy), static_cast<float>(vyaw));
-    }
-    publishControlTrace(static_cast<float>(vx), static_cast<float>(vy),
-                        static_cast<float>(vyaw), cmd_age, timed_out,
-                        motion_allowed, move_attempted, move_result);
-
-    if (++tick >= status_publish_interval)
-    {
-      tick = 0;
-      publishStatus();
-    }
-
+    step();
     rate.sleep();
   }
 
@@ -706,6 +954,7 @@ void Sw01Bridge::shutdown()
   }
 
   RCLCPP_INFO(node_->get_logger(), "开始优雅退出 / graceful shutdown ...");
+  motion_enabled_.store(false);
 
   if (sdk_initialized_.load() && has_authority_.load())
   {
@@ -721,7 +970,7 @@ void Sw01Bridge::shutdown()
 
   if (sdk_initialized_.exchange(false))
   {
-    AstrallSdkDeinit();
+    sdk_->deinit();
     RCLCPP_INFO(node_->get_logger(), "ASTRALL SDK 已断开 / SDK deinitialized");
   }
 
@@ -731,57 +980,3 @@ void Sw01Bridge::shutdown()
 }
 
 }  // namespace sw01_ros_control
-
-namespace
-{
-sw01_ros_control::Sw01Bridge* g_bridge = nullptr;
-volatile sig_atomic_t g_sigint_received = 0;
-
-/** @brief Signal handler setting the stop flag so shutdown runs on the main thread. */
-void sigintHandler(int /*sig*/)
-{
-  g_sigint_received = 1;
-  if (g_bridge != nullptr)
-  {
-    g_bridge->requestStop();
-  }
-}
-}  // namespace
-
-int main(int argc, char** argv)
-{
-  rclcpp::init(argc, argv);
-  // Install custom SIGINT/SIGTERM handler so zero velocity is sent before SDK deinitialization.
-  rclcpp::uninstall_signal_handlers();
-
-  auto node = std::make_shared<rclcpp::Node>("sw01_cmd_vel_bridge");
-  sw01_ros_control::Sw01Bridge bridge(node);
-  g_bridge = &bridge;
-  signal(SIGINT, sigintHandler);
-  signal(SIGTERM, sigintHandler);
-
-  if (!bridge.init())
-  {
-    RCLCPP_ERROR(node->get_logger(), "sw01_cmd_vel_bridge 初始化失败，节点退出");
-    g_bridge = nullptr;
-    rclcpp::shutdown();
-    return 1;
-  }
-
-  rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
-  executor.add_node(node);
-  std::thread spin_thread([&executor]() { executor.spin(); });
-
-  bridge.spin();
-  bridge.shutdown();
-
-  executor.cancel();
-  if (spin_thread.joinable())
-  {
-    spin_thread.join();
-  }
-
-  g_bridge = nullptr;
-  rclcpp::shutdown();
-  return 0;
-}

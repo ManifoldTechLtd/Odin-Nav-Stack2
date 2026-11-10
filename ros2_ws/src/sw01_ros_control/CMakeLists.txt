@@ -22,6 +22,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 
 # Locate ASTRALL SDK (bundled under sdk/ by architecture, overridable via -DSW01_SDK_ROOT=<dir>)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
@@ -53,17 +54,25 @@ endif()
 message(STATUS "ASTRALL SDK include : ${ASTRALL_SDK_INCLUDE_HDR}")
 message(STATUS "ASTRALL SDK library : ${ASTRALL_SDK_LIBRARY}")
 
-add_executable(sw01_cmd_vel_bridge src/sw01_cmd_vel_bridge.cpp)
-target_include_directories(sw01_cmd_vel_bridge PRIVATE
+# Bridge logic; talks to the SDK only through ChassisSdk so tests can link without the SDK
+add_library(sw01_bridge_core STATIC src/sw01_bridge.cpp)
+target_include_directories(sw01_bridge_core PUBLIC
   include
   ${ASTRALL_SDK_INCLUDE_DIR}
 )
-ament_target_dependencies(sw01_cmd_vel_bridge
+ament_target_dependencies(sw01_bridge_core
   rclcpp
   geometry_msgs
   std_msgs
+  std_srvs
+)
+
+add_executable(sw01_cmd_vel_bridge
+  src/sw01_cmd_vel_bridge_main.cpp
+  src/astrall_chassis_sdk.cpp
 )
 target_link_libraries(sw01_cmd_vel_bridge
+  sw01_bridge_core
   ${ASTRALL_SDK_LIBRARY}
   pthread
 )
@@ -82,5 +91,12 @@ file(GLOB ASTRALL_SDK_RUNTIME_LIBS "${ASTRALL_SDK_LIBRARY_DIR}/libASTRALL_SDK.so
 install(FILES ${ASTRALL_SDK_RUNTIME_LIBS}
   DESTINATION lib/${PROJECT_NAME}
 )
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_sw01_bridge test/test_sw01_bridge.cpp TIMEOUT 120)
+  target_include_directories(test_sw01_bridge PRIVATE test)
+  target_link_libraries(test_sw01_bridge sw01_bridge_core)
+endif()
 
 ament_package()
