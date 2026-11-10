@@ -50,7 +50,14 @@ bash scripts/ons2_sw01.sh --map=NAME
 - Readiness gates are printed in the main terminal; long-running nodes run in the `ons2_sw01` tmux session (`odin / map_server / sw01 / mission / atomic / waypoint / rosbridge / foxglove / health / control`).
 - Attach with `tmux attach -t ons2_sw01`.
 - `ROS_DOMAIN_ID=98` is set by the script. Set it yourself in any terminal you open by hand.
-- Robot-specific geometry, global planner parameters, bridge topic, and NeuPAN configs are loaded from `robots/sw01/robot.yaml` and `robots/sw01/neupan/`.
+- Robot-specific geometry, global planner parameters, chassis bridge parameters, and NeuPAN configs are loaded from `robots/sw01/robot.yaml` and `robots/sw01/neupan/`.
+- **Chassis motion starts disabled.** Stand the robot up and switch it to MOVE with the remote controller, release the remote controller, make sure the area is clear, then enable motion from the `control` window (`[c]`, requires `--allow-motion`) or with:
+
+  ```bash
+  ros2 service call /sw01_cmd_vel_bridge/enable std_srvs/srv/SetBool "{data: true}"
+  ```
+
+  The bridge disables motion again on start-up/respawn, control-authority loss (e.g. remote-controller takeover), SDK link loss, or a robot fault, and only executes velocity commands received after the last enable. The bridge never stands the robot up on its own (`auto_enter_move_mode: false`). `/sw01_cmd_vel_bridge/motion_enabled` reports the current state.
 
 Stop:
 

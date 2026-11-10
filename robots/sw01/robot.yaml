@@ -29,6 +29,8 @@ geometry:
     yaw: 0.0
   supports_strafe: true
 
+# Bridge launch arguments merge common -> native -> ros2 (later wins); package/launch only select
+# the launch file. Every scalar key below becomes a sw01_cmd_vel_bridge parameter.
 bridge:
   common:
     cmd_vel_topic: /cmd_vel
@@ -39,18 +41,20 @@ bridge:
     package: sw01_ros_control
     launch: sw01_control.launch.py
     cmd_vel_topic: /cmd_vel
-    auto_enter_move_mode: true
+    auto_enter_move_mode: false     # Never stand up / enter MOVE on its own
   native:
     control_rate: 50.0
     heartbeat_rate: 10.0
     cmd_vel_decay_window: 0.0
     sdk_timeout: 10000
-    auth_timeout: 2000
+    auth_timeout: 200               # [ms] Heartbeats stall while waiting; capped at 400
     move_timeout: 20
     heartbeat_timeout: 20
     request_control_authority: true
     require_move_mode: true
     publish_status: true
+    require_enable: true            # Motion needs /sw01_cmd_vel_bridge/enable (std_srvs/SetBool)
+    blocking_error_mask: 0          # errorCode bits that also block motion; sysStatus ERROR always does
 
 navigation:
   inflation_radius: 0.35

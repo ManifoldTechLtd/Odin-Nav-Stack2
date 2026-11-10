@@ -97,6 +97,11 @@ if(BUILD_TESTING)
   ament_add_gtest(test_sw01_bridge test/test_sw01_bridge.cpp TIMEOUT 120)
   target_include_directories(test_sw01_bridge PRIVATE test)
   target_link_libraries(test_sw01_bridge sw01_bridge_core)
+
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_sw01_control_launch test/test_sw01_control_launch.py
+    APPEND_ENV PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+  )
 endif()
 
 ament_package()

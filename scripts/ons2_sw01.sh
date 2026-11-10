@@ -116,4 +116,6 @@ if [ "${ENABLE_REMOTE_MONITOR:-0}" = "1" ]; then
   ons2_log "  Remote monitor: http://<robot-ip>:${REMOTE_MONITOR_PORT:-18088}  (ENABLE_REMOTE_MONITOR=1)"
 fi
 ons2_log "  Stop          : bash ${SCRIPT_DIR}/ons2_sw01_stop.sh"
+ons2_log "  Chassis       : motion DISABLED until enabled (control window [c], or:"
+ons2_log "                  ros2 service call /sw01_cmd_vel_bridge/enable std_srvs/srv/SetBool \"{data: true}\")"
 ons2_log "=================================================="

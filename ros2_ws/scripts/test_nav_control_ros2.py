@@ -62,9 +62,28 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
 from std_msgs.msg import String
-from std_srvs.srv import Trigger
+from std_srvs.srv import SetBool, Trigger
 from tf2_ros import Buffer, TransformListener
-from rtk_nav_control import RtkNavControl
+
+try:
+    from rtk_nav_control import RtkNavControl
+except ImportError:  # RTK helpers are optional; the console must still start without them
+    RtkNavControl = None
+
+
+class _RtkUnavailable:
+    """Stand-in used when rtk_nav_control is not installed."""
+
+    mission_id = None
+
+    def on_mission_status(self, message):
+        pass
+
+    def acknowledge_cancel(self):
+        pass
+
+    def status_lines(self):
+        return ["RTK: rtk_nav_control module not installed"]
 
 
 STATUS_TOPIC = "/waypoint_manager/status"
@@ -84,6 +103,8 @@ MISSION_RESET_SERVICE = "/waypoint_manager/reset"
 BRIDGE_START_SERVICE = "/waypoint/goal/start"
 BRIDGE_COMMIT_SERVICE = "/waypoint/goal/commit"
 BRIDGE_RESET_SERVICE = "/waypoint/goal/reset"
+# SW01 chassis bridge motion gate (std_srvs/SetBool); motion stays disabled until enabled
+CHASSIS_ENABLE_SERVICE = "/sw01_cmd_vel_bridge/enable"
 BRIDGE_STATUS_TOPIC = "/waypoint/goal/status"
 COMMAND_TOPIC = "/waypoint_manager/operator_command"
 TERMINAL_STATES = {"COMPLETED", "FAILED", "CANCELLED"}
@@ -135,6 +156,7 @@ class NavControlTest:
             BRIDGE_START_SERVICE: node.create_client(Trigger, BRIDGE_START_SERVICE),
             BRIDGE_COMMIT_SERVICE: node.create_client(Trigger, BRIDGE_COMMIT_SERVICE),
             BRIDGE_RESET_SERVICE: node.create_client(Trigger, BRIDGE_RESET_SERVICE),
+            CHASSIS_ENABLE_SERVICE: node.create_client(SetBool, CHASSIS_ENABLE_SERVICE),
         }
         self._map_params_client = node.create_client(GetParameters, "/map_server/get_parameters")
 
@@ -146,7 +168,8 @@ class NavControlTest:
         )
         self.mode_publisher = node.create_publisher(String, MODE_TOPIC, latched_qos)
         self.command_publisher = node.create_publisher(OperatorCommand, COMMAND_TOPIC, 50)
-        self.rtk = RtkNavControl(node, self.tf_buffer, self.map_frame)
+        self.rtk = (RtkNavControl(node, self.tf_buffer, self.map_frame)
+                    if RtkNavControl is not None else _RtkUnavailable())
         node.create_subscription(MissionStatus, STATUS_TOPIC, self._status_callback, latched_qos)
         node.create_subscription(
             String,
@@ -410,6 +433,27 @@ class NavControlTest:
         if service == CANCEL_SERVICE and response.success:
             self._acknowledge_rtk_cancel()
 
+    def toggle_chassis_motion(self):
+        """Enable or disable SW01 chassis motion through the bridge ~/enable service."""
+        if not self._motion_ready():
+            return
+        answer = input("Chassis motion: [e]nable / [d]isable: ").strip().lower()
+        if answer not in ("e", "d"):
+            print("Cancelled")
+            return
+        enable = answer == "e"
+        if enable and not self._confirm(
+                "Area clear and remote controller released; enable chassis motion"):
+            return
+        if not self._wait_for_service(CHASSIS_ENABLE_SERVICE):
+            return
+        request = SetBool.Request()
+        request.data = enable
+        response = self._call_service(CHASSIS_ENABLE_SERVICE, request)
+        if response is not None:
+            print("chassis {}: success={} message={}".format(
+                "enable" if enable else "disable", response.success, response.message))
+
     def _acknowledge_rtk_cancel(self):
         self.rtk.acknowledge_cancel()
         with self.condition:
@@ -665,6 +709,9 @@ class NavControlTest:
         return True
 
     def collect_rtk_goal(self):
+        if RtkNavControl is None:
+            print("RTK goals unavailable: rtk_nav_control module not installed")
+            return
         try:
             latitude = float(input("WGS84 latitude (decimal deg): ").strip())
             longitude = float(input("WGS84 longitude (decimal deg): ").strip())
@@ -906,6 +953,7 @@ class NavControlTest:
         print("[8] Reset (stop navigation and clear mission & /waypoint/goal queue)")
         print("[9] Save current waypoints JSON  [10] Load waypoints JSON & run")
         print("[11] Enter waypoints manually & run  [12/r] RTK lat/lon single goal  [0] Quit")
+        print("[13/c] Chassis motion enable/disable (SW01 bridge, required before moving)")
         while rclpy.ok():
             try:
                 choice = input("Select > ").strip()
@@ -946,6 +994,8 @@ class NavControlTest:
                 self.collect_manual_waypoints()
             elif choice.lower() in ("12", "r"):
                 self.collect_rtk_goal()
+            elif choice.lower() in ("13", "c"):
+                self.toggle_chassis_motion()
             else:
                 print("Invalid option")
 
@@ -958,9 +1008,9 @@ class TerminalGui:
         " [4] Resume mission       [5] Cancel mission  [6] Return home",
         " [7] Single/temp point    [8] Reset nav       [9] Save waypoints JSON",
         " [0] Load JSON & run      [m] Manual input    [r] RTK lat/lon goal",
-        " [q] Quit",
+        " [c] Chassis enable/disable                   [q] Quit",
     )
-    MENU_KEYS = "1234567890mr"
+    MENU_KEYS = "1234567890mrc"
 
     def __init__(self, nav):
         self.nav = nav
@@ -1176,6 +1226,8 @@ class TerminalGui:
             nav.collect_manual_waypoints()
         elif key == "r":
             nav.collect_rtk_goal()
+        elif key == "c":
+            nav.toggle_chassis_motion()
 
     def _redraw(self, stdscr):
         import curses

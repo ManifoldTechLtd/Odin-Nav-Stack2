@@ -94,11 +94,28 @@ def bridge_launch_file(profile: dict, runtime: str = 'ros2') -> tuple:
     return str(cfg.get('package', '')).strip(), str(cfg.get('launch', '')).strip()
 
 
+_BRIDGE_LAUNCH_SELECTORS = ('package', 'launch')
+
+
+def _launch_value(value) -> str:
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    return str(value)
+
+
 def bridge_launch_arguments(profile: dict, runtime: str = 'ros2') -> dict:
+    """Merge bridge.common -> bridge.native -> bridge.<runtime> (later wins) into launch arguments.
+
+    Only scalar values are passed; `package`/`launch` select the launch file and are skipped.
+    """
     bridge = profile.get('bridge', {})
-    topic = bridge.get(runtime, {}).get(
-        'cmd_vel_topic', bridge.get('common', {}).get('cmd_vel_topic'))
-    return {'cmd_vel_topic': str(topic)} if topic else {}
+    merged = {}
+    for section in (bridge.get('common'), bridge.get('native'), bridge.get(runtime)):
+        for key, value in (section or {}).items():
+            if key in _BRIDGE_LAUNCH_SELECTORS or value is None or isinstance(value, (dict, list)):
+                continue
+            merged[key] = _launch_value(value)
+    return merged
 
 
 def mission_interface_arguments(profile: dict, lp_backend: str = '', gp_backend: str = '') -> dict:

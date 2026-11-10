@@ -14,48 +14,113 @@
 Prerequisites:
   1) SDK network interface configured (e.g. 10.18.0.200/24 reaching SW01 at 10.18.0.100, UDP 3600)
   2) SW01 in DAMPING or FIXEDDOWN state so the SDK link can be established
+
+Every bridge parameter is a launch argument; ons2_bringup fills them from
+robots/sw01/robot.yaml. Motion stays disabled until
+  ros2 service call /sw01_cmd_vel_bridge/enable std_srvs/srv/SetBool "{data: true}"
 """
 
 import os
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
+# name -> (type, default). Launch arguments are strings; they are converted to these types so the
+# node's typed declare_parameter() calls accept them (e.g. "50" must become 50.0 for control_rate).
+BRIDGE_PARAMETERS = {
+    'cmd_vel_topic': (str, os.environ.get('CMD_VEL_TOPIC', '/cmd_vel')),
+    'max_linear_vel': (float, 1.0),
+    'max_angular_vel': (float, 1.0),
+    'cmd_vel_timeout': (float, 0.5),
+    'cmd_vel_decay_window': (float, 0.0),   # 0.0 = disabled
+    'heartbeat_rate': (float, 10.0),
+    'control_rate': (float, 50.0),
+    'sdk_timeout': (int, 10000),
+    'auth_timeout': (int, 200),
+    'move_timeout': (int, 20),
+    'heartbeat_timeout': (int, 20),
+    'request_control_authority': (bool, True),
+    'require_move_mode': (bool, True),
+    'auto_enter_move_mode': (bool, False),
+    'publish_status': (bool, True),
+    'require_enable': (bool, True),
+    'blocking_error_mask': (int, 0),
+}
 
-def generate_launch_description():
-    cmd_vel_topic = LaunchConfiguration('cmd_vel_topic')
-    declare_topic = DeclareLaunchArgument(
-        'cmd_vel_topic', default_value=os.environ.get('CMD_VEL_TOPIC', '/cmd_vel'),
-        description='Subscribed velocity topic (default /cmd_vel)')
+_DESCRIPTIONS = {
+    'cmd_vel_topic': 'Subscribed velocity topic (default /cmd_vel)',
+    'auto_enter_move_mode': 'Allow DAMPING/FIXEDSTAND -> MOVE while enabled and commanded',
+    'require_enable': 'Require ~/enable before motion (disabled again on authority/link loss or fault)',
+}
 
-    params = {
-        'cmd_vel_topic': cmd_vel_topic,
-        'max_linear_vel': 1.0,
-        'max_angular_vel': 1.0,
-        'cmd_vel_timeout': 0.5,
-        'cmd_vel_decay_window': 0.0,   # 0.0 = disabled
-        'heartbeat_rate': 10.0,
-        'control_rate': 50.0,
-        'sdk_timeout': 10000,
-        'auth_timeout': 2000,
-        'move_timeout': 20,
-        'heartbeat_timeout': 20,
-        'request_control_authority': True,
-        'require_move_mode': True,
-        'auto_enter_move_mode': True,  # Automatically transitions robot into MOVE mode
-        'publish_status': True,
+_TRUE_WORDS = ('true', '1', 'yes', 'on')
+_FALSE_WORDS = ('false', '0', 'no', 'off')
+
+
+def _to_bool(name, text):
+    word = text.lower()
+    if word in _TRUE_WORDS:
+        return True
+    if word in _FALSE_WORDS:
+        return False
+    raise ValueError(f'{name}: expected a boolean, got {text!r}')
+
+
+def _to_int(name, text):
+    try:
+        return int(text, 0)
+    except ValueError:
+        number = float(text)
+        if not number.is_integer():
+            raise ValueError(f'{name}: expected an integer, got {text!r}') from None
+        return int(number)
+
+
+def _convert(name, kind, value):
+    text = str(value).strip()
+    if kind is bool:
+        return _to_bool(name, text)
+    if kind is int:
+        return _to_int(name, text)
+    if kind is float:
+        return float(text)
+    return text
+
+
+def typed_parameters(context):
+    """Convert the bridge launch arguments to the parameter types the node declares."""
+    return {
+        name: _convert(name, kind, LaunchConfiguration(name).perform(context))
+        for name, (kind, _) in BRIDGE_PARAMETERS.items()
     }
 
-    node = Node(
+
+def _launch_bridge(context, *args, **kwargs):
+    return [Node(
         package='sw01_ros_control',
         executable='sw01_cmd_vel_bridge',
         name='sw01_cmd_vel_bridge',
         output='screen',
+        # A respawned bridge starts with motion disabled (require_enable)
         respawn=True,
         respawn_delay=3.0,
-        parameters=[params],
-    )
+        parameters=[typed_parameters(context)],
+    )]
 
-    return LaunchDescription([declare_topic, node])
+
+def _default_text(kind, default):
+    if kind is bool:
+        return 'true' if default else 'false'
+    return str(default)
+
+
+def generate_launch_description():
+    arguments = [
+        DeclareLaunchArgument(
+            name, default_value=_default_text(kind, default),
+            description=_DESCRIPTIONS.get(name, f'sw01_cmd_vel_bridge parameter ({kind.__name__})'))
+        for name, (kind, default) in BRIDGE_PARAMETERS.items()
+    ]
+    return LaunchDescription([*arguments, OpaqueFunction(function=_launch_bridge)])
