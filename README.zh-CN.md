@@ -54,7 +54,8 @@
   可在你自己的工作站上连接更强大的视觉语言模型，实现更丰富的场景理解。  
   参见 [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) 教程，内有网页链接与文档说明。
 - **专为工业巡检打造**  
-  针对真实工业巡检场景与长距离巡逻路线进行了大量专项优化。
+  针对真实工业巡检场景与长距离巡逻路线进行了大量专项优化。  
+  远程 Web 监控界面见 [remote_monitoring.zh-CN.md](docs/remote_monitoring.zh-CN.md) —— 浏览器控制台，按需开相机与语音喊话（需自备 4G 模块、内网穿透或公网服务器）。
 - **端到端，完全开源**  
   完整的巡检工作流——从仿真到实机、从算法到监控平台。参见 [Real2Sim 教程](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial)。
 - **插件化架构**  

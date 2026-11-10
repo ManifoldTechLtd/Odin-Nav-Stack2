@@ -97,11 +97,23 @@ ons2_start_window "${SESSION}" foxglove "${ENV_PREFIX} && ros2 run foxglove_brid
 ons2_start_window "${SESSION}" health "${ENV_PREFIX} && python3 ${REPO_ROOT}/ros2_ws/scripts/node_health_monitor.py 2>&1 | tee ${LOG_DIR}/health.log"
 ons2_start_window "${SESSION}" control "${ENV_PREFIX} && python3 ${REPO_ROOT}/ros2_ws/scripts/test_nav_control_ros2.py --allow-motion"
 
+# Optional web control console (off by default).
+#   ENABLE_REMOTE_MONITOR=1 bash scripts/ons2_sw01.sh [--remote-monitor-port=18088]
+# Exposes a single port serving both HTTP and HTTPS, so a NAT tunnel only needs one port.
+# See docs/remote_monitoring.md for the network prerequisites (4G / tunnel / VPS).
+if [ "${ENABLE_REMOTE_MONITOR:-0}" = "1" ]; then
+  REMOTE_MONITOR_PORT="${REMOTE_MONITOR_PORT:-18088}"
+  ons2_start_window "${SESSION}" monitor "${ENV_PREFIX} && python3 ${REPO_ROOT}/ros2_ws/scripts/remote_monitor.py --port ${REMOTE_MONITOR_PORT} 2>&1 | tee ${LOG_DIR}/remote_monitor.log"
+fi
+
 ons2_log "=================================================="
 ons2_log "SW01 stack started"
 ons2_log "  Local planner : ${LOCAL_PLANNER}"
 ons2_log "  Navigation    : ${NAVIGATION_MODE}"
 ons2_log "  Map           : ${MAP_FILE_NAME}"
 ons2_log "  Attach        : tmux attach -t ${SESSION}"
+if [ "${ENABLE_REMOTE_MONITOR:-0}" = "1" ]; then
+  ons2_log "  Remote monitor: http://<robot-ip>:${REMOTE_MONITOR_PORT:-18088}  (ENABLE_REMOTE_MONITOR=1)"
+fi
 ons2_log "  Stop          : bash ${SCRIPT_DIR}/ons2_sw01_stop.sh"
 ons2_log "=================================================="

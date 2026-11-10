@@ -54,7 +54,8 @@
   Connect a more capable vision-language model to your own workstation for richer scene understanding.  
   See the [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) tutorial for web links and documentation.
 - **Built for industrial inspection**  
-  Extensive optimizations tuned to real industrial inspection scenarios and long patrol routes.
+  Extensive optimizations tuned to real industrial inspection scenarios and long patrol routes.  
+  See the [remote web monitor](docs/remote_monitoring.md) — browser-based control console with on-demand camera and intercom (requires your own 4G module, NAT traversal or a public server).
 - **End-to-end, fully open source**  
   A complete inspection workflow — simulation to real robots, algorithms to the monitoring platform. See the [Real2Sim tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial).
 - **Plugin architecture**  
