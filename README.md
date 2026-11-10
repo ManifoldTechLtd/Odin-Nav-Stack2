@@ -127,7 +127,7 @@ For parameter tuning (speed, footprint, safety clearance, stuck escape), see [02
 
 ## Running SRU
 
-> **SRU requires training.** Please contact us to obtain the locomotion controller for your robot. The trained ONNX models (policy and VAE encoder) are **not included** in this repository. Train the policy in the SRU repository, then deploy the exported models to the SRU workspace on the robot:
+> **SRU requires training.** Obtain the locomotion controller from your robot's manufacturer — it is not provided by us. The trained ONNX models (policy and VAE encoder) are **not included** in this repository. Train the policy in the SRU repository, then deploy the exported models to the SRU workspace on the robot:
 >
 > **[ManifoldTechLtd/SRU-Odin](https://github.com/ManifoldTechLtd/SRU-Odin)** — training (`Train/`), deployment (`Deployment/`), and the porting guide.
 
