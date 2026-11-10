@@ -48,7 +48,8 @@
 ## What's New
 
 - **Dramatically faster planning**  
-  Plans substantially faster even on low-compute platforms, with smoother execution and nimbler obstacle avoidance.
+  Plans substantially faster even on low-compute platforms, with smoother execution and nimbler obstacle avoidance.  
+  See the [NeuPAN optimisation notes](docs/neuPAN_optimisation.md) for what was changed and the measured gains.
 - **Upgraded VLM, bring your own model**  
   Connect a more capable vision-language model to your own workstation for richer scene understanding.
 - **Built for industrial inspection**  
