@@ -36,14 +36,13 @@ flowchart TB
         direction LR
 
         subgraph GP_Slot["Plugin Slot 1: Global Planner (global_planner.backend)"]
-            GP_DEF["Default: map_planner (2D A*)<br/>nav_params.yaml + robot.yaml overrides"]
-            GP_CUS["Custom: &lt;my_global_planner&gt;<br/>• With package+launch: auto-included<br/>• Without: launched externally<br/>Contract: /map_planner/plan (PlanPath)"]
+            GP_DEF["Built-in Default: map_planner (2D A*)<br/>nav_params.yaml + robot.yaml overrides"]
+            GP_CUS["Custom: &lt;my_global_planner&gt; (package + launch)<br/>Contract: plan_service (default: /map_planner/plan)"]
         end
 
         subgraph LP_Slot["Plugin Slot 2: Local Planner (local_planner.backend)"]
-            LP_DEF["Default: neupan (MPC + Analytic DUNE)<br/>robots/&lt;robot&gt;/neupan/{config,planner}.yaml"]
-            LP_ACT["Custom Mode A (interface.mode: action)<br/>Contract: /neupan/nav_path Action + /neupan/stop"]
-            LP_GOAL["Custom Mode B (interface.mode: goal_pose)<br/>Contract: /sru/goal_pose + /sru/cmd_vel_enable"]
+            LP_ACT["Mode A — Path Tracking (interface.mode: action)<br/>• Built-in default: neupan (MPC + Analytic DUNE)<br/>• Custom: any action planner (package + launch)<br/>• Contract: nav_path_action + stop_topic<br/>  (defaults: /neupan/nav_path, /neupan/stop)"]
+            LP_GOAL["Mode B — Goal-Point Driven (interface.mode: goal_pose)<br/>• Built-in preset: sru (end-to-end depth policy)<br/>• Custom: any goal-pose planner (package + launch)<br/>• Contract: goal_topic + enable_topic<br/>  (defaults: /sru/goal_pose, /sru/cmd_vel_enable)"]
         end
 
         subgraph BR_Slot["Plugin Slot 3: Chassis Bridge (bridge.ros1 / bridge.ros2)"]
@@ -147,10 +146,15 @@ base_inspection/
 - **Custom Global Planner**: Selected via `global_planner.backend` in `robot.yaml` (or `--global-planner=<name>`). Must advertise `plan_service` (default `/map_planner/plan`, `nav_interfaces/srv/PlanPath`). Optional services (`/map_planner/validate_path` and `/map_planner/plan_sequence`) are skipped automatically when not advertised.
 
 ### 5.4 Pluggable Local Planner (`local_planner`)
-- **Default (`neupan`)**: Model Predictive Control (MPC) coupled with analytical DUNE (`dune_use_analytic: true`) and SCS conic QP (`NRMP`), plus `adaptive_d_max` and `stuck_escape`. Configured in `robots/<robot>/neupan/{config,planner}.yaml`.
-- **Custom Local Planner**: Selected via `local_planner.backend` in `robot.yaml` (or `--local-planner=<name>`). Supports two contracts via `interface.mode`:
-  - `mode: action`: Tracks the global A* path via `nav_path_action` (default `/neupan/nav_path`) and aborts on `stop_topic` (default `/neupan/stop`).
-  - `mode: goal_pose`: Bypasses global A* planning; receives the active waypoint directly on `goal_topic` (default `/sru/goal_pose`) gated by `enable_topic` (default `/sru/cmd_vel_enable`).
+Selected via `local_planner.backend` in `robot.yaml` (or `--local-planner=<name>`). Supports two interface modes via `interface.mode`, each with a built-in implementation and configurable ROS topic/action names for custom planners:
+- **Mode A — Path Tracking (`interface.mode: action`)**:
+  - **Built-in default (`neupan`)**: Model Predictive Control (MPC) coupled with analytical DUNE (`dune_use_analytic: true`) and SCS conic QP (`NRMP`), plus `adaptive_d_max` and `stuck_escape`. Configured in `robots/<robot>/neupan/{config,planner}.yaml`.
+  - **Custom action planner**: Any path-tracking local planner (launched via `package + launch` in `robot.yaml` or externally).
+  - **Contract**: Tracks the global path via `nav_path_action` (default `/neupan/nav_path`) and aborts on `stop_topic` (default `/neupan/stop`).
+- **Mode B — Goal-Point Driven (`interface.mode: goal_pose`)**:
+  - **Built-in preset (`sru`)**: End-to-end depth policy with spatially-enhanced recurrent memory.
+  - **Custom goal-pose planner**: Any goal-driven local planner (launched via `package + launch` in `robot.yaml` or externally).
+  - **Contract**: Bypasses global A* planning; receives the active waypoint directly on `goal_topic` (default `/sru/goal_pose`) gated by `enable_topic` (default `/sru/cmd_vel_enable`).
 
 ### 5.5 Mission State Machine (`mission_manager`) & Alignment (`atomic_move`)
 
