@@ -174,12 +174,13 @@ cd Odin-Nav-Stack2
 If you cloned without `--recursive`:
 
 ``` shell
-git submodule update --init ros_ws/src/odin_ros_driver   # ROS1 Odin1 driver (submodule)
-git submodule update --init yolov5                       # optional: object detection
-git submodule update --init odin_rtk_fusion              # optional: RTK input
+git submodule update --init ros_ws/src/odin_ros_driver    # ROS1 Odin1 driver (submodule)
+git submodule update --init ros2_ws/src/odin_ros_driver   # ROS2 Odin1 driver (submodule)
+git submodule update --init yolov5                        # optional: object detection
+git submodule update --init odin_rtk_fusion               # optional: RTK input
 ```
 
-The ROS2 Odin1 driver `ros2_ws/src/odin_ros_driver` is an in-tree copy of [manifoldsdk/odin_ros_driver](https://github.com/manifoldsdk/odin_ros_driver/), not a submodule.
+Both `ros_ws/src/odin_ros_driver` and `ros2_ws/src/odin_ros_driver` are submodules pointing to [manifoldsdk/odin_ros_driver](https://github.com/manifoldsdk/odin_ros_driver/).
 
 ### 2. Odin1 USB rule
 
@@ -273,7 +274,7 @@ python3 -m pip install --break-system-packages "numpy<2" scipy cvxpy cvxpylayers
 ``` shell
 source /opt/ros/jazzy/setup.bash
 cd ros2_ws
-colcon build --symlink-install
+colcon build --symlink-install --cmake-args -DBUILD_SYSTEM=ROS2
 cd ..
 bash scripts/ons2_sw01.sh --map=NAME                           # ASTRALL SW01 (ROS2)
 ```
@@ -286,7 +287,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 |---|---|---|
 | OS | Ubuntu 20.04 | Ubuntu 24.04 |
 | Python for NeuPAN | System `python3` or `NEUPAN_PYTHON` (Python ≥ 3.10) | System Python 3.12 (`pip --break-system-packages`) |
-| Build | `catkin_make` / `build_ros.sh` | `colcon build --symlink-install` |
+| Build | `catkin_make` / `build_ros.sh` | `colcon build --symlink-install --cmake-args -DBUILD_SYSTEM=ROS2` |
 | Discovery | `roscore` (started by the launcher) | DDS, `ROS_DOMAIN_ID=98`, no `roscore` |
 | Launcher | `scripts/ons2_go2.sh`, `scripts/ons2_dobot_lumo.sh` | `scripts/ons2_sw01.sh` |
 | `--navigation-mode` | Optional (defaults to `replan_periodic`) | Optional (defaults to `replan_periodic`) |
@@ -294,7 +295,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | tmux session | `ons2_go2`, `ons2_dobot_lumo` | `ons2_sw01` |
 | Mission CLI / TUI | `ros_ws/scripts/test_nav_control_rospy.py` or `scripts/tools/mission_cli.sh` | `ros2_ws/scripts/test_nav_control_ros2.py` or `ros2 service call` |
 | Robots | Go2, Dobot Lumo, SW01 | SW01 |
-| Odin driver | Submodule `ros_ws/src/odin_ros_driver` | In-tree copy `ros2_ws/src/odin_ros_driver` |
+| Odin driver | Submodule `ros_ws/src/odin_ros_driver` | Submodule `ros2_ws/src/odin_ros_driver` |
 
 # Documentation
 
@@ -431,6 +432,7 @@ Odin-Nav-Stack2/
 ├── ros_ws/                        # ROS 1 Noetic workspace
 │   ├── scripts/                   # ROS 1 runtime scripts (test_nav_control_rospy.py, waypoint_goal_bridge.py, sru/, ...)
 │   └── src/
+│       ├── odin_ros_driver/       # Submodule -> manifoldsdk/odin_ros_driver (Odin1 sensor driver)
 │       ├── ons2_bringup/          # Profile-driven ROS 1 launch files (go2, dobot, map_planner, neupan)
 │       ├── nav_interfaces/        # Shared messages, services, and actions
 │       ├── sliding_map/           # 360° ego-centric virtual scan & obstacle memory
@@ -445,6 +447,7 @@ Odin-Nav-Stack2/
 ├── ros2_ws/                       # ROS 2 Jazzy workspace (1:1 core parity with ros_ws)
 │   ├── scripts/                   # ROS 2 runtime scripts (test_nav_control_ros2.py, waypoint_goal_bridge.py, sru/, ...)
 │   └── src/
+│       ├── odin_ros_driver/       # Submodule -> manifoldsdk/odin_ros_driver (Odin1 sensor driver)
 │       ├── ons2_bringup/          # Generic profile-driven bringup.launch.py
 │       ├── nav_interfaces/        # ROS 2 IDL messages, services, and actions
 │       ├── sliding_map/           # ROS 2 360° virtual scan & obstacle memory

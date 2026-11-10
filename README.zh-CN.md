@@ -174,12 +174,13 @@ cd Odin-Nav-Stack2
 如果你没有使用 `--recursive` 克隆：
 
 ``` shell
-git submodule update --init ros_ws/src/odin_ros_driver   # ROS1 Odin1 驱动（子模块）
-git submodule update --init yolov5                       # 可选：目标检测
-git submodule update --init odin_rtk_fusion              # 可选：RTK 输入
+git submodule update --init ros_ws/src/odin_ros_driver    # ROS1 Odin1 驱动（子模块）
+git submodule update --init ros2_ws/src/odin_ros_driver   # ROS2 Odin1 驱动（子模块）
+git submodule update --init yolov5                        # 可选：目标检测
+git submodule update --init odin_rtk_fusion               # 可选：RTK 输入
 ```
 
-ROS2 的 Odin1 驱动 `ros2_ws/src/odin_ros_driver` 是 [manifoldsdk/odin_ros_driver](https://github.com/manifoldsdk/odin_ros_driver/) 的源码树内副本，不是子模块。
+`ros_ws/src/odin_ros_driver` 与 `ros2_ws/src/odin_ros_driver` 均为指向 [manifoldsdk/odin_ros_driver](https://github.com/manifoldsdk/odin_ros_driver/) 的子模块。
 
 ### 2. Odin1 USB 规则
 
@@ -273,7 +274,7 @@ python3 -m pip install --break-system-packages "numpy<2" scipy cvxpy cvxpylayers
 ``` shell
 source /opt/ros/jazzy/setup.bash
 cd ros2_ws
-colcon build --symlink-install
+colcon build --symlink-install --cmake-args -DBUILD_SYSTEM=ROS2
 cd ..
 bash scripts/ons2_sw01.sh --map=NAME                           # ASTRALL SW01 (ROS2)
 ```
@@ -286,7 +287,7 @@ bash scripts/ons2_sw01.sh --map=NAME                           # ASTRALL SW01 (R
 |---|---|---|
 | 操作系统 | Ubuntu 20.04 | Ubuntu 24.04 |
 | NeuPAN 使用的 Python | 系统 `python3` 或 `NEUPAN_PYTHON`（Python ≥ 3.10） | 系统 Python 3.12（`pip --break-system-packages`） |
-| 构建 | `catkin_make` / `build_ros.sh` | `colcon build --symlink-install` |
+| 构建 | `catkin_make` / `build_ros.sh` | `colcon build --symlink-install --cmake-args -DBUILD_SYSTEM=ROS2` |
 | 发现机制 | `roscore`（由启动脚本启动） | DDS，`ROS_DOMAIN_ID=98`，无 `roscore` |
 | 启动脚本 | `scripts/ons2_go2.sh`、`scripts/ons2_dobot_lumo.sh` | `scripts/ons2_sw01.sh` |
 | `--navigation-mode` | 可选（默认 `replan_periodic`） | 可选（默认 `replan_periodic`） |
@@ -294,7 +295,7 @@ bash scripts/ons2_sw01.sh --map=NAME                           # ASTRALL SW01 (R
 | tmux 会话 | `ons2_go2`、`ons2_dobot_lumo` | `ons2_sw01` |
 | 任务 CLI / 交互控制台 | `ros_ws/scripts/test_nav_control_rospy.py` 或 `scripts/tools/mission_cli.sh` | `ros2_ws/scripts/test_nav_control_ros2.py` 或 `ros2 service call` |
 | 机器人 | Go2、Dobot Lumo、SW01 | SW01 |
-| Odin 驱动 | 子模块 `ros_ws/src/odin_ros_driver` | 源码树内副本 `ros2_ws/src/odin_ros_driver` |
+| Odin 驱动 | 子模块 `ros_ws/src/odin_ros_driver` | 子模块 `ros2_ws/src/odin_ros_driver` |
 
 # 文档
 
@@ -420,6 +421,7 @@ Odin-Nav-Stack2/
 ├── ros_ws/                        # ROS 1 Noetic 工作空间
 │   ├── scripts/                   # ROS 1 运行时脚本 (test_nav_control_rospy.py, waypoint_goal_bridge.py, sru/, ...)
 │   └── src/
+│       ├── odin_ros_driver/       # 子模块 -> manifoldsdk/odin_ros_driver (Odin1 传感器驱动)
 │       ├── ons2_bringup/          # 基于 robot.yaml 的 ROS 1 启动包 (go2, dobot, map_planner, neupan)
 │       ├── nav_interfaces/        # 共享消息、服务与动作定义
 │       ├── sliding_map/           # 360° 虚拟激光与盲区障碍物记忆
@@ -434,6 +436,7 @@ Odin-Nav-Stack2/
 ├── ros2_ws/                       # ROS 2 Jazzy 工作空间 (与 ros_ws 核心包一一对应)
 │   ├── scripts/                   # ROS 2 运行时脚本 (test_nav_control_ros2.py, waypoint_goal_bridge.py, sru/, ...)
 │   └── src/
+│       ├── odin_ros_driver/       # 子模块 -> manifoldsdk/odin_ros_driver (Odin1 传感器驱动)
 │       ├── ons2_bringup/          # 通用 profile 驱动入口 bringup.launch.py
 │       ├── nav_interfaces/        # ROS 2 IDL 消息、服务与动作定义
 │       ├── sliding_map/           # ROS 2 360° 虚拟激光与盲区障碍物记忆
