@@ -184,6 +184,8 @@ Both `ros_ws/src/odin_ros_driver` and `ros2_ws/src/odin_ros_driver` are submodul
 
 ### 2. Odin1 USB rule
 
+For details, see the [Odin1 Ubuntu Quick Start — Create udev rules](https://manifoldtechltd.github.io/wiki/en/odin_series/odin1/7.%20Odin1%20Quick%20start%20for%20ubuntu.html#74-create-udev-rules):
+
 ``` shell
 sudo vim /etc/udev/rules.d/99-odin-usb.rules
 ```
@@ -200,83 +202,104 @@ sudo udevadm control --reload && sudo udevadm trigger
 
 ## ROS1 Noetic (Ubuntu 20.04)
 
-ROS1 runs NeuPAN, which requires **Python ≥ 3.10**. The system Python on Ubuntu 20.04 is 3.8, so install ROS and NeuPAN into a conda environment.
+Both ROS1 and ROS2 use the **NeuPAN** local planner by default (`NeuPAN/` requires **Python ≥ 3.10**). Because Ubuntu 20.04 ships with system Python 3.8, create a Python 3.10 conda environment for NeuPAN while building the ROS1 C++ packages against your system ROS Noetic installation.
 
 ### Install
 
-``` shell
-conda install -n base -c conda-forge mamba        # then re-login to the shell
-mamba create -n neupan -y
-mamba activate neupan
-conda config --env --add channels conda-forge
-conda config --env --remove channels defaults
-conda config --env --add channels robostack-noetic
-mamba install -n neupan ros-noetic-desktop colcon-common-extensions catkin_tools rosdep ros-dev-tools -y
-pip install torch --index-url https://download.pytorch.org/whl/cpu   # on Jetson, use the NVIDIA wheel
-pip install -e NeuPAN
-python --version                                  # must be 3.10 or newer
-```
+1. **System ROS1 dependencies:**
+   ``` shell
+   sudo apt update
+   sudo apt install -y \
+     ros-noetic-tf2-ros ros-noetic-tf2-geometry-msgs ros-noetic-tf2-eigen \
+     ros-noetic-cv-bridge ros-noetic-image-transport ros-noetic-pcl-ros \
+     ros-noetic-pointcloud-to-laserscan ros-noetic-map-server \
+     ros-noetic-rosbridge-suite ros-noetic-foxglove-bridge
+   ```
 
-Tell the launch scripts which interpreter runs NeuPAN:
-
-``` shell
-export NEUPAN_PYTHON="$(which python)"
-```
+2. **Python ≥ 3.10 environment for the NeuPAN local planner:**
+   ``` shell
+   conda create -n neupan python=3.10 -y
+   conda activate neupan
+   pip install rospkg catkin_pkg
+   pip install torch --index-url https://download.pytorch.org/whl/cpu   # on Jetson, use the NVIDIA JetPack wheel
+   pip install -e NeuPAN
+   export NEUPAN_PYTHON="$(which python)"
+   ```
+   *(Alternative: if you prefer a self-contained RoboStack environment without system `/opt/ros/noetic`, you can install `ros-noetic-desktop` into the `neupan` environment via `mamba` and the `robostack-noetic` channel.)*
 
 ### Build
 
-Install the Unitree SDK first: `ros_ws/src/unitree_control` calls `find_package(unitree_sdk2)`. Then build all ROS1 packages:
+1. **Robot-specific chassis SDKs:**
+   - **Unitree Go2:** Install the official [unitree_sdk2](https://github.com/unitreerobotics/unitree_sdk2) first (see also the [Unitree SDK Developer Guide](https://support.unitree.com/home/zh/developer/Obtain%20SDK)), as `ros_ws/src/unitree_control` links against `unitree_sdk2`.
+   - **ASTRALL SW01:** The SW01 chassis SDK and driver support are provided by ASTRALL Dynamics. Contact them through their official website: [https://www.astralldynamics.com/index.html](https://www.astralldynamics.com/index.html).
+   - **Dobot Lumo:** Optional; without the Lumo SDK, `dobot_ros_control` builds the raw RPC backend automatically.
 
-``` shell
-bash ros_ws/src/odin_ros_driver/script/build_ros.sh
-```
+2. **Build the ROS1 workspace:**
+   ``` shell
+   # Full build (when unitree_sdk2 is installed):
+   bash ros_ws/src/odin_ros_driver/script/build_ros.sh
+   # Equivalent to: cd ros_ws && catkin_make -DCMAKE_BUILD_TYPE=Release
 
-This is the same as `cd ros_ws && catkin_make -DCMAKE_BUILD_TYPE=Release`.
-
-- **No Unitree SDK?** Build only the packages you need: `catkin_make -DCATKIN_WHITELIST_PACKAGES="nav_interfaces;odin_ros_driver;map_planner;sliding_map;neupan_ros;mission_manager;atomic_move;sw01_ros_control"`.
-- **Dobot Lumo** is optional. Without the Lumo SDK, `dobot_ros_control` builds the raw RPC backend only.
-- Build artifacts are tied to the machine architecture. Rebuild after moving to another board.
+   # Or build without unitree_control (for SW01, Dobot Lumo, or custom robots):
+   cd ros_ws && catkin_make -DCMAKE_BUILD_TYPE=Release \
+     -DCATKIN_WHITELIST_PACKAGES="nav_interfaces;odin_ros_driver;map_planner;sliding_map;neupan_ros;mission_manager;atomic_move;sw01_ros_control;dobot_ros_control"
+   ```
 
 ### Launch
 
 ``` shell
-bash scripts/ons2_go2.sh --map=NAME                            # Unitree Go2 (ROS1)
-bash scripts/ons2_dobot_lumo.sh --map=NAME                     # Dobot Lumo (ROS1)
+bash scripts/ons2_go2.sh --map=NAME  # Unitree Go2 (ROS1)
+bash scripts/ons2_dobot_lumo.sh --map=NAME  # Dobot Lumo (ROS1)
+bash scripts/ons2_sw01.sh --ros1 --map=NAME  # ASTRALL SW01 (ROS1)
 ```
 
-Stop: `bash scripts/ons2_go2_stop.sh` (Go2) or `bash scripts/ons2_dobot_lumo_stop.sh` (Dobot Lumo).
+Stop: `bash scripts/ons2_go2_stop.sh`, `bash scripts/ons2_dobot_lumo_stop.sh`, or `bash scripts/ons2_sw01_stop.sh`.
 
 ## ROS2 Jazzy (Ubuntu 24.04)
 
-ROS2 targets the **ASTRALL SW01** platform. It uses the system Python 3.12 and does not need conda.
+The ROS2 stack (`ros2_ws/`) has been validated on **ASTRALL SW01** and supports any ROS2 robot configured through `robots/<robot>/robot.yaml` (see [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md)). Because Ubuntu 24.04 ships with system **Python 3.12** (which already satisfies NeuPAN's Python ≥ 3.10 requirement), both the ROS2 nodes and the NeuPAN local planner run directly on the system Python without needing conda.
 
 ### Install
 
+1. **System ROS2 Jazzy dependencies** (required by `ros2_ws/src/*/package.xml` and `ons2_bringup`):
+   ``` shell
+   sudo apt update
+   sudo apt install -y \
+     ros-jazzy-ros-base ros-jazzy-tf2-ros ros-jazzy-tf2-geometry-msgs \
+     ros-jazzy-pcl-ros ros-jazzy-pcl-conversions ros-jazzy-cv-bridge ros-jazzy-image-transport \
+     ros-jazzy-pointcloud-to-laserscan ros-jazzy-rosbridge-suite ros-jazzy-nav-msgs \
+     ros-jazzy-sensor-msgs ros-jazzy-std-srvs ros-jazzy-message-filters \
+     ros-jazzy-rosidl-default-generators ros-jazzy-rosidl-default-runtime \
+     ros-jazzy-nav2-map-server ros-jazzy-foxglove-bridge
+   ```
+
+2. **Python dependencies for the NeuPAN local planner** (defined in `NeuPAN/pyproject.toml`):
+   ``` shell
+   python3 -m pip install --break-system-packages "numpy<2" \
+     torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+   python3 -m pip install --break-system-packages -e NeuPAN
+   ```
+
+> Keep `numpy` below 2.0 so it stays ABI-compatible with the system ROS2 `cv_bridge` package.
+
+### Build
+
+1. **Robot-specific chassis SDKs:**
+   - **ASTRALL SW01:** The SW01 chassis SDK and driver support are provided by ASTRALL Dynamics. Contact them through their official website: [https://www.astralldynamics.com/index.html](https://www.astralldynamics.com/index.html).
+   - **Custom robots:** Implement your own chassis bridge and register it in `robots/<robot>/robot.yaml`; see [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md). If you are not building for SW01, skip `sw01_ros_control` with `--packages-skip sw01_ros_control`.
+
+2. **Build the ROS2 workspace:**
+   ``` shell
+   source /opt/ros/jazzy/setup.bash
+   cd ros2_ws
+   colcon build --symlink-install --cmake-args -DBUILD_SYSTEM=ROS2
+   cd ..
+   ```
+
+### Launch
+
 ``` shell
-sudo apt update
-sudo apt install -y \
-  ros-jazzy-ros-base ros-jazzy-tf2-ros ros-jazzy-tf2-geometry-msgs \
-  ros-jazzy-pcl-ros ros-jazzy-pcl-conversions ros-jazzy-cv-bridge ros-jazzy-image-transport \
-  ros-jazzy-pointcloud-to-laserscan ros-jazzy-rosbridge-suite ros-jazzy-nav-msgs \
-  ros-jazzy-sensor-msgs ros-jazzy-std-srvs ros-jazzy-message-filters \
-  ros-jazzy-rosidl-default-generators ros-jazzy-rosidl-default-runtime \
-  ros-jazzy-nav2-map-server ros-jazzy-foxglove-bridge
-
-python3 -m pip install --break-system-packages "numpy<2" scipy cvxpy cvxpylayers ecos \
-  matplotlib rich pyyaml scikit-learn loguru "gctl==1.2" \
-  torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
-```
-
-> Keep `numpy` below 2.0. NeuPAN/cvxpy and the ROS2 `cv_bridge` build depend on it. NeuPAN is not installed with pip; the launch scripts add `NeuPAN/` to `PYTHONPATH`.
-
-### Build and Launch
-
-``` shell
-source /opt/ros/jazzy/setup.bash
-cd ros2_ws
-colcon build --symlink-install --cmake-args -DBUILD_SYSTEM=ROS2
-cd ..
-bash scripts/ons2_sw01.sh --map=NAME                           # ASTRALL SW01 (ROS2)
+bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2, or your own robot launcher)
 ```
 
 Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal you open by hand; the launch script sets it by default.

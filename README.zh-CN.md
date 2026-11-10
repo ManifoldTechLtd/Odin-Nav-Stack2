@@ -184,6 +184,8 @@ git submodule update --init odin_rtk_fusion               # 可选：RTK 输入
 
 ### 2. Odin1 USB 规则
 
+具体可参考 [Odin1 Ubuntu 快速上手 —— 创建 udev 规则](https://manifoldtechltd.github.io/wiki/en/odin_series/odin1/7.%20Odin1%20Quick%20start%20for%20ubuntu.html#74-create-udev-rules)：
+
 ``` shell
 sudo vim /etc/udev/rules.d/99-odin-usb.rules
 ```
@@ -200,83 +202,104 @@ sudo udevadm control --reload && sudo udevadm trigger
 
 ## ROS1 Noetic（Ubuntu 20.04）
 
-ROS1 运行 NeuPAN，要求 **Python ≥ 3.10**。Ubuntu 20.04 的系统 Python 为 3.8，因此需要将 ROS 和 NeuPAN 安装到 conda 环境中。
+ROS1 和 ROS2 默认都使用 **NeuPAN** 局部规划器（`NeuPAN/` 要求 **Python ≥ 3.10**）。由于 Ubuntu 20.04 系统自带的 Python 为 3.8，需要为 NeuPAN 单独创建一个 Python 3.10 的 conda 环境，而 ROS1 的 C++ 功能包则直接基于系统安装的 ROS Noetic 编译。
 
 ### 安装
 
-``` shell
-conda install -n base -c conda-forge mamba        # 然后重新登录 shell
-mamba create -n neupan -y
-mamba activate neupan
-conda config --env --add channels conda-forge
-conda config --env --remove channels defaults
-conda config --env --add channels robostack-noetic
-mamba install -n neupan ros-noetic-desktop colcon-common-extensions catkin_tools rosdep ros-dev-tools -y
-pip install torch --index-url https://download.pytorch.org/whl/cpu   # 在 Jetson 上请使用 NVIDIA 的 wheel
-pip install -e NeuPAN
-python --version                                  # 必须为 3.10 或更高版本
-```
+1. **安装系统 ROS1 依赖包：**
+   ``` shell
+   sudo apt update
+   sudo apt install -y \
+     ros-noetic-tf2-ros ros-noetic-tf2-geometry-msgs ros-noetic-tf2-eigen \
+     ros-noetic-cv-bridge ros-noetic-image-transport ros-noetic-pcl-ros \
+     ros-noetic-pointcloud-to-laserscan ros-noetic-map-server \
+     ros-noetic-rosbridge-suite ros-noetic-foxglove-bridge
+   ```
 
-告诉启动脚本哪个解释器运行 NeuPAN：
-
-``` shell
-export NEUPAN_PYTHON="$(which python)"
-```
+2. **创建用于运行 NeuPAN 局部规划器的 Python ≥ 3.10 环境：**
+   ``` shell
+   conda create -n neupan python=3.10 -y
+   conda activate neupan
+   pip install rospkg catkin_pkg
+   pip install torch --index-url https://download.pytorch.org/whl/cpu   # 在 Jetson 上请使用对应的 NVIDIA JetPack wheel
+   pip install -e NeuPAN
+   export NEUPAN_PYTHON="$(which python)"
+   ```
+   *（可选替代方案：如果主机未安装系统级 `/opt/ros/noetic`，也可以通过 `mamba` 和 `robostack-noetic` 频道在虚拟环境内安装完整的 `ros-noetic-desktop`。）*
 
 ### 构建
 
-先安装 Unitree SDK：`ros_ws/src/unitree_control` 会调用 `find_package(unitree_sdk2)`。然后构建所有 ROS1 包：
+1. **按你的机器人机型准备底盘 SDK：**
+   - **Unitree Go2：** 请先按官方指南安装 [unitree_sdk2](https://github.com/unitreerobotics/unitree_sdk2)（亦可参考[宇树 SDK 开发者文档](https://support.unitree.com/home/zh/developer/Obtain%20SDK)），因为 `ros_ws/src/unitree_control` 依赖 `find_package(unitree_sdk2)`。
+   - **ASTRALL SW01：** SW01 底盘 SDK 与驱动支持由 ASTRALL Dynamics（璇玑动力）提供，请通过其官网联系获取：[https://www.astralldynamics.com/index.html](https://www.astralldynamics.com/index.html)。
+   - **Dobot Lumo：** SDK 为可选项；未安装 Lumo SDK 时，`dobot_ros_control` 会自动只编译原生 RPC 后端。
 
-``` shell
-bash ros_ws/src/odin_ros_driver/script/build_ros.sh
-```
+2. **编译 ROS1 工作空间：**
+   ``` shell
+   # 全量编译（已安装 unitree_sdk2 时）：
+   bash ros_ws/src/odin_ros_driver/script/build_ros.sh
+   # 等同于：cd ros_ws && catkin_make -DCMAKE_BUILD_TYPE=Release
 
-这等同于 `cd ros_ws && catkin_make -DCMAKE_BUILD_TYPE=Release`。
-
-- **没有 Unitree SDK？** 只构建你需要的包：`catkin_make -DCATKIN_WHITELIST_PACKAGES="nav_interfaces;odin_ros_driver;map_planner;sliding_map;neupan_ros;mission_manager;atomic_move;sw01_ros_control"`。
-- **Dobot Lumo** 为可选项。没有 Lumo SDK 时，`dobot_ros_control` 只构建原始 RPC 后端。
-- 构建产物与机器架构绑定。更换主板后需要重新构建。
+   # 跳过 unitree_control 编译（适用于 SW01、Dobot Lumo 或自定义机器人）：
+   cd ros_ws && catkin_make -DCMAKE_BUILD_TYPE=Release \
+     -DCATKIN_WHITELIST_PACKAGES="nav_interfaces;odin_ros_driver;map_planner;sliding_map;neupan_ros;mission_manager;atomic_move;sw01_ros_control;dobot_ros_control"
+   ```
 
 ### 启动
 
 ``` shell
 bash scripts/ons2_go2.sh --map=NAME                            # Unitree Go2 (ROS1)
 bash scripts/ons2_dobot_lumo.sh --map=NAME                     # Dobot Lumo (ROS1)
+bash scripts/ons2_sw01.sh --ros1 --map=NAME                    # ASTRALL SW01 (ROS1)
 ```
 
-停止：`bash scripts/ons2_go2_stop.sh`（Go2）或 `bash scripts/ons2_dobot_lumo_stop.sh`（Dobot Lumo）。
+停止：`bash scripts/ons2_go2_stop.sh`、`bash scripts/ons2_dobot_lumo_stop.sh` 或 `bash scripts/ons2_sw01_stop.sh`。
 
 ## ROS2 Jazzy（Ubuntu 24.04）
 
-ROS2 面向 **ASTRALL SW01** 平台。它使用系统 Python 3.12，不需要 conda。
+ROS2 导航栈（`ros2_ws/`）已在 **ASTRALL SW01** 上完成验证，同时支持任何通过 `robots/<robot>/robot.yaml` 接入的 ROS2 机器人（详见 [03 · 接入你自己的机器人](docs/usage/03_integrate_your_robot.md)）。由于 Ubuntu 24.04 系统自带 **Python 3.12**（已满足 NeuPAN 对 Python ≥ 3.10 的要求），ROS2 节点和 NeuPAN 局部规划器均可直接运行在系统 Python 上，无需配置 conda。
 
 ### 安装
 
+1. **安装系统 ROS2 Jazzy 依赖包**（对应 `ros2_ws/src/*/package.xml` 与 `ons2_bringup` 所需组件）：
+   ``` shell
+   sudo apt update
+   sudo apt install -y \
+     ros-jazzy-ros-base ros-jazzy-tf2-ros ros-jazzy-tf2-geometry-msgs \
+     ros-jazzy-pcl-ros ros-jazzy-pcl-conversions ros-jazzy-cv-bridge ros-jazzy-image-transport \
+     ros-jazzy-pointcloud-to-laserscan ros-jazzy-rosbridge-suite ros-jazzy-nav-msgs \
+     ros-jazzy-sensor-msgs ros-jazzy-std-srvs ros-jazzy-message-filters \
+     ros-jazzy-rosidl-default-generators ros-jazzy-rosidl-default-runtime \
+     ros-jazzy-nav2-map-server ros-jazzy-foxglove-bridge
+   ```
+
+2. **安装 NeuPAN 局部规划器的 Python 依赖**（定义于 `NeuPAN/pyproject.toml`）：
+   ``` shell
+   python3 -m pip install --break-system-packages "numpy<2" \
+     torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+   python3 -m pip install --break-system-packages -e NeuPAN
+   ```
+
+> 请保持 `numpy` 版本低于 2.0，以确保与系统 ROS2 `cv_bridge` 包保持 ABI 兼容。
+
+### 构建
+
+1. **按你的机器人机型准备底盘 SDK：**
+   - **ASTRALL SW01：** SW01 底盘 SDK 与驱动支持由 ASTRALL Dynamics（璇玑动力）提供，请通过其官网联系获取：[https://www.astralldynamics.com/index.html](https://www.astralldynamics.com/index.html)。
+   - **自定义机器人：** 实现你自己的底盘桥，并在 `robots/<robot>/robot.yaml` 中注册，详见 [03 · 接入你自己的机器人](docs/usage/03_integrate_your_robot.md)。如果不为 SW01 构建，可通过 `--packages-skip sw01_ros_control` 跳过 `sw01_ros_control`。
+
+2. **编译 ROS2 工作空间：**
+   ``` shell
+   source /opt/ros/jazzy/setup.bash
+   cd ros2_ws
+   colcon build --symlink-install --cmake-args -DBUILD_SYSTEM=ROS2
+   cd ..
+   ```
+
+### 启动
+
 ``` shell
-sudo apt update
-sudo apt install -y \
-  ros-jazzy-ros-base ros-jazzy-tf2-ros ros-jazzy-tf2-geometry-msgs \
-  ros-jazzy-pcl-ros ros-jazzy-pcl-conversions ros-jazzy-cv-bridge ros-jazzy-image-transport \
-  ros-jazzy-pointcloud-to-laserscan ros-jazzy-rosbridge-suite ros-jazzy-nav-msgs \
-  ros-jazzy-sensor-msgs ros-jazzy-std-srvs ros-jazzy-message-filters \
-  ros-jazzy-rosidl-default-generators ros-jazzy-rosidl-default-runtime \
-  ros-jazzy-nav2-map-server ros-jazzy-foxglove-bridge
-
-python3 -m pip install --break-system-packages "numpy<2" scipy cvxpy cvxpylayers ecos \
-  matplotlib rich pyyaml scikit-learn loguru "gctl==1.2" \
-  torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
-```
-
-> 请保持 `numpy` 低于 2.0。NeuPAN/cvxpy 和 ROS2 的 `cv_bridge` 构建依赖于此。NeuPAN 不通过 pip 安装；启动脚本会将 `NeuPAN/` 添加到 `PYTHONPATH`。
-
-### 构建与启动
-
-``` shell
-source /opt/ros/jazzy/setup.bash
-cd ros2_ws
-colcon build --symlink-install --cmake-args -DBUILD_SYSTEM=ROS2
-cd ..
-bash scripts/ons2_sw01.sh --map=NAME                           # ASTRALL SW01 (ROS2)
+bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机器人启动脚本)
 ```
 
 停止：`bash scripts/ons2_sw01_stop.sh`。在手动打开的每个终端中使用 `ROS_DOMAIN_ID=98`；启动脚本默认会设置它。
