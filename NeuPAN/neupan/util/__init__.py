@@ -306,3 +306,38 @@ def downsample_decimation(mat, m):
     sampled_matrix = mat[:, indices]
     return sampled_matrix
 
+
+def downsample_nearest_first(mat, m, center):
+    """
+    Select m columns of a dim x n point matrix, keeping the points closest to `center`.
+
+    The ceil(m / 2) points nearest to `center` are always kept; the remaining slots are
+    filled by uniform decimation of the other points so far obstacles keep coverage.
+
+    Parameters:
+        mat: numpy.ndarray or torch.Tensor of shape (dim >= 2, n)
+        m: integer, number of columns to keep
+        center: (x, y) reference position, e.g. the robot position
+
+    Returns:
+        numpy.ndarray of sorted column indices (length min(m, n))
+    """
+
+    n = mat.shape[1]
+
+    if m >= n:
+        return np.arange(n)
+
+    cx, cy = float(center[0]), float(center[1])
+    d2 = (mat[0, :] - cx) ** 2 + (mat[1, :] - cy) ** 2
+    if hasattr(d2, "detach"):
+        d2 = d2.detach().cpu().numpy()
+    order = np.argsort(np.asarray(d2, dtype=float), kind="stable")
+
+    n_near = (m + 1) // 2
+    near = order[:n_near]
+    rest = np.sort(order[n_near:])
+    n_far = m - n_near
+    far = rest[np.linspace(0, len(rest) - 1, n_far).astype(int)] if n_far > 0 else rest[:0]
+    return np.sort(np.concatenate([near, far]))
+

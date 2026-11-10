@@ -210,7 +210,7 @@ class NeupanStallWatch:
         waiting = (
             self.last_trace_at is not None
             and now - self.last_trace_at < 1.0
-            and self.control_mode in ("IDLE", "WAIT_PATH", "WAIT_TF", "RECOVERY_WAIT")
+            and self.control_mode in ("IDLE", "WAIT_PATH", "WAIT_TF", "WAIT_SCAN", "RECOVERY_WAIT")
         )
         if self.wait_reason and (missing_cmd or waiting):
             return NodeResult(

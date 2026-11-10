@@ -26,7 +26,7 @@ from neupan.blocks import NRMP, DUNE
 from math import inf
 from typing import Optional
 from neupan.configuration import to_device, tensor_to_np
-from neupan.util import downsample_decimation
+from neupan.util import downsample_nearest_first
 import time
 
 class PAN(torch.nn.Module):
@@ -213,8 +213,11 @@ class PAN(torch.nn.Module):
 
         if obs_points.shape[1] > self.dune_max_num:
             self.print_once(f"down sample the obs points from {obs_points.shape[1]} to {self.dune_max_num}") 
-            obs_points = downsample_decimation(obs_points, self.dune_max_num)
-            point_velocities = downsample_decimation(point_velocities, self.dune_max_num)
+            # Keep the obstacles closest to the robot; plain decimation could drop a near pole.
+            keep = downsample_nearest_first(obs_points, self.dune_max_num, nom_s[0:2, 0])
+            keep = torch.as_tensor(keep, dtype=torch.long, device=obs_points.device)
+            obs_points = obs_points[:, keep]
+            point_velocities = point_velocities[:, keep]
 
         
         obs_points_list = []

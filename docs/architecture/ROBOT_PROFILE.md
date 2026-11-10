@@ -258,7 +258,8 @@ contains the robot geometry and MPC/planner weights.
 
 Current loader behavior (`NeuPAN/neupan/ros/neupan_ros.py`):
 
-- `NEUPAN_ROS_CONFIG` is resolved relative to `NeuPAN/neupan/ros/configs/`.
+- `NEUPAN_ROS_CONFIG` is resolved relative to `NeuPAN/neupan/ros/configs/`. A path that
+  does not exist is a start-up error; there is no fallback to the package default config.
 - `planner_config_file` is resolved relative to `NeuPAN/neupan/ros/`, not the
   directory of the config file.
 - `dune_checkpoint` is passed through to the DUNE layer.

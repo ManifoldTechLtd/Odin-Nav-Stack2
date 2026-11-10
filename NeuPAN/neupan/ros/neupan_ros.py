@@ -105,13 +105,12 @@ class neupan_core:
                 if os.path.isabs(env_config)
                 else os.path.join(config_dir, env_config)
             )
-            if os.path.isfile(candidate):
-                config_path = candidate
-            else:
-                logger.warning(
-                    f"NEUPAN_ROS_CONFIG={env_config} not found, "
-                    f"falling back to {config_path}"
+            if not os.path.isfile(candidate):
+                raise FileNotFoundError(
+                    f"NEUPAN_ROS_CONFIG={env_config} not found (resolved to {candidate}); "
+                    "refusing to fall back to the default config"
                 )
+            config_path = candidate
         logger.info(f"Loading ROS config: {config_path}")
         with open(config_path, "r") as f:
             self.config = yaml.safe_load(f)
@@ -158,6 +157,7 @@ class neupan_core:
         self.obstacle_points = None  # (2, n)  n number of points
         self.robot_state = None  # (3, 1) [x, y, theta]
         self.stop = False
+        self.arrive = False
 
         # publisher
         self.vel_pub = rospy.Publisher(
@@ -179,6 +179,10 @@ class neupan_core:
         self._control_trace_seq = 0
         self._last_scan_t = None
         self._last_scan_points = 0
+        # Monotonic time of the last successfully processed scan; the control cycle commands
+        # zero velocity when it is older than scan_timeout_sec (<= 0 disables the gate).
+        self._last_scan_ok_mono = None
+        self._scan_timeout_sec = float(self.config.get("scan_timeout_sec", 0.5))
         self._trace_last_loop_start_t = None
         self._trace_loop_gap_ms = None
         self._trace_tf_ms = 0.0
@@ -468,6 +472,24 @@ class neupan_core:
         self.vel_pub.publish(self.generate_twist_msg(action))
         return True
 
+    def _scan_is_fresh(self, now_mono):
+        """Return True when a scan was processed within scan_timeout_sec (or the gate is off)."""
+        if self._scan_timeout_sec <= 0.0:
+            return True
+        return (self._last_scan_ok_mono is not None
+                and now_mono - self._last_scan_ok_mono <= self._scan_timeout_sec)
+
+    def _publish_zero_velocity(self, token):
+        """Command a stop through the gated publisher and restart rate limiting from rest."""
+        self._last_cmd_v = 0.0
+        self._last_cmd_w = 0.0
+        self._last_cmd_t = time.time()
+        try:
+            self.neupan_planner.cur_vel_array[:, 0] = 0.0
+        except Exception:  # pragma: no cover - defensive
+            pass
+        return self._publish_control_velocity(np.zeros((2, 1)), token)
+
     def _on_navigation_path_installed(self):
         """Allow action adapters to reactivate only on an explicit path/goal."""
         pass
@@ -477,319 +499,326 @@ class neupan_core:
         r = _TracedRate(rospy.Rate(50), self)
 
         while not rospy.is_shutdown():
-            loop_start_t = time.perf_counter()
-            _ec_ticks = getattr(self, "_ec_loop_ticks", 0) + 1
-            self._ec_loop_ticks = _ec_ticks
-            if _ec_ticks % 250 == 0:
-                ec(EC.NEUPAN_LOOP_ALIVE, "main_loop",
-                   "ticks={} gap={}".format(
-                       _ec_ticks,
-                       "{:.1f}ms".format(self._trace_loop_gap_ms)
-                       if getattr(self, "_trace_loop_gap_ms", None) is not None else "na"),
-                   node="neupan", also_print=False)
-            if self._trace_last_loop_start_t is None:
-                self._trace_loop_gap_ms = None
-            else:
-                self._trace_loop_gap_ms = (
-                    (loop_start_t - self._trace_last_loop_start_t) * 1000.0
-                )
-            self._trace_last_loop_start_t = loop_start_t
-            self._trace_tf_ms = 0.0
-            self._trace_planner_ms = 0.0
-            self._trace_visualization_ms = 0.0
+            self._control_cycle()
+            r.sleep()
 
-            control_token = self._control_cycle_token()
-            if control_token is None:
-                self._publish_control_trace("IDLE")
-                r.sleep()
-                continue
-
-            tf_start_t = time.perf_counter()
-            try:
-                (trans, rot) = self.listener.lookupTransform(
-                    self.config["frame"]["map"],
-                    self.config["frame"]["base"],
-                    rospy.Time(0),
-                )
-                self._trace_tf_ms = (time.perf_counter() - tf_start_t) * 1000.0
-
-                yaw = self.quat_to_yaw_list(rot)
-                x, y = trans[0], trans[1]
-                self.robot_state = np.array([x, y, yaw]).reshape(3, 1)
-                # Pose (and path progress) history for stall detection.
-                now_pose = time.time()
-                self._escape.note_pose(now_pose, float(x), float(y))
-                if self._escape_criterion == "progress":
-                    self._refresh_escape_reference_path()
-                    if self._escape_ref_path_installed:
-                        self._escape.note_progress(now_pose, float(x), float(y))
-
-                if self._escape.grace_active:
-                    self._update_post_escape_grace()
-                elif self._escape.pb_enable:
-                    self._update_path_block_grace()
-
-            except (
-                tf.LookupException,
-                tf.ConnectivityException,
-                tf.ExtrapolationException,
-            ):
-                self._trace_tf_ms = (time.perf_counter() - tf_start_t) * 1000.0
-                rospy.loginfo_throttle(
-                    3,
-                    "waiting for tf for the transform from {} to {}".format(
-                        self.config["frame"]["base"], self.config["frame"]["map"]
-                    ),
-                )
-                self._publish_control_trace("WAIT_TF")
-                r.sleep()
-                continue
-
-            if self.robot_state is None:
-                rospy.logwarn_throttle(3, "waiting for robot state")
-                r.sleep()
-                continue
-
-            rospy.loginfo_once(
-                "robot state received {}".format(self.robot_state.tolist())
+    def _control_cycle(self):
+        """One control cycle: TF, path and scan gates, planning, and velocity publishing."""
+        loop_start_t = time.perf_counter()
+        _ec_ticks = getattr(self, "_ec_loop_ticks", 0) + 1
+        self._ec_loop_ticks = _ec_ticks
+        if _ec_ticks % 250 == 0:
+            ec(EC.NEUPAN_LOOP_ALIVE, "main_loop",
+               "ticks={} gap={}".format(
+                   _ec_ticks,
+                   "{:.1f}ms".format(self._trace_loop_gap_ms)
+                   if getattr(self, "_trace_loop_gap_ms", None) is not None else "na"),
+               node="neupan", also_print=False)
+        if self._trace_last_loop_start_t is None:
+            self._trace_loop_gap_ms = None
+        else:
+            self._trace_loop_gap_ms = (
+                (loop_start_t - self._trace_last_loop_start_t) * 1000.0
             )
+        self._trace_last_loop_start_t = loop_start_t
+        self._trace_tf_ms = 0.0
+        self._trace_planner_ms = 0.0
+        self._trace_visualization_ms = 0.0
 
-            if (
-                len(self.neupan_planner.waypoints) >= 1
-                and self.neupan_planner.initial_path is None
-            ):
-                try:
-                    self.neupan_planner.set_initial_path_from_state(self.robot_state)
-                except Exception as exc:
-                    handler = getattr(self, "_handle_planner_exception", None)
-                    if handler is not None:
-                        handler("initial path initialization", exc)
-                    else:
-                        logger.exception("initial path initialization failed")
-                        self.vel_pub.publish(Twist())
-                    r.sleep()
-                    continue
+        control_token = self._control_cycle_token()
+        if control_token is None:
+            self._publish_control_trace("IDLE")
+            return
 
-            if self.neupan_planner.initial_path is None:
-                rospy.logwarn_throttle(3, "waiting for neupan initial path")
-                self._publish_control_trace("WAIT_PATH")
-                r.sleep()
-                continue
+        tf_start_t = time.perf_counter()
+        try:
+            (trans, rot) = self.listener.lookupTransform(
+                self.config["frame"]["map"],
+                self.config["frame"]["base"],
+                rospy.Time(0),
+            )
+            self._trace_tf_ms = (time.perf_counter() - tf_start_t) * 1000.0
 
-            # Everything below drives the actual control-cycle output
-            # (planning, escape override, cmd_vel publishing).
-            # It is wrapped in a top-level guard so that any exception NOT
-            # already caught by a more specific handler above cannot kill
-            # this loop silently (which previously froze the robot with no
-            # error ever reaching /rosout: the action server kept publishing
-            # stale feedback from a dead control loop, so mission_manager's
-            # watchdog never noticed).
+            yaw = self.quat_to_yaw_list(rot)
+            x, y = trans[0], trans[1]
+            self.robot_state = np.array([x, y, yaw]).reshape(3, 1)
+            # Pose (and path progress) history for stall detection.
+            now_pose = time.time()
+            self._escape.note_pose(now_pose, float(x), float(y))
+            if self._escape_criterion == "progress":
+                self._refresh_escape_reference_path()
+                if self._escape_ref_path_installed:
+                    self._escape.note_progress(now_pose, float(x), float(y))
+
+            if self._escape.grace_active:
+                self._update_post_escape_grace()
+            elif self._escape.pb_enable:
+                self._update_path_block_grace()
+
+        except (
+            tf.LookupException,
+            tf.ConnectivityException,
+            tf.ExtrapolationException,
+        ):
+            self._trace_tf_ms = (time.perf_counter() - tf_start_t) * 1000.0
+            rospy.loginfo_throttle(
+                3,
+                "waiting for tf for the transform from {} to {}".format(
+                    self.config["frame"]["base"], self.config["frame"]["map"]
+                ),
+            )
+            self._publish_zero_velocity(control_token)
+            self._publish_control_trace("WAIT_TF")
+            return
+
+        if self.robot_state is None:
+            rospy.logwarn_throttle(3, "waiting for robot state")
+            return
+
+        rospy.loginfo_once(
+            "robot state received {}".format(self.robot_state.tolist())
+        )
+
+        if (
+            len(self.neupan_planner.waypoints) >= 1
+            and self.neupan_planner.initial_path is None
+        ):
             try:
-                rospy.loginfo_once("initial Path Received")
-                self.ref_path_pub.publish(
-                    self.generate_path_msg(self.neupan_planner.initial_path)
-                )
-
-                if self.obstacle_points is None:
-                    rospy.logwarn_throttle(
-                        1, "No obstacle points, only path tracking task will be performed"
-                    )
-
-                # refresh d_max periodically based on local corridor width.
-                if self._adaptive.enable:
-                    self._update_adaptive_d_max()
-
-                # Override priority: stuck-escape > NeuPAN MPC.
-                escape_cmd = self._stuck_escape_decide_and_command()
-
-                bypass_rate_limit = False
-                control_mode = "MPC"
-                if escape_cmd is not None:
-                    action = escape_cmd
-                    control_mode = (
-                        "RECOVERY_WAIT"
-                        if self._trace_escape_info.get("recovery_wait")
-                        else "ESCAPE"
-                    )
-                    bypass_rate_limit = True
-                    info = {
-                        "stop": False,
-                        "arrive": False,
-                        "opt_state_list": [self.robot_state],
-                        "ref_state_list": [self.robot_state],
-                        "escape": True,
-                    }
-                else:
-                    if not self.last_arrive_flag:
-                        t_start = time.time()
-
-                    if self._curv.enable and self._global_path_xy is not None:
-                        self._ref_speed_eff = self._curv.update(x, y)
-                        self.neupan_planner.set_reference_speed(self._ref_speed_eff)
-
-                    # Smith Predictor — when enabled, plan from the state we
-                    # PREDICT the robot will be in by the time this command takes
-                    # effect (now + last_solve_time + fixed_actuator_lag) instead
-                    # of from "where the robot is now". 
-                    planner_state = self._predict_state_for_solve(self.robot_state)
-
-                    planner_start_t = time.perf_counter()
-                    if (planner_start_t - getattr(self, "_ec_last_solve_pre_t", 0.0)) >= 2.0:
-                        self._ec_last_solve_pre_t = planner_start_t
-                        try:
-                            _n_pts = len(self.obstacle_points) if self.obstacle_points is not None else -1
-                        except Exception:
-                            _n_pts = -1
-                        ec(EC.HEAVY_ALLOC_PRE, "solve_pre", "pts_in={}".format(_n_pts),
-                           node="neupan", also_print=False)
-                    try:
-                        action, info = self.neupan_planner(planner_state, self.obstacle_points)
-                        self._trace_planner_ms = (
-                            (time.perf_counter() - planner_start_t) * 1000.0
-                        )
-                        if (planner_start_t - getattr(self, "_ec_last_solve_done_t", 0.0)) >= 5.0:
-                            self._ec_last_solve_done_t = planner_start_t
-                            ec(EC.MPC_SOLVE, "mpc_solve",
-                               "solve={:.1f}ms pts_in={}".format(
-                                   self._trace_planner_ms,
-                                   len(self.obstacle_points) if self.obstacle_points is not None else -1),
-                               node="neupan", also_print=False)
-                    except Exception as exc:
-                        self._trace_planner_ms = (
-                            (time.perf_counter() - planner_start_t) * 1000.0
-                        )
-                        ec(EC.NEUPAN_SOLVE_FAIL, "solve_exception",
-                           "{}: {}".format(type(exc).__name__, str(exc)[:120]),
-                           node="neupan")
-                        handler = getattr(self, "_handle_planner_exception", None)
-                        if handler is not None:
-                            handler("planner execution", exc)
-                        else:
-                            logger.exception("planner execution failed")
-                            self.vel_pub.publish(Twist())
-                        r.sleep()
-                        continue
-
-                    if not self.last_arrive_flag:
-                        t_end = time.time()
-                        self._last_solve_sec = t_end - t_start
-                        rospy.loginfo(
-                            f"neupan planning time: {self._last_solve_sec*1000:.1f} ms"
-                        )
-
-                    try:
-                        pan = self.neupan_planner.pan
-                        if hasattr(pan, "perf"):
-                            perf = pan.perf
-                            npts = pan.perf_n_points
-                            rospy.loginfo_throttle(
-                                2.0,
-                                "[perf] solve={:.1f}ms | pf={:.1f}ms dune={:.1f}ms "
-                                "nrmp={:.1f}ms | pts in={} dune_out={} nrmp_in={} "
-                                "| min_dist={:.3f} | iter={} iters_run={}".format(
-                                    self._last_solve_sec * 1000.0,
-                                    perf["point_flow_ms"],
-                                    perf["dune_ms"],
-                                    perf["nrmp_ms"],
-                                    npts["input"],
-                                    npts["dune_out"],
-                                    npts["nrmp_in"],
-                                    float(self.neupan_planner.min_distance)
-                                    if hasattr(self.neupan_planner, "min_distance")
-                                    else -1.0,
-                                    getattr(pan, "iter_num", -1),
-                                    getattr(pan, "perf_iters", -1),
-                                ),
-                            )
-                    except Exception:
-                        pass
-
-                if self._control_cycle_token() != control_token:
-                    self._publish_control_trace("IDLE")
-                    r.sleep()
-                    continue
-
-                self.stop = info["stop"]
-                self.arrive = info["arrive"]
-
-                if info["arrive"] and not self.last_arrive_flag:
-                    self.arrive_pub.publish(Empty())
-                    rospy.loginfo("arrive at the target")
-
-                self.last_arrive_flag = info["arrive"]
-
-
-                # Preserve the planner/escape output before smoothing and acceleration
-                # limiting; trace publication below makes both values bag-visible.
-                raw_action = action.copy()
-                if bypass_rate_limit:
-                    self._last_cmd_v = float(action[0, 0])
-                    self._last_cmd_w = float(action[1, 0])
-                    self._last_cmd_t = time.time()
-                    self._escape.note_cmd(self._last_cmd_v, self._last_cmd_w)
-
-                    v_fb, w_fb = self._velocity_for_feedback(
-                        self._last_cmd_v, self._last_cmd_w
-                    )
-                    try:
-                        self.neupan_planner.cur_vel_array[0, 0] = v_fb
-                        self.neupan_planner.cur_vel_array[1, 0] = w_fb
-                    except Exception as e:  # pragma: no cover - defensive
-                        rospy.logwarn_throttle(5, f"escape feedback skipped: {e}")
-                else:
-                    # Clamp negative forward velocity during strafe-mode stall/grace windows.
-                    if (self._escape.strafe_enable
-                            and action[0, 0] < 0.0
-                            and (self._escape.count > 0
-                                 or self._escape.grace_active
-                                 or self._escape.pb_active)):
-                        action[0, 0] = 0.0
-                    action = self._apply_w_deadband(action)
-                    action = self._rate_limit_action(action)
-                    if self._out_gain_enable:
-                        action = self._apply_output_gain(action)
-
-
-                visualization_start_t = time.perf_counter()
-                opt_states = info.get("opt_state_list")
-                if opt_states:
-                    self.plan_pub.publish(self.generate_path_msg(opt_states))
-                ref_states = info.get("ref_state_list")
-                if ref_states:
-                    self.ref_state_pub.publish(self.generate_path_msg(ref_states))
-                if not info["arrive"] or not self.last_arrive_flag:
-                    if not self._publish_control_velocity(action, control_token):
-                        self._publish_control_trace("IDLE")
-                        r.sleep()
-                        continue
-
-                self.point_markers_pub_dune.publish(self.generate_dune_points_markers_msg())
-                self.point_markers_pub_nrmp.publish(self.generate_nrmp_points_markers_msg())
-                self.robot_marker_pub.publish(self.generate_robot_marker_msg())
-                # Covers path/ref/marker serialization and ROS publication after the
-                # action is known. It is observational only; output cmd is unchanged.
-                self._trace_visualization_ms = (
-                    (time.perf_counter() - visualization_start_t) * 1000.0
-                )
-                self._publish_control_trace(control_mode, raw_action, action, info)
-
-                if info["stop"]:
-                    rospy.logwarn_throttle(
-                        0.5,
-                        "neupan stop with the min distance "
-                        + str(self.neupan_planner.min_distance.detach().item())
-                        + " threshold "
-                        + str(self.neupan_planner.collision_threshold),
-                    )
+                self.neupan_planner.set_initial_path_from_state(self.robot_state)
             except Exception as exc:
                 handler = getattr(self, "_handle_planner_exception", None)
                 if handler is not None:
-                    handler("main control loop", exc)
+                    handler("initial path initialization", exc)
                 else:
-                    logger.exception("main control loop failed")
+                    logger.exception("initial path initialization failed")
                     self.vel_pub.publish(Twist())
+                return
 
-            r.sleep()
+        if self.neupan_planner.initial_path is None:
+            rospy.logwarn_throttle(3, "waiting for neupan initial path")
+            self._publish_control_trace("WAIT_PATH")
+            return
+
+        if not self._scan_is_fresh(time.monotonic()):
+            rospy.logwarn_throttle(
+                1, "no scan processed for {:.2f}s: commanding zero velocity".format(
+                    self._scan_timeout_sec))
+            self._publish_zero_velocity(control_token)
+            self._publish_control_trace("WAIT_SCAN")
+            return
+
+        # Everything below drives the actual control-cycle output
+        # (planning, escape override, cmd_vel publishing).
+        # It is wrapped in a top-level guard so that any exception NOT
+        # already caught by a more specific handler above cannot kill
+        # this loop silently (which previously froze the robot with no
+        # error ever reaching /rosout: the action server kept publishing
+        # stale feedback from a dead control loop, so mission_manager's
+        # watchdog never noticed).
+        try:
+            rospy.loginfo_once("initial Path Received")
+            self.ref_path_pub.publish(
+                self.generate_path_msg(self.neupan_planner.initial_path)
+            )
+
+            if self.obstacle_points is None:
+                rospy.logwarn_throttle(
+                    1, "No obstacle points, only path tracking task will be performed"
+                )
+
+            # refresh d_max periodically based on local corridor width.
+            if self._adaptive.enable:
+                self._update_adaptive_d_max()
+
+            # Override priority: stuck-escape > NeuPAN MPC.
+            escape_cmd = self._stuck_escape_decide_and_command()
+
+            bypass_rate_limit = False
+            control_mode = "MPC"
+            if escape_cmd is not None:
+                action = escape_cmd
+                control_mode = (
+                    "RECOVERY_WAIT"
+                    if self._trace_escape_info.get("recovery_wait")
+                    else "ESCAPE"
+                )
+                bypass_rate_limit = True
+                info = {
+                    "stop": False,
+                    "arrive": False,
+                    "opt_state_list": [self.robot_state],
+                    "ref_state_list": [self.robot_state],
+                    "escape": True,
+                }
+            else:
+                if not self.last_arrive_flag:
+                    t_start = time.time()
+
+                if self._curv.enable and self._global_path_xy is not None:
+                    self._ref_speed_eff = self._curv.update(x, y)
+                    self.neupan_planner.set_reference_speed(self._ref_speed_eff)
+
+                # Smith Predictor — when enabled, plan from the state we
+                # PREDICT the robot will be in by the time this command takes
+                # effect (now + last_solve_time + fixed_actuator_lag) instead
+                # of from "where the robot is now". 
+                planner_state = self._predict_state_for_solve(self.robot_state)
+
+                planner_start_t = time.perf_counter()
+                if (planner_start_t - getattr(self, "_ec_last_solve_pre_t", 0.0)) >= 2.0:
+                    self._ec_last_solve_pre_t = planner_start_t
+                    try:
+                        _n_pts = len(self.obstacle_points) if self.obstacle_points is not None else -1
+                    except Exception:
+                        _n_pts = -1
+                    ec(EC.HEAVY_ALLOC_PRE, "solve_pre", "pts_in={}".format(_n_pts),
+                       node="neupan", also_print=False)
+                try:
+                    action, info = self.neupan_planner(planner_state, self.obstacle_points)
+                    self._trace_planner_ms = (
+                        (time.perf_counter() - planner_start_t) * 1000.0
+                    )
+                    if (planner_start_t - getattr(self, "_ec_last_solve_done_t", 0.0)) >= 5.0:
+                        self._ec_last_solve_done_t = planner_start_t
+                        ec(EC.MPC_SOLVE, "mpc_solve",
+                           "solve={:.1f}ms pts_in={}".format(
+                               self._trace_planner_ms,
+                               len(self.obstacle_points) if self.obstacle_points is not None else -1),
+                           node="neupan", also_print=False)
+                except Exception as exc:
+                    self._trace_planner_ms = (
+                        (time.perf_counter() - planner_start_t) * 1000.0
+                    )
+                    ec(EC.NEUPAN_SOLVE_FAIL, "solve_exception",
+                       "{}: {}".format(type(exc).__name__, str(exc)[:120]),
+                       node="neupan")
+                    handler = getattr(self, "_handle_planner_exception", None)
+                    if handler is not None:
+                        handler("planner execution", exc)
+                    else:
+                        logger.exception("planner execution failed")
+                        self.vel_pub.publish(Twist())
+                    return
+
+                if not self.last_arrive_flag:
+                    t_end = time.time()
+                    self._last_solve_sec = t_end - t_start
+                    rospy.loginfo(
+                        f"neupan planning time: {self._last_solve_sec*1000:.1f} ms"
+                    )
+
+                try:
+                    pan = self.neupan_planner.pan
+                    if hasattr(pan, "perf"):
+                        perf = pan.perf
+                        npts = pan.perf_n_points
+                        rospy.loginfo_throttle(
+                            2.0,
+                            "[perf] solve={:.1f}ms | pf={:.1f}ms dune={:.1f}ms "
+                            "nrmp={:.1f}ms | pts in={} dune_out={} nrmp_in={} "
+                            "| min_dist={:.3f} | iter={} iters_run={}".format(
+                                self._last_solve_sec * 1000.0,
+                                perf["point_flow_ms"],
+                                perf["dune_ms"],
+                                perf["nrmp_ms"],
+                                npts["input"],
+                                npts["dune_out"],
+                                npts["nrmp_in"],
+                                float(self.neupan_planner.min_distance)
+                                if hasattr(self.neupan_planner, "min_distance")
+                                else -1.0,
+                                getattr(pan, "iter_num", -1),
+                                getattr(pan, "perf_iters", -1),
+                            ),
+                        )
+                except Exception:
+                    pass
+
+            if self._control_cycle_token() != control_token:
+                self._publish_control_trace("IDLE")
+                return
+
+            self.stop = info["stop"]
+            self.arrive = info["arrive"]
+
+            # Decide before updating the flag: the arrival cycle publishes one final zero command.
+            first_arrive = info["arrive"] and not self.last_arrive_flag
+            if first_arrive:
+                self.arrive_pub.publish(Empty())
+                rospy.loginfo("arrive at the target")
+
+            self.last_arrive_flag = info["arrive"]
+
+
+            # Preserve the planner/escape output before smoothing and acceleration
+            # limiting; trace publication below makes both values bag-visible.
+            raw_action = action.copy()
+            if bypass_rate_limit:
+                self._last_cmd_v = float(action[0, 0])
+                self._last_cmd_w = float(action[1, 0])
+                self._last_cmd_t = time.time()
+                self._escape.note_cmd(self._last_cmd_v, self._last_cmd_w)
+
+                v_fb, w_fb = self._velocity_for_feedback(
+                    self._last_cmd_v, self._last_cmd_w
+                )
+                try:
+                    self.neupan_planner.cur_vel_array[0, 0] = v_fb
+                    self.neupan_planner.cur_vel_array[1, 0] = w_fb
+                except Exception as e:  # pragma: no cover - defensive
+                    rospy.logwarn_throttle(5, f"escape feedback skipped: {e}")
+            else:
+                # Clamp negative forward velocity during strafe-mode stall/grace windows.
+                if (self._escape.strafe_enable
+                        and action[0, 0] < 0.0
+                        and (self._escape.count > 0
+                             or self._escape.grace_active
+                             or self._escape.pb_active)):
+                    action[0, 0] = 0.0
+                action = self._apply_w_deadband(action)
+                action = self._rate_limit_action(action)
+                if self._out_gain_enable:
+                    action = self._apply_output_gain(action)
+
+
+            visualization_start_t = time.perf_counter()
+            opt_states = info.get("opt_state_list")
+            if opt_states:
+                self.plan_pub.publish(self.generate_path_msg(opt_states))
+            ref_states = info.get("ref_state_list")
+            if ref_states:
+                self.ref_state_pub.publish(self.generate_path_msg(ref_states))
+            if not info["arrive"] or first_arrive:
+                if not self._publish_control_velocity(action, control_token):
+                    self._publish_control_trace("IDLE")
+                    return
+
+            self.point_markers_pub_dune.publish(self.generate_dune_points_markers_msg())
+            self.point_markers_pub_nrmp.publish(self.generate_nrmp_points_markers_msg())
+            self.robot_marker_pub.publish(self.generate_robot_marker_msg())
+            # Covers path/ref/marker serialization and ROS publication after the
+            # action is known. It is observational only; output cmd is unchanged.
+            self._trace_visualization_ms = (
+                (time.perf_counter() - visualization_start_t) * 1000.0
+            )
+            self._publish_control_trace(control_mode, raw_action, action, info)
+
+            if info["stop"]:
+                rospy.logwarn_throttle(
+                    0.5,
+                    "neupan stop with the min distance "
+                    + str(self.neupan_planner.min_distance.detach().item())
+                    + " threshold "
+                    + str(self.neupan_planner.collision_threshold),
+                )
+        except Exception as exc:
+            handler = getattr(self, "_handle_planner_exception", None)
+            if handler is not None:
+                handler("main control loop", exc)
+            else:
+                logger.exception("main control loop failed")
+                self.vel_pub.publish(Twist())
+
 
     def _trace_age_sec(self, stamp):
         """Wall-clock age for a callback timestamp; ``None`` means unseen."""
@@ -1592,6 +1621,7 @@ class neupan_core:
         self._last_scan_points = len(points)
         if len(points) == 0:
             self.obstacle_points = None
+            self._last_scan_ok_mono = time.monotonic()
             rospy.loginfo_once("No valid scan points")
             self._note_scan_cb(t_cb0)
             return None
@@ -1613,6 +1643,7 @@ class neupan_core:
                 rot_matrix @ point_array + trans_matrix
             )
             rospy.loginfo_once("Scan obstacle points Received")
+            self._last_scan_ok_mono = time.monotonic()
 
             self._note_scan_cb(t_cb0)
             return
