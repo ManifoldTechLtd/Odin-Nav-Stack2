@@ -26,7 +26,7 @@
 
 **Odin1** 是一款高性能空间感知模块，可提供**高精度 3D 建图**、**鲁棒的重定位**，以及包括 **RGB 图像**、**深度**、**IMU**、**里程计**和**稠密点云**在内的丰富感知数据流。ONS2 在 Odin1 的基础上，为地面平台提供自主**巡逻导航**栈，支持：
 
-- **多航点自主巡逻**，具备动态避障能力
+- **多航点自主巡逻**，具备动态避障能力和远程监控能力
 - **自然语言控制**与**视觉语言模型（VLM）**场景理解
 - **双运行时**：同一套代码可运行在 **ROS1 Noetic** 和 **ROS2 Jazzy** 上
 
@@ -35,29 +35,29 @@
 - **高精度 SLAM 与持久重定位**（位于 Odin1 内部，未开源）  
   实时建图，并利用紧凑的二进制地图进行长期重定位。
 - **动态障碍物感知导航**（完全开源）  
-  带盲区障碍物记忆（`sliding_map`）的全局 A\* 规划，结合 NeuPAN 局部规划器，在杂乱环境中安全运动。
+  带盲区障碍物记忆（`sliding_map`）的全局规划，结合 NeuPAN/SRU 局部规划器，在杂乱环境中也能安全运动。
 - **任务管理**（完全开源）  
-  支持多航点任务，包括暂停、恢复、取消、返航、最终对准以及每个航点的停留。
+  支持多航点任务，包括暂停、恢复、取消、返航、最终对准、每个航点的停留以及远程监控平台。
 - **自然语言大脑**（完全开源）  
-  通过基于规则和基于 LLM 的规划，将文本命令路由到任务。可通过 `enable_motion` 或在运行时通过 `/brain/enable` 禁用运动。
-- **视觉语言集成**（完全开源）  
-  通过兼容 OpenAI 的 VLM 服务器进行场景问答。
+  通过基于 VLM 的感知检测，用户可以接入VLM实现自定义的物体检查和场景问答功能。
 - **双运行时，共享核心**  
-  `ros_ws/`（ROS1 Noetic）与 `ros2_ws/`（ROS2 Jazzy）共享 NeuPAN 核心、话题/服务/动作名称以及配置档位。
+  `ros_ws/`（ROS1 Noetic）与 `ros2_ws/`（ROS2 Jazzy）共享规划器核心、话题/服务/动作名称以及配置档位。
 
 ## 新增内容
 
 - **规划速度大幅提升**  
   即使在低算力平台上也能显著加快规划速度，运动执行更加平滑，避障更加敏捷。  
-  具体改了什么、实测收益多少，见 [NeuPAN 优化说明](docs/neuPAN_optimisation.zh-CN.md)。
+  具体修改和实测收益，见 [NeuPAN 优化说明](docs/neuPAN_optimisation.zh-CN.md)。
 - **升级版 VLM，支持接入自有模型**  
   可在你自己的工作站上连接更强大的视觉语言模型，实现更丰富的场景理解。  
   参见 [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) 教程，内有网页链接与文档说明。
 - **专为工业巡检打造**  
   针对真实工业巡检场景与长距离巡逻路线进行了大量专项优化。  
-  远程 Web 监控界面见 [remote_monitoring.zh-CN.md](docs/remote_monitoring.zh-CN.md)（**仅 ROS 2**）—— 浏览器控制台，按需开相机与语音喊话（需自备 4G 模块、内网穿透或公网服务器）。
+  远程 Web 监控界面见 [remote_monitoring.zh-CN.md](docs/remote_monitoring.zh-CN.md)（**仅璇玑SW01+ROS 2适配**）—— 浏览器控制台，按需开相机与语音喊话（需自备 4G 模块、内网穿透或公网服务器）。
 - **端到端，完全开源**  
-  完整的巡检工作流——从仿真到实机、从算法到监控平台。参见 [Real2Sim 教程](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial)。
+  完整的巡检工作流——从仿真到实机、从算法到监控平台。真实世界到仿真世界，参见 [Real2Sim 教程](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial)。
+- **Odin RTK融合导航**
+  使用Odin和RTK快速完成配置，可完整实现基于经纬度的导航，以及扩展更多的使用场景。
 - **插件化架构**  
   整个导航栈围绕插件化设计构建，可轻松接入自定义规划器。
 - **更多功能即将推出**  
@@ -70,13 +70,15 @@
 - **[NeuPAN（ManifoldTech 分支）](https://github.com/ManifoldTechLtd/NeuPAN)** —— ONS2 使用的局部规划器，带 ROS 封装。
 - **[ManifoldTech Real2Sim 教程](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial)** —— 使用 Q9000 将真实世界转换为 Isaac Sim 中的仿真环境。
 - **[odin_ros_driver](https://github.com/manifoldsdk/odin_ros_driver)** 与 [Odin1 wiki](https://manifoldtechltd.github.io/wiki/Odin1/Cover.html) —— Odin1 驱动与文档。
+- **[Odin RTK](https://github.com/ManifoldTechLtd/Odin-RTK)** —— Odin RTK Fusion，把 Odin SLAM 里程计与 RTK/GNSS 的 GGA 数据融合，输出带全局参考的位姿。
+- **[Odin Perception](https://github.com/ManifoldTechLtd/Odin-perception)** —— ONS2 的端侧巡检感知组件：把一帧图像交给视觉模型，按结构化检查清单输出可判定的结论（yes/no、状态、计数、读字、描述），并保留证据图与耗时。
 
 # 支持的平台
 
 | 机器人 | 运行时 | 状态 |
 |---|---|---|
+| ASTRALL SW01 | ROS1 Noetic / ROS2 Jazzy | 支持（`scripts/ons2_sw01.sh`，配置 `robots/sw01/`），并经过大量验证测试和针对性优化 |
 | Unitree Go2 | ROS1 Noetic | 支持（`scripts/ons2_go2.sh`，配置 `robots/go2/`） |
-| ASTRALL SW01 | ROS1 Noetic / ROS2 Jazzy | 支持（`scripts/ons2_sw01.sh`，配置 `robots/sw01/`） |
 | Dobot Lumo | ROS1 Noetic | 支持（`scripts/ons2_dobot_lumo.sh`，配置 `robots/dobot_lumo/`，默认 `dry_run=true`） |
 | 你自己的机器人 | ROS1 或 ROS2 | 复制 `robots/_template/`；见 [03 · 接入你自己的机器人](docs/usage/03_integrate_your_robot.md) |
 
@@ -85,9 +87,9 @@ Unitree Go2 仅由 ROS1 栈支持。
 # 局部规划器：NeuPAN 或 SRU
 
 > [!NOTE]
-> SRU 将在近期发布。敬请期待！
+> SRU 训练代码已发布。融入导航的 SRU 将在近期发布。敬请期待！
 
-默认情况下，该栈在全局 A\* 路径上使用 **NeuPAN**（解析 DUNE + NRMP MPC）。ONS2 也可以用 **SRU** 端到端策略替代 NeuPAN，后者直接将深度图像和目标映射为速度指令。
+默认情况下，该栈在全局 A\* 路径上使用 **NeuPAN**。ONS2 也可以用 **SRU** 端到端策略替代 NeuPAN，后者直接将深度图像和目标映射为速度指令。
 
 | | NeuPAN（默认） | SRU（实验性） |
 |---|---|---|
@@ -124,7 +126,7 @@ NeuPAN 是默认的局部规划器（`--local-planner=neupan`），适配新机�
 
 ## 运行 SRU
 
-> **SRU 需要训练。** 训练好的 ONNX 模型（策略和 VAE 编码器）**不包含**在本仓库中。请在 SRU 仓库中训练策略，然后将导出的模型部署到机器人上的 SRU 工作空间：
+> **SRU 需要训练。** 请联系厂家获得机器人的运控。训练好的 ONNX 模型（策略和 VAE 编码器）**不包含**在本仓库中。请在 SRU 仓库中训练策略，然后将导出的模型部署到机器人上的 SRU 工作空间：
 >
 > **[ManifoldTechLtd/SRU-Odin](https://github.com/ManifoldTechLtd/SRU-Odin)** —— 训练（`Train/`）、部署（`Deployment/`）与移植指南。
 
@@ -147,11 +149,6 @@ NeuPAN 是默认的局部规划器（`--local-planner=neupan`），适配新机�
   # ROS1
   export SRU_WS=/path/to/sru_ros1_workspace
   bash scripts/ons2_sw01.sh --ros1 --local-planner=sru --map=NAME
-  ```
-- **Dobot Lumo（ROS1）：**
-  ``` shell
-  export SRU_WS=/path/to/sru_ros1_workspace
-  bash scripts/ons2_dobot_lumo.sh --local-planner=sru --map=NAME
   ```
 
 通用说明：
@@ -204,7 +201,7 @@ sudo udevadm control --reload && sudo udevadm trigger
 
 ## ROS1 Noetic（Ubuntu 20.04）
 
-ROS1 和 ROS2 默认都使用 **NeuPAN** 局部规划器（`NeuPAN/` 要求 **Python ≥ 3.10**）。由于 Ubuntu 20.04 系统自带的 Python 为 3.8，需要为 NeuPAN 单独创建一个 Python 3.10 的 conda 环境，而 ROS1 的 C++ 功能包则直接基于系统安装的 ROS Noetic 编译。
+ROS1 和 ROS2 默认都使用 **NeuPAN** 局部规划器（`NeuPAN/` 要求 **Python ≥ 3.10**）。由于 Ubuntu 20.04 系统自带的 Python 为 3.8，需要为 NeuPAN 单独创建一个 Python 3.10 的 conda 或者 venv 环境（下方以conda示例），而 ROS1 的 C++ 功能包则直接基于系统安装的 ROS Noetic 编译。
 
 ### 安装
 
@@ -332,12 +329,12 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 | **用浏览器驱动机器人**（Foxglove，或可选的 3DGS 控制台） | [快速开始 § 5 · Web 控制前端](docs/usage/01_quick_start.md#5-web-control-frontend) |
 | **通过 4G / 内网穿透远程操作** —— *仅 ROS 2（SW01），ROS 1 暂不支持* | [远程 Web 监控](docs/remote_monitoring.zh-CN.md) |
 | **搞懂或重调局部规划器** —— 优化了什么、为什么 | [NeuPAN 优化说明](docs/neuPAN_optimisation.zh-CN.md) |
-| **按名字查参数**，或根据症状排障 | [高级调参与排障指南](docs/TUNING_GUIDE.zh-CN.md) |
+| **查我这台平台的默认参数值** —— 各机器人实测取值 + 推荐调参顺序 | [02 · 参数调优](docs/usage/02_parameter_tuning.zh-CN.md) |
+| **按名字查某个参数是什么**，或按症状排障 | [高级调参与排障指南](docs/TUNING_GUIDE.zh-CN.md) —— 全参数词典（MPC/DUNE/扫描预处理/自适应安全带/全局规划）+ 症状→改哪个参数的对照表 |
 | **选用或编写平台档案** | [机器人档案规范](docs/architecture/ROBOT_PROFILE.md) |
 | **加入自动巡检** —— 清单结论、标注图像 | [感知指南](perception/README.zh-CN.md) → [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) |
 | **接入一台新机器人** —— 接口契约、底盘桥、TF、启动 | [03 · 接入你自己的机器人](docs/usage/03_integrate_your_robot.md) |
 | **向 VLM 提问场景理解问题** | [VLM 场景理解](#vlm-场景理解) |
-| **用自然语言控制机器人** | [自然语言控制（odin_brain）](#自然语言控制odin_brain) |
 | **了解架构与模块数据流** | [系统架构](docs/architecture/ONS2_ARCHITECTURE.md) · [模块数据流](docs/architecture/MODULE_DATAFLOW.md) |
 | **扫描现场并建导航地图**（Q9000） | [Q9000 教程](docs/Q9000-tutorial/Q9000-tutorial.md) · [`pcd_to_pgm.py`](scripts/map_processing/pcd_to_pgm.py) |
 | **在仿真中复现场景**（Real2Sim） | [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
@@ -361,23 +358,9 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 | 巡检导航、全局/局部规划 | ✅ | ✅ |
 | Web 控制台（Foxglove） | ✅ | ✅ |
 | 巡检感知（Florence-2，独立仓） | ✅ | ✅ |
-| 自然语言控制（`odin_brain`） | ✅ | ✅ |
 | 远程 Web 监控（相机 / 喊话 / 急停） | ❌ 暂不支持 | ✅ SW01 |
-| 3DGS 导航控制台 *（可选，联系获取）* | ✅ | ✅ |
+| 3DGS 导航控制台 *（可选，联系我们获取）* | ✅ | ✅ |
 
-## 自然语言控制（odin_brain）
-
-`odin_brain` 接收 `/brain/command` 上的文本并将其转换为任务。在 ROS2 中：
-
-``` shell
-mkdir -p ~/.config/odin_brain
-cp ros2_ws/src/odin_brain/config/llm.env.example ~/.config/odin_brain/llm.env
-chmod 600 ~/.config/odin_brain/llm.env        # 填入你的 LLM API key
-ros2 run odin_brain check_llm                 # 验证 LLM 连接
-ros2 run odin_brain brain_node                # 启动常驻节点
-```
-
-该大脑节点从不直接发布 `/cmd_vel`。它只调用任务服务。
 
 ## VLM 场景理解
 
@@ -389,7 +372,7 @@ ros2 launch odin_vlm_terminal odin_vlm_terminal.launch.py     # ROS2
 roslaunch odin_vlm_terminal odin_vlm_terminal.launch          # ROS1
 ```
 
-在资源有限的车载计算机上，请在配套机器上运行 VLM 服务器。
+在资源有限的车载计算机上，请在配套机器上运行 VLM 服务器。另外我们不推荐使用此功能，可以使用Florance-2完全替代。
 
 ## 巡检感知（Florence-2）
 
@@ -457,7 +440,6 @@ Odin-Nav-Stack2/
 │       ├── atomic_move/           # 到点闭环精对齐服务 (move / turn / align)
 │       ├── unitree_control/       # Unitree Go2 SDK2 底盘速度桥
 │       ├── dobot_ros_control/     # Dobot Lumo RPC 底盘速度桥与 O1L 启动配置
-│       ├── odin_brain/            # 自然语言规划器与 Hermes Web 插件
 │       └── odin_vlm_terminal/     # VLM 场景问答终端节点
 ├── ros2_ws/                       # ROS 2 Jazzy 工作空间 (与 ros_ws 核心包一一对应)
 │   ├── scripts/                   # ROS 2 运行时脚本 (test_nav_control_ros2.py, waypoint_goal_bridge.py, sru/, ...)
@@ -471,7 +453,6 @@ Odin-Nav-Stack2/
 │       ├── mission_manager/       # ROS 2 任务状态机与路径安全校验
 │       ├── atomic_move/           # ROS 2 闭环对齐节点
 │       ├── sw01_ros_control/      # ASTRALL SW01 SDK 底盘速度桥
-│       ├── odin_brain/            # ROS 2 自然语言规划器
 │       └── odin_vlm_terminal/     # ROS 2 VLM 场景问答节点
 ├── NeuPAN/                        # 共享 MPC + 解析式 DUNE 局部规划器核心库 (Python)
 ├── perception/                    # ManifoldTechLtd/Odin-perception 巡检感知仓库说明与拉取指南

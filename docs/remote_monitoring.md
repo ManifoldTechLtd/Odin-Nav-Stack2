@@ -22,7 +22,7 @@ responsibility** — the component does not include any tunnel or relay. You nee
 |---|---|---|
 | **Same LAN** | Nothing extra | `http://<robot-ip>:18088` works directly. Browser microphone needs HTTPS unless you use `localhost`. |
 | **4G / cellular** | A 4G module (or phone hotspot) on the robot + a reachable public address | Mobile carriers use shared NAT — you cannot dial in directly. Combine with a tunnel (next row). |
-| **NAT traversal / tunnel** | A tunnel service such as SakuraFrp, frp, or natfrp, **plus a VPS if you self-host** | Map one public port to `127.0.0.1:18088`. This is exactly why the server speaks HTTP and HTTPS on a **single port**. |
+| **NAT traversal / tunnel** | A tunnel service such as frp, natfrp, or another equivalent, **plus a VPS if you self-host** | Map one public port to `127.0.0.1:18088`. This is exactly why the server speaks HTTP and HTTPS on a **single port**. |
 | **Your own public server** | A VPS with a public IPv4 and a reverse proxy | Point the proxy at the robot over an existing tunnel/VPN. |
 
 **Why a single port matters:** the server auto-detects TLS on the same port, so your tunnel

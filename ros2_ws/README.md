@@ -22,7 +22,6 @@ This workspace contains the **ROS 2 Jazzy (Ubuntu 24.04)** navigation, perceptio
 | `sw01_ros_control` | ASTRALL SW01 chassis velocity & SDK lifecycle bridge (`sw01_cmd_vel_bridge`). |
 | `pointcloud_saver` | Online voxel/statistical filtering and PCD map exporter (`pointcloud_saver_node`). |
 | `odin_vlm_terminal` | Visual-language query node subscribing to Odin camera streams. |
-| `odin_brain` | Natural-language mission planner, speech I/O, and semantic place memory. |
 
 ---
 

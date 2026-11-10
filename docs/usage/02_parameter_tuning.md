@@ -2,7 +2,13 @@
 
 **English** | [中文](02_parameter_tuning.zh-CN.md)
 
-This guide lists the parameters that matter for each supported platform, the order in which to change them, and a symptom table. Values below are the ones in the repository today. Read the full rationale in the [tuning guide](../TUNING_GUIDE.md) before changing anything that is not listed here.
+This guide lists the parameters that matter for each supported platform, the order in which to change them, and a symptom table. Values below are the ones in the repository today.
+
+> **How this guide relates to the [advanced tuning guide](../TUNING_GUIDE.md):**
+> this page answers "**what values should my robot use**" — measured per-platform defaults plus
+> a tuning order — while the tuning guide answers "**what does this parameter actually do, and
+> how do I tune it**" — a full parameter dictionary plus symptom-based troubleshooting. Read
+> that one before changing anything not listed here.
 
 ## 1. Where the parameters live
 
@@ -61,6 +67,14 @@ NeuPAN profiles live in `robots/<robot>/neupan/` and are shared between ROS1 and
 Change one group at a time, and log the result.
 
 1. **Footprint first.** Enter the real `length` and `width` (and `footprint_length_m` / `footprint_width_m` in `sliding_map`). Wrong geometry causes every later symptom.
+
+> **Changing the robot's size needs no DUNE retraining.**
+> Set `robot.length` / `robot.width` to the measured values of the new chassis (and update
+> `footprint_length_m` / `footprint_width_m` in `sliding_map`). The shipped default
+> `pan.dune_use_analytic: true` uses the **analytic closed-form** solver, which adapts to any
+> rectangular footprint from `length × width` — **no DUNE model has to be retrained**. Only if
+> you explicitly disable `dune_use_analytic` and fall back to the neural DUNE encoder do you
+> need to train again with the new dimensions.
 2. **Speed.** Lower `ref_speed` and `max_speed` until the robot tracks the path without swaying.
 3. **Clearance.** Set `d_max` and `inflation_radius` to fit your narrowest passage. `d_max` should stay at or below half the corridor clearance.
 4. **Tracking.** Adjust `q_s` (position) and `q_theta` (heading), then `p_w` (angular damping).

@@ -98,7 +98,6 @@ base_inspection/
 │   ├── atomic_move/               # Closed-loop move / turn / align services
 │   ├── unitree_control/           # Unitree Go2 SDK2 velocity bridge
 │   ├── dobot_ros_control/         # Dobot Lumo RPC velocity bridge & O1L launch
-│   ├── odin_brain/                # Natural-language planner & Hermes web plugin
 │   ├── odin_vlm_terminal/         # VLM image query node
 │   ├── pointcloud_saver/          # PCD map exporter
 │   ├── pcd2pgm/                   # ROS 1 PCD-to-PGM converter
@@ -113,7 +112,6 @@ base_inspection/
 │   ├── mission_manager/           # ROS 2 mission state machine & path safety validator
 │   ├── atomic_move/               # ROS 2 closed-loop alignment node
 │   ├── sw01_ros_control/          # ASTRALL SW01 SDK velocity bridge
-│   ├── odin_brain/                # ROS 2 natural-language planner
 │   ├── odin_vlm_terminal/         # ROS 2 VLM query node
 │   └── pointcloud_saver/          # ROS 2 PCD map exporter
 ├── perception/                    # Standalone edge VLM inspection & person-following package

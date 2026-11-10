@@ -2,7 +2,12 @@
 
 [English](02_parameter_tuning.md) | **中文**
 
-本文列出各支持平台上真正重要的参数、改动顺序，以及一张症状对照表。下面的数值是当前仓库里的值。改动本文未列出的参数前，请先读完整的[调参指南](../TUNING_GUIDE.zh-CN.md)。
+本文列出各支持平台上真正重要的参数、改动顺序，以及一张症状对照表。下面的数值是当前仓库里的值。
+
+> **本文与[高级调参指南](../TUNING_GUIDE.zh-CN.md)的分工：**
+> 本文回答「**我这台机器人该填什么值**」—— 各平台实测默认值 + 调参顺序；
+> 高级调参指南回答「**这个参数到底干什么、该怎么调**」—— 全参数词典 + 症状排障，
+> 改动本文未列出的参数前请先读它。
 
 ## 1. 参数都在哪
 
@@ -61,6 +66,12 @@ NeuPAN 档案在 `robots/<robot>/neupan/` 下，ROS1 与 ROS2 共用。需要时
 一次只改一组，并把结果记下来。
 
 1. **先定外形。** 填入真实的 `length` 和 `width`（以及 `sliding_map` 里的 `footprint_length_m` / `footprint_width_m`）。几何错了，后面每一个症状都会跟着错。
+
+> **换机器人尺寸：改长宽即可，不用重训 DUNE。**
+> 把 `robot.length` / `robot.width` 改成新机器人的实测值就够了（同时更新 `sliding_map` 的
+> `footprint_length_m` / `footprint_width_m`）。出厂默认 `pan.dune_use_analytic: true` 走的是
+> **解析闭式解**，会按 `length × width` 自动适配任意矩形外形，**不需要重新训练 DUNE 模型**。
+> 只有当你显式关掉 `dune_use_analytic`、退回神经网络版 DUNE 时，才需要用新尺寸重新训练。
 2. **速度。** 降低 `ref_speed` 与 `max_speed`，直到机器人能贴着路径走而不摆动。
 3. **净空。** 按你最窄的通道来设 `d_max` 和 `inflation_radius`。`d_max` 应当保持在走廊净空的一半或更低。
 4. **跟踪。** 调 `q_s`（位置）与 `q_theta`（航向），再调 `p_w`（角速度阻尼）。

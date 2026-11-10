@@ -26,7 +26,7 @@
 
 **Odin1** is a high-performance spatial sensing module that delivers **high-precision 3D mapping**, **robust relocalization**, and rich sensory streams including **RGB images**, **depth**, **IMU**, **odometry**, and **dense point clouds**. ONS2 builds on Odin1 to provide an autonomous **patrol navigation** stack for ground platforms, enabling:
 
-- **Multi-waypoint autonomous patrol** with dynamic obstacle avoidance
+- **Multi-waypoint autonomous patrol** with dynamic obstacle avoidance and remote monitoring
 - **Natural-language control** and **Vision-Language Model (VLM)** scene understanding
 - **Dual runtime**: the same codebase runs on **ROS1 Noetic** and **ROS2 Jazzy**
 
@@ -37,13 +37,12 @@
 - **Dynamic Obstacle-Aware Navigation** (fully open-sourced)  
   Global A\* planning with a memory of blind-spot obstacles (`sliding_map`), combined with the NeuPAN local planner for safe motion in cluttered environments.
 - **Mission Management** (fully open-sourced)  
-  Multi-waypoint missions with pause, resume, cancel, return-home, final alignment, and per-waypoint dwell.
-- **Natural-Language Brain** (fully open-sourced)  
-  Routes text commands to missions through rule-based and LLM-based planning. Motion can be disabled with `enable_motion` or at runtime through `/brain/enable`.
-- **Vision-Language Integration** (fully open-sourced)  
-  Scene question answering through an OpenAI-compatible VLM server.
+  Multi-waypoint missions with pause, resume, cancel, return-home, final alignment, per-waypoint
+  dwell, and a remote monitoring console.
+- **VLM-based perception** (fully open-sourced)  
+  Plug in your own vision-language model to run custom object checks and scene question answering. See [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception).
 - **Dual Runtime, Shared Core**  
-  `ros_ws/` (ROS1 Noetic) and `ros2_ws/` (ROS2 Jazzy) share the NeuPAN core, the topic / service / action names, and the configuration profiles.
+  `ros_ws/` (ROS1 Noetic) and `ros2_ws/` (ROS2 Jazzy) share the planner core, the topic / service / action names, and the configuration profiles.
 
 ## What's New
 
@@ -55,9 +54,11 @@
   See the [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) tutorial for web links and documentation.
 - **Built for industrial inspection**  
   Extensive optimizations tuned to real industrial inspection scenarios and long patrol routes.  
-  See the [remote web monitor](docs/remote_monitoring.md) (**ROS 2 only**) — browser-based control console with on-demand camera and intercom (requires your own 4G module, NAT traversal or a public server).
+  See the [remote web monitor](docs/remote_monitoring.md) (**ASTRALL SW01 + ROS 2 only**) — browser-based control console with on-demand camera and intercom (requires your own 4G module, NAT traversal or a public server).
 - **End-to-end, fully open source**  
-  A complete inspection workflow — simulation to real robots, algorithms to the monitoring platform. See the [Real2Sim tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial).
+  A complete inspection workflow — simulation to real robots, algorithms to the monitoring platform, real world to simulated world. See the [Real2Sim tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial).
+- **Odin RTK fusion navigation**  
+  Configure Odin with RTK in minutes to get full latitude/longitude-based navigation and open up further use cases.
 - **Plugin architecture**  
   The stack is built around a plugin-based design, making it straightforward to integrate custom planners.
 - **More on the way**  
@@ -70,13 +71,15 @@
 - **[NeuPAN (ManifoldTech fork)](https://github.com/ManifoldTechLtd/NeuPAN)** — The local planner used by ONS2, with a ROS wrapper.
 - **[ManifoldTech Real2Sim Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial)** — Transform the real world into a simulated environment in Isaac Sim using Q9000.
 - **[odin_ros_driver](https://github.com/manifoldsdk/odin_ros_driver)** and the [Odin1 wiki](https://manifoldtechltd.github.io/wiki/Odin1/Cover.html) — Odin1 driver and documentation.
+- **[Odin RTK](https://github.com/ManifoldTechLtd/Odin-RTK)** — Odin RTK Fusion: fuses Odin SLAM odometry with RTK/GNSS GGA data to output globally referenced poses.
+- **[Odin Perception](https://github.com/ManifoldTechLtd/Odin-perception)** — the on-device inspection perception component for ONS2: feed one image to a vision model and get decidable verdicts against a structured checklist (yes/no, state, count, read-text, describe), with evidence image and latency.
 
 # Supported Platforms
 
 | Robot | Runtime | Status |
 |---|---|---|
+| ASTRALL SW01 | ROS1 Noetic / ROS2 Jazzy | Supported (`scripts/ons2_sw01.sh`, profile `robots/sw01/`), extensively validated and tuned |
 | Unitree Go2 | ROS1 Noetic | Supported (`scripts/ons2_go2.sh`, profile `robots/go2/`) |
-| ASTRALL SW01 | ROS1 Noetic / ROS2 Jazzy | Supported (`scripts/ons2_sw01.sh`, profile `robots/sw01/`) |
 | Dobot Lumo | ROS1 Noetic | Supported (`scripts/ons2_dobot_lumo.sh`, profile `robots/dobot_lumo/`, defaults to `dry_run=true`) |
 | Your own robot | ROS1 or ROS2 | Copy `robots/_template/`; see [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md) |
 
@@ -85,9 +88,9 @@ Unitree Go2 is supported by the ROS1 stack only.
 # Local Planner: NeuPAN or SRU
 
 > [!NOTE]
-> SRU will be released soon. Please stay tuned!
+> The SRU training code is already published. SRU integrated into the navigation stack will be released soon. Please stay tuned!
 
-By default the stack uses **NeuPAN** (analytic DUNE + NRMP MPC) on a global A\* path. ONS2 can also replace NeuPAN with the **SRU** end-to-end policy, which maps the depth image and the goal directly to velocity commands.
+By default the stack uses **NeuPAN** on a global A\* path. ONS2 can also replace NeuPAN with the **SRU** end-to-end policy, which maps the depth image and the goal directly to velocity commands.
 
 | | NeuPAN (default) | SRU (experimental) |
 |---|---|---|
@@ -124,7 +127,7 @@ For parameter tuning (speed, footprint, safety clearance, stuck escape), see [02
 
 ## Running SRU
 
-> **SRU requires training.** The trained ONNX models (policy and VAE encoder) are **not included** in this repository. Train the policy in the SRU repository, then deploy the exported models to the SRU workspace on the robot:
+> **SRU requires training.** Please contact us to obtain the locomotion controller for your robot. The trained ONNX models (policy and VAE encoder) are **not included** in this repository. Train the policy in the SRU repository, then deploy the exported models to the SRU workspace on the robot:
 >
 > **[ManifoldTechLtd/SRU-Odin](https://github.com/ManifoldTechLtd/SRU-Odin)** — training (`Train/`), deployment (`Deployment/`), and the porting guide.
 
@@ -332,12 +335,12 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | **Drive it from a browser** (Foxglove, or the optional 3DGS console) | [Quick Start § 5 · Web Control Frontend](docs/usage/01_quick_start.md#5-web-control-frontend) |
 | **Operate it remotely over 4G / NAT** — *ROS 2 (SW01) only; ROS 1 not supported yet* | [Remote Web Monitor](docs/remote_monitoring.md) |
 | **Understand or retune the local planner** — what was optimised and why | [NeuPAN Optimisation Notes](docs/neuPAN_optimisation.md) |
-| **Look up a parameter by name**, or debug a symptom | [Advanced Tuning & Troubleshooting](docs/TUNING_GUIDE.md) |
+| **Look up the default values for my platform** — measured per-robot values plus a recommended tuning order | [02 · Parameter Tuning](docs/usage/02_parameter_tuning.md) |
+| **Look up what a specific parameter does**, or debug a symptom | [Advanced Tuning & Troubleshooting](docs/TUNING_GUIDE.md) — full parameter dictionary (MPC/DUNE, scan pre-processing, adaptive safety band, global planner) plus a symptom→parameter table |
 | **Pick or write a platform profile** | [Robot Profiles](docs/architecture/ROBOT_PROFILE.md) |
 | **Add automated inspection** — checklist verdicts, annotated frames | [Perception guide](perception/README.md) → [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) |
 | **Connect a new robot** — interface contract, chassis bridge, TF, launch | [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md) |
 | **Ask a VLM questions about the scene** | [VLM Scene Understanding](#vlm-scene-understanding) |
-| **Control the robot in natural language** | [Natural-Language Control (odin_brain)](#natural-language-control-odin_brain) |
 | **Understand the architecture / module dataflow** | [Architecture](docs/architecture/ONS2_ARCHITECTURE.md) · [Module Dataflow](docs/architecture/MODULE_DATAFLOW.md) |
 | **Scan a site and build a navigation map** (Q9000) | [Q9000 Tutorial](docs/Q9000-tutorial/Q9000-tutorial.md) · [`pcd_to_pgm.py`](scripts/map_processing/pcd_to_pgm.py) |
 | **Reproduce a scenario in simulation** (Real2Sim) | [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
@@ -361,23 +364,8 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | Patrol navigation, local/global planning | ✅ | ✅ |
 | Web control console (Foxglove) | ✅ | ✅ |
 | Inspection perception (Florence-2, separate repo) | ✅ | ✅ |
-| Natural-language control (`odin_brain`) | ✅ | ✅ |
 | Remote web monitor (camera / intercom / e-stop) | ❌ not yet | ✅ SW01 |
-| 3DGS navigation console *(optional, on request)* | ✅ | ✅ |
-
-## Natural-Language Control (odin_brain)
-
-`odin_brain` accepts text on `/brain/command` and turns it into missions. In ROS2:
-
-``` shell
-mkdir -p ~/.config/odin_brain
-cp ros2_ws/src/odin_brain/config/llm.env.example ~/.config/odin_brain/llm.env
-chmod 600 ~/.config/odin_brain/llm.env        # fill in your LLM API key
-ros2 run odin_brain check_llm                 # verify the LLM connection
-ros2 run odin_brain brain_node                # start the resident node
-```
-
-The brain never publishes `/cmd_vel` directly. It only calls the mission services.
+| 3DGS navigation console *(optional, contact us)* | ✅ | ✅ |
 
 ## VLM Scene Understanding
 
@@ -389,7 +377,7 @@ ros2 launch odin_vlm_terminal odin_vlm_terminal.launch.py     # ROS2
 roslaunch odin_vlm_terminal odin_vlm_terminal.launch          # ROS1
 ```
 
-On an onboard computer with limited resources, run the VLM server on a companion machine.
+On an onboard computer with limited resources, run the VLM server on a companion machine. Note that we no longer recommend this path — Florence-2 (see below) fully supersedes it.
 
 ## Inspection Perception (Florence-2)
 
@@ -454,7 +442,7 @@ Odin-Nav-Stack2/
 │   ├── ons2_go2.sh / ons2_go2_stop.sh
 │   ├── ons2_sw01.sh / ons2_sw01_stop.sh
 │   ├── ons2_dobot_lumo.sh / ons2_dobot_lumo_stop.sh
-│   └── lib/ | brain/ | tools/ | systemd/ | map_processing/
+│   └── lib/ | tools/ | systemd/ | map_processing/
 ├── ros_ws/                        # ROS 1 Noetic workspace
 │   ├── scripts/                   # ROS 1 runtime scripts (test_nav_control_rospy.py, waypoint_goal_bridge.py, sru/, ...)
 │   └── src/
@@ -468,7 +456,6 @@ Odin-Nav-Stack2/
 │       ├── atomic_move/           # Closed-loop move / turn / align services
 │       ├── unitree_control/       # Unitree Go2 SDK2 velocity bridge
 │       ├── dobot_ros_control/     # Dobot Lumo RPC velocity bridge & O1L launch
-│       ├── odin_brain/            # Natural-language planner & Hermes web plugin
 │       └── odin_vlm_terminal/     # VLM scene question-answering node
 ├── ros2_ws/                       # ROS 2 Jazzy workspace (1:1 core parity with ros_ws)
 │   ├── scripts/                   # ROS 2 runtime scripts (test_nav_control_ros2.py, waypoint_goal_bridge.py, sru/, ...)
@@ -482,7 +469,6 @@ Odin-Nav-Stack2/
 │       ├── mission_manager/       # ROS 2 mission state machine & path safety validator
 │       ├── atomic_move/           # ROS 2 closed-loop alignment node
 │       ├── sw01_ros_control/      # ASTRALL SW01 SDK velocity bridge
-│       ├── odin_brain/            # ROS 2 natural-language planner
 │       └── odin_vlm_terminal/     # ROS 2 VLM scene question-answering node
 ├── NeuPAN/                        # Shared MPC + analytic DUNE local planner core (Python)
 ├── perception/                    # Guide & clone instructions for ManifoldTechLtd/Odin-perception
