@@ -1,5 +1,7 @@
 # Q9000 Map Scanning & Processing Guide
 
+**English** | [中文](Q9000-tutorial.zh-CN.md)
+
 > [!NOTE]
 > Although this guide uses the **Unitree Go2** as a concrete example for file transfer and mounting height parameters, the Q9000 scanning, map export, and PCD-to-PGM grid conversion workflow is **completely platform-agnostic**. It applies equally to any robot running ONS2 (such as ASTRALL SW01, Dobot Lumo, or custom mobile platforms) regardless of the specific robot model.
 
@@ -132,6 +134,9 @@ python3 /path/to/base_inspection/scripts/map_processing/pcd_to_pgm.py parkinglot
 | `--lidar-height` | `0.545` | Sensor mounting height above ground in meters (`0.545` is the default for Go2; adjust for your robot) |
 | `--slice-above` | `0.3` | Height window above the sensor (m) retained as obstacles |
 | `--slice-below` | `0.2` | Height window below the sensor (m) retained as obstacles |
+
+> How to pick the two height windows from your robot's height and sensor mount is covered in
+> [Tuning Guide §3.1b Point-Cloud Height Slicing](../TUNING_GUIDE.md).
 
 ### 4.3 Verify the Generated Files
 
