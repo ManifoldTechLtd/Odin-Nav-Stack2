@@ -30,6 +30,10 @@
 - **Natural-language control** and **Vision-Language Model (VLM)** scene understanding
 - **Dual runtime**: the same codebase runs on **ROS1 Noetic** and **ROS2 Jazzy**
 
+<p align="center">
+  <img src="figures/ons2_architecture.png" alt="ONS2 System Architecture Overview" width="100%">
+</p>
+
 ## Key Features
 
 - **High-Accuracy SLAM & Persistent Relocalization** (inside Odin1, not open-sourced)  

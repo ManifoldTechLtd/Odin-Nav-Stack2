@@ -30,6 +30,10 @@
 - **自然语言控制**与**视觉语言模型（VLM）**场景理解
 - **双运行时**：同一套代码可运行在 **ROS1 Noetic** 和 **ROS2 Jazzy** 上
 
+<p align="center">
+  <img src="figures/ons2_architecture.png" alt="ONS2 系统架构总览" width="100%">
+</p>
+
 ## 核心特性
 
 - **高精度 SLAM 与持久重定位**（位于 Odin1 内部，未开源）  
