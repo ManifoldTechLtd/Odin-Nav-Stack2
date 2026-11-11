@@ -132,7 +132,7 @@ base_inspection/
 ## 5. Core Modules & Runtime Behavior
 
 ### 5.1 Sensor Driver & Relocalization Gates (`odin_ros_driver`)
-- Before starting the driver (when `--mock-odin` is not set), `ons2_prepare_odin_reloc_config` in `scripts/lib/ons2_lib.sh` enforces `custom_map_mode: 2` (`0: Odometry | 1: SLAM | 2: Relocalization`), `use_host_ros_time: 1`, and sets `relocalization_map_abs_path` to `customer_file/<map>.bin`.
+- Before starting the driver (when `--mock-odin` is not set), `ons2_prepare_odin_reloc_config` in `scripts/lib/ons2_lib.sh` enforces `custom_map_mode: 2` (`0: Odometry | 1: SLAM | 2: Relocalization`), `use_host_ros_time: 1`, and sets `relocalization_map_abs_path` to `customer_file/<map>.bin`. Its optional third argument selects the Odin mode: `scripts/ons2_sw01_mapless.sh` passes `1` (SLAM), does not use a relocalization map, and skips Gate 2.
 - **Gate 1** waits for `Device ready and streams activated`; **Gate 2** waits for `relocalization success` (or `odom -> map` TF on O1L) before launching downstream navigation nodes.
 
 ### 5.2 Perception Chain (`pc_to_scan` -> `scan_temporal_filter` -> `sliding_map`)

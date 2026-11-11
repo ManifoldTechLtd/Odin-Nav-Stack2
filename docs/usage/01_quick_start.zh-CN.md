@@ -58,6 +58,17 @@ bash scripts/ons2_sw01.sh --map=NAME
 bash scripts/ons2_sw01_stop.sh
 ```
 
+无图导航（没有先验地图，例如新场地在建立重定位地图之前）：
+
+```bash
+bash scripts/ons2_sw01_mapless.sh
+```
+
+- Odin 以 SLAM 模式运行（`custom_map_mode: 1`）。导航地图为空白的 `empty`（100 m × 100 m，以启动位姿为中心），用静态恒等变换 `map → odom` 代替重定位，因此跳过闸门 2。
+- 空白图上的全局路径只是直线，尚未扫描到的障碍不在全局路径上。请分小步下发目标，并随时准备用遥控器接管。
+- 该模式不接受 `--map`。`--navigation-mode`、`--periodic-replan-sec`、`--neupan-config`、`--mock-odin` 的用法与 `ons2_sw01.sh` 相同。
+- 目标在 `map` 坐标系下下发，`map` 与 `odom` 重合，原点为启动位姿。停止：`bash scripts/ons2_sw01_stop.sh`。
+
 `ons2_go2.sh`、`ons2_sw01.sh`、`ons2_dobot_lumo.sh` 共通的常用参数：
 
 | 选项 | 作用 |

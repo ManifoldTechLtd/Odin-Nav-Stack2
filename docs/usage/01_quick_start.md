@@ -58,6 +58,17 @@ Stop:
 bash scripts/ons2_sw01_stop.sh
 ```
 
+Mapless navigation (no prior map, e.g. at a new site before any relocalization map exists):
+
+```bash
+bash scripts/ons2_sw01_mapless.sh
+```
+
+- Odin runs in SLAM mode (`custom_map_mode: 1`). The navigation map is the blank `empty` map (100 m × 100 m, centred on the start pose), and a static identity `map → odom` TF replaces relocalization, so Gate 2 is skipped.
+- Global paths on a blank map are straight lines, and obstacles not yet scanned are not on the global path. Send goals in short steps and keep the remote control ready to take over.
+- `--map` is not accepted in this mode. `--navigation-mode`, `--periodic-replan-sec`, `--neupan-config` and `--mock-odin` work as in `ons2_sw01.sh`.
+- Goals are given in the `map` frame, which equals `odom` with its origin at the start pose. Stop with `bash scripts/ons2_sw01_stop.sh`.
+
 Useful options across `ons2_go2.sh`, `ons2_sw01.sh`, and `ons2_dobot_lumo.sh`:
 
 | Option | Effect |

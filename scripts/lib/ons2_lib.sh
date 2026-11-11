@@ -113,13 +113,13 @@ ons2_wait_window() {
 }
 
 ons2_prepare_odin_reloc_config() {
-  local cfg="$1" reloc_bin="$2"
+  local cfg="$1" reloc_bin="$2" mode="${3:-2}"
   RELOC_MAP_SWITCHED=0
   [[ "${MOCK_ODIN}" -eq 1 ]] && return 0
   [[ -f "${cfg}" ]] || ons2_fail "Driver config not found: ${cfg}"
   [[ -f "${cfg}.orig" ]] || cp "${cfg}" "${cfg}.orig"
   sed -i -E "s|^[[:space:]]*use_host_ros_time:[[:space:]]*[0-2].*|  use_host_ros_time: 1|" "${cfg}"
-  sed -i -E "s|^([[:space:]]*custom_map_mode:)[[:space:]]*[0-2].*|\1 2|" "${cfg}"
+  sed -i -E "s|^([[:space:]]*custom_map_mode:)[[:space:]]*[0-2].*|\1 ${mode}|" "${cfg}"
   if [[ -n "${MAP_NAME}" || -f "${reloc_bin}" ]]; then
     [[ -f "${reloc_bin}" ]] || ons2_fail "--map=${MAP_FILE_NAME} missing relocalization map: ${reloc_bin}"
     local old_bin
