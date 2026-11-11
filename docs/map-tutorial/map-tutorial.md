@@ -1,22 +1,46 @@
-# Q9000 Map Scanning & Processing Guide
+# Map Building & Processing Guide (Q9000 & Odin1)
 
-**English** | [中文](Q9000-tutorial.zh-CN.md)
+**English** | [中文](map-tutorial.zh-CN.md)
 
 > [!NOTE]
-> Although this guide uses the **Unitree Go2** as a concrete example for file transfer and mounting height parameters, the Q9000 scanning, map export, and PCD-to-PGM grid conversion workflow is **completely platform-agnostic**. It applies equally to any robot running ONS2 (such as ASTRALL SW01, Dobot Lumo, or custom mobile platforms) regardless of the specific robot model.
+> Although this guide uses the **Unitree Go2** as a concrete example for file transfer and mounting height parameters, the map scanning, export, and PCD-to-PGM grid conversion workflow is **completely platform-agnostic**. It applies equally to any robot running ONS2 (such as ASTRALL SW01, Dobot Lumo, or custom mobile platforms) regardless of the specific robot model.
 
-This document walks through the complete workflow from scanning an environment with a **Q9000**, exporting the point-cloud and relocalization maps in **MindCloud Studio**, and converting them into a 2D occupancy grid map ready for autonomous navigation.
+This document walks through how to build the three map files required by ONS2 (`<map>.bin`, `<map>.pgm`, and `<map>.yaml`):
+- **Sections 1–5 (Recommended): Offline Post-Processing via MindCloud Studio** — using data captured by either a **Q9000** scanner or an **Odin1** module (`recorddata: 1`).
+- **Section 6 (Alternative): Onboard Online Mapping with Odin1 Only** — saving `.bin` and `.pcd`/`.pgm` directly on the robot without MindCloud Studio, along with its practical limitations.
 
 ---
 
-## 1. Connect the Q9000 to Your Workstation
+## 1. Capture Raw Mapping Data (Q9000 or Odin1)
 
-Connect a Type-C to USB-A or Type-C to Type-C data cable between the USB-C port on the back of the [Q9000](https://www.manifoldtech.cn/products/q9000) head and your computer. Once recognized, a removable USB drive will appear on your computer containing the recorded project folders.
+MindCloud Studio accepts raw mapping projects recorded by either a **Q9000** scanner or an **Odin1** sensor:
+
+### Option 1A — Capture with a Q9000 Scanner
+
+Connect a Type-C to USB-A or Type-C to Type-C data cable between the USB-C port on the back of the [Q9000](https://www.manifoldtech.cn/products/q9000) head and your computer. Once recognized, a removable USB drive will appear on your computer containing the recorded `.lx` project folders.
 
 ![Q9000 bottom interface ports](https://i.ibb.co/prvWBS9C/09.png)
 
+### Option 1B — Record with an Odin1 Module (`recorddata: 1`)
+
+If you do not have a Q9000, you can record a MindCloud-compatible project directly from **Odin1**:
+
+1. Edit `odin_ros_driver/config/control_command.yaml` (in `ros_ws/src/odin_ros_driver/` or `ros2_ws/src/odin_ros_driver/`) and enable `recorddata`:
+   ```yaml
+   custom_map_mode: 1      # 1: SLAM mode
+   recorddata: 1           # 1: Record RGB, odometry, and SLAM cloud in MindCloud (.olx) format
+   ```
+2. Launch `odin_ros_driver` and move the robot/sensor through the environment:
+   ```bash
+   # ROS 1
+   roslaunch odin_ros_driver odin1_ros1.launch
+   # ROS 2
+   ros2 launch odin_ros_driver odin1_ros2.launch.py
+   ```
+3. Stop the driver when finished, set `recorddata: 0` back in `control_command.yaml`, and copy the recorded project folder from `odin_ros_driver/recorddata/<record_start_time>/` to your workstation for MindCloud Studio post-processing (Section 2).
+
 > [!TIP]
-> A workstation or laptop with a dedicated GPU is recommended. Ultrabooks without a discrete GPU will process point clouds significantly more slowly.
+> A workstation or laptop with a dedicated GPU is recommended for MindCloud Studio. Ultrabooks without a discrete GPU will process point clouds significantly more slowly.
 
 ---
 
@@ -205,3 +229,42 @@ Here `--map=<map_name>` selects the built map by its base name. Every map consis
 | `<map_name>.bin` | `/path/to/base_inspection/customer_file/` | Odin1 3D relocalization map (**note:** `customer_file/` does not exist by default in a fresh clone—create it manually with `mkdir -p /path/to/base_inspection/customer_file`) |
 
 For full mission control and patrol instructions after startup, see [01 · Quick Start](../usage/01_quick_start.md).
+
+---
+
+## 6. Alternative: Onboard Online Mapping with Odin1 Only (No MindCloud Studio)
+
+For small indoor environments where offline post-processing in MindCloud Studio is not required, Odin1 can also save a `.bin` relocalization map and a `.pcd` point cloud **directly on the onboard computer** in SLAM mode (`custom_map_mode: 1`).
+
+### 6.1 Procedure (ROS 1 Helper Script `map_recording.sh`)
+
+1. Edit `ros_ws/src/odin_ros_driver/config/control_command.yaml` and set `custom_map_mode: 1`.
+2. **Terminal 1 — Start the Odin1 driver:**
+   ```bash
+   source ros_ws/devel/setup.bash
+   roslaunch odin_ros_driver odin1_ros1.launch
+   ```
+3. **Terminal 2 — Run the mapping helper script:**
+   ```bash
+   bash scripts/map_processing/map_recording.sh <map_name>
+   ```
+   - Press `[Enter]` to start recording (`/pointcloud_saver/start_recording`), walk the robot through the site, and press `[Enter]` again to stop.
+   - The script automatically calls:
+     - `bash ros_ws/src/odin_ros_driver/set_param.sh save_map 1` (which triggers the Odin1 driver to write the relocalization `.bin` map to `ros_ws/src/odin_ros_driver/map/<driver_start_time>/map_<save_time>.bin`);
+     - `/pointcloud_saver/save_map` to save the accumulated `.pcd` point cloud;
+     - `pcd2pgm` + `map_server map_saver` to generate `ros_ws/src/map_planner/maps/<map_name>.pgm` and `<map_name>.yaml`.
+4. **Copy and rename the generated `.bin` file into `customer_file/`:**
+   ```bash
+   mkdir -p customer_file
+   cp ros_ws/src/odin_ros_driver/map/*/*.bin customer_file/<map_name>.bin
+   ```
+
+*(On **ROS 2**, call `ros2 service call /odin1/save_map odin_ros_driver/srv/SaveMap "{value: 1}"` to save the `.bin` file, save the `.pcd` via `pointcloud_saver`, and run `scripts/map_processing/pcd_to_pgm.py` as shown in Section 4.2.)*
+
+### 6.2 Limitations of Onboard Online Mapping
+
+Compared to the MindCloud Studio workflow (Sections 1–4), onboard online mapping has three important limitations:
+
+1. **No offline global optimization or dynamic-object removal:** Pedestrians or moving objects seen during mapping are baked directly into the saved `.pcd` and `.pgm` unless manually erased in GIMP (Section 4.4), and large loops do not benefit from MindCloud Studio's offline bundle adjustment.
+2. **Manual `.bin` placement and renaming:** The Odin1 driver writes `map_<save_time>.bin` inside `odin_ros_driver/map/<driver_start_time>/` (unless `mapping_result_dest_dir` and `mapping_result_file_name` are explicitly configured in `control_command.yaml`). You must copy and rename it to `customer_file/<map_name>.bin` so it matches `<map_name>.pgm` and `<map_name>.yaml`.
+3. **`map_recording.sh` is a legacy ROS 1 helper:** The shell wrapper `scripts/map_processing/map_recording.sh` relies on ROS 1 `roslaunch`/`rosservice` and the ROS 1 `pcd2pgm` package. For ROS 2 or multi-robot deployments, using `pcd_to_pgm.py` (Section 4.2) with MindCloud Studio is strongly recommended.

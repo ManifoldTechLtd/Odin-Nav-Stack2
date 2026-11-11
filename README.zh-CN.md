@@ -34,7 +34,9 @@
   <img src="figures/ons2_architecture.png" alt="ONS2 系统架构总览" width="100%">
 </p>
 
-## 核心特性
+# 1. 概览
+
+## 1.1 核心特性
 
 - **高精度 SLAM 与持久重定位**（位于 Odin1 内部，未开源）  
   实时建图，并利用紧凑的二进制地图进行长期重定位。
@@ -47,7 +49,7 @@
 - **双运行时，共享核心**  
   `ros_ws/`（ROS1 Noetic）与 `ros2_ws/`（ROS2 Jazzy）共享规划器核心、话题/服务/动作名称以及配置档位。
 
-## 新增内容
+## 1.2 新增内容
 
 - **规划速度大幅提升**  
   即使在低算力平台上也能显著加快规划速度，运动执行更加平滑，避障更加敏捷。  
@@ -67,7 +69,7 @@
 - **更多功能即将推出**  
   后续版本将持续带来更多新能力。
 
-## 相关工作
+## 1.3 相关工作
 
 - **[Odin-Nav-Stack](https://github.com/ManifoldTechLtd/Odin-Nav-Stack)** —— 本项目所基于的 ROS1 开源导航栈。
 - **[SRU × Odin1: Mapless Navigation with Spatially-Enhanced Recurrent Memory](https://github.com/ManifoldTechLtd/SRU-Odin)** —— Odin1 上的无地图导航（SRU 后端）。
@@ -77,7 +79,7 @@
 - **[Odin RTK](https://github.com/ManifoldTechLtd/Odin-RTK)** —— Odin RTK Fusion，把 Odin SLAM 里程计与 RTK/GNSS 的 GGA 数据融合，输出带全局参考的位姿。
 - **[Odin Perception](https://github.com/ManifoldTechLtd/Odin-perception)** —— ONS2 的端侧巡检感知组件：把一帧图像交给视觉模型，按结构化检查清单输出可判定的结论（yes/no、状态、计数、读字、描述），并保留证据图与耗时。
 
-# 支持的平台
+# 2. 支持的平台
 
 | 机器人 | 运行时 | 状态 |
 |---|---|---|
@@ -88,7 +90,7 @@
 
 Unitree Go2 仅由 ROS1 栈支持。
 
-# 局部规划器：NeuPAN 或 SRU
+# 3. 局部规划器：NeuPAN 或 SRU
 
 > [!NOTE]
 > SRU 训练代码已发布。融入导航的 SRU 将在近期发布。敬请期待！
@@ -103,7 +105,7 @@ Unitree Go2 仅由 ROS1 栈支持。
 | 模型 | 解析式：新底盘无需训练 | ONNX 策略：**必须针对你的机器人训练** |
 | 选择方式 | 默认 | `--local-planner=sru` |
 
-## 运行 NeuPAN
+## 3.1 运行 NeuPAN
 
 NeuPAN 是默认的局部规划器（`--local-planner=neupan`），适配新机器人底盘尺寸时无需任何神经网络训练：
 
@@ -124,11 +126,11 @@ NeuPAN 是默认的局部规划器（`--local-planner=neupan`），适配新机�
   bash scripts/ons2_dobot_lumo.sh --map=NAME
   ```
 
-> `--map=NAME`（例如 `--map=parkinglot`）用于指定建好的地图前缀（对应同名的 `NAME.yaml`、`NAME.pgm` 和 `customer_file/NAME.bin` 三个文件）。关于地图扫描、转换与存放目录的详细说明，请参考 [Q9000 扫描建图与处理指南](docs/Q9000-tutorial/Q9000-tutorial.zh-CN.md)。
+> `--map=NAME`（例如 `--map=parkinglot`）用于指定建好的地图前缀（对应同名的 `NAME.yaml`、`NAME.pgm` 和 `customer_file/NAME.bin` 三个文件）。关于使用 Q9000 或 Odin1 建图、转换与存放目录的详细说明，请参考 [地图构建与处理指南](docs/map-tutorial/map-tutorial.zh-CN.md)。
 
 参数调优（速度、底盘尺寸、安全间隙、脱困策略）请参见 [02 · 参数调优](docs/usage/02_parameter_tuning.md)。
 
-## 运行 SRU
+## 3.2 运行 SRU
 
 > **SRU 需要训练。** 请联系厂家获得机器人的运控。训练好的 ONNX 模型（策略和 VAE 编码器）**不包含**在本仓库中。请在 SRU 仓库中训练策略，然后将导出的模型部署到机器人上的 SRU 工作空间：
 >
@@ -161,13 +163,13 @@ NeuPAN 是默认的局部规划器（`--local-planner=neupan`），适配新机�
 - `--navigation-mode` 在 SRU 模式下无效。
 - SRU 输出机体坐标系下的 `Twist`，因此任何具备 `/cmd_vel` 桥接的机器人都可以使用。详见 [03 · 接入你自己的机器人](docs/usage/03_integrate_your_robot.md)。
 
-# 安装与构建
+# 4. 安装与构建
 
 两种运行时共用相同的克隆步骤和相同的 Odin1 USB 规则。然后按下面**其中一个**运行时章节操作。
 
-## 通用步骤
+## 4.1 通用步骤
 
-### 1. 克隆仓库
+### 4.1.1 克隆仓库
 
 ``` shell
 git clone --recursive https://github.com/ManifoldTechLtd/Odin-Nav-Stack2.git
@@ -185,7 +187,7 @@ git submodule update --init odin_rtk_fusion               # 可选：RTK 输入
 
 `ros_ws/src/odin_ros_driver` 与 `ros2_ws/src/odin_ros_driver` 均为指向 [manifoldsdk/odin_ros_driver](https://github.com/manifoldsdk/odin_ros_driver/) 的子模块。
 
-### 2. Odin1 USB 规则
+### 4.1.2 Odin1 USB 规则
 
 具体可参考 [Odin1 Ubuntu 快速上手 —— 创建 udev 规则](https://manifoldtechltd.github.io/wiki/en/odin_series/odin1/7.%20Odin1%20Quick%20start%20for%20ubuntu.html#74-create-udev-rules)：
 
@@ -203,11 +205,11 @@ SUBSYSTEM=="usb", ATTR{idVendor}=="2207", ATTR{idProduct}=="0019", MODE="0666", 
 sudo udevadm control --reload && sudo udevadm trigger
 ```
 
-## ROS1 Noetic（Ubuntu 20.04）
+## 4.2 ROS1 Noetic（Ubuntu 20.04）
 
 ROS1 和 ROS2 默认都使用 **NeuPAN** 局部规划器（`NeuPAN/` 要求 **Python ≥ 3.10**）。由于 Ubuntu 20.04 系统自带的 Python 为 3.8，需要为 NeuPAN 单独创建一个 Python 3.10 的 conda 或者 venv 环境（下方以conda示例），而 ROS1 的 C++ 功能包则直接基于系统安装的 ROS Noetic 编译。
 
-### 安装
+### 4.2.1 安装
 
 1. **安装系统 ROS1 依赖包：**
    ``` shell
@@ -230,7 +232,7 @@ ROS1 和 ROS2 默认都使用 **NeuPAN** 局部规划器（`NeuPAN/` 要求 **Py
    ```
    *（可选替代方案：如果主机未安装系统级 `/opt/ros/noetic`，也可以通过 `mamba` 和 `robostack-noetic` 频道在虚拟环境内安装完整的 `ros-noetic-desktop`。）*
 
-### 构建
+### 4.2.2 构建
 
 1. **按你的机器人机型准备底盘 SDK：**
    - **Unitree Go2：** 请先按官方指南安装 [unitree_sdk2](https://github.com/unitreerobotics/unitree_sdk2)（亦可参考[宇树 SDK 开发者文档](https://support.unitree.com/home/zh/developer/Obtain%20SDK)），因为 `ros_ws/src/unitree_control` 依赖 `find_package(unitree_sdk2)`。
@@ -248,7 +250,7 @@ ROS1 和 ROS2 默认都使用 **NeuPAN** 局部规划器（`NeuPAN/` 要求 **Py
      -DCATKIN_WHITELIST_PACKAGES="nav_interfaces;odin_ros_driver;map_planner;sliding_map;neupan_ros;mission_manager;atomic_move;sw01_ros_control;dobot_ros_control"
    ```
 
-### 启动
+### 4.2.3 启动
 
 ``` shell
 bash scripts/ons2_go2.sh --map=NAME                            # Unitree Go2 (ROS1)
@@ -258,11 +260,11 @@ bash scripts/ons2_sw01.sh --ros1 --map=NAME                    # ASTRALL SW01 (R
 
 停止：`bash scripts/ons2_go2_stop.sh`、`bash scripts/ons2_dobot_lumo_stop.sh` 或 `bash scripts/ons2_sw01_stop.sh`。
 
-## ROS2 Jazzy（Ubuntu 24.04）
+## 4.3 ROS2 Jazzy（Ubuntu 24.04）
 
 ROS2 导航栈（`ros2_ws/`）已在 **ASTRALL SW01** 上完成验证，同时支持任何通过 `robots/<robot>/robot.yaml` 接入的 ROS2 机器人（详见 [03 · 接入你自己的机器人](docs/usage/03_integrate_your_robot.md)）。由于 Ubuntu 24.04 系统自带 **Python 3.12**（已满足 NeuPAN 对 Python ≥ 3.10 的要求），ROS2 节点和 NeuPAN 局部规划器均可直接运行在系统 Python 上，无需配置 conda。
 
-### 安装
+### 4.3.1 安装
 
 1. **安装系统 ROS2 Jazzy 依赖包**（对应 `ros2_ws/src/*/package.xml` 与 `ons2_bringup` 所需组件）：
    ``` shell
@@ -285,7 +287,7 @@ ROS2 导航栈（`ros2_ws/`）已在 **ASTRALL SW01** 上完成验证，同时�
 
 > 请保持 `numpy` 版本低于 2.0，以确保与系统 ROS2 `cv_bridge` 包保持 ABI 兼容。
 
-### 构建
+### 4.3.2 构建
 
 1. **按你的机器人机型准备底盘 SDK：**
    - **ASTRALL SW01：** SW01 底盘 SDK 与驱动支持由 ASTRALL Dynamics（璇玑动力）提供，请通过其官网联系获取：[https://www.astralldynamics.com/index.html](https://www.astralldynamics.com/index.html)。
@@ -299,7 +301,7 @@ ROS2 导航栈（`ros2_ws/`）已在 **ASTRALL SW01** 上完成验证，同时�
    cd ..
    ```
 
-### 启动
+### 4.3.3 启动
 
 ``` shell
 bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机器人启动脚本)
@@ -307,7 +309,7 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 
 停止：`bash scripts/ons2_sw01_stop.sh`。在手动打开的每个终端中使用 `ROS_DOMAIN_ID=98`；启动脚本默认会设置它。
 
-## ROS1 与 ROS2 的差异
+## 4.4 ROS1 与 ROS2 的差异
 
 | 项目 | ROS1（Noetic） | ROS2（Jazzy） |
 |---|---|---|
@@ -323,9 +325,9 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 | 机器人 | Go2、Dobot Lumo、SW01 | SW01 |
 | Odin 驱动 | 子模块 `ros_ws/src/odin_ros_driver` | 子模块 `ros2_ws/src/odin_ros_driver` |
 
-# 文档
+# 5. 文档
 
-## 功能索引 —— 从你想做的事开始
+## 5.1 功能索引 —— 从你想做的事开始
 
 | 我想… | 看这篇 |
 |---|---|
@@ -338,16 +340,16 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 | **选用或编写平台档案** | [机器人档案规范](docs/architecture/ROBOT_PROFILE.md) |
 | **加入自动巡检** —— 清单结论、标注图像 | [感知指南](perception/README.zh-CN.md) → [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) |
 | **接入一台新机器人** —— 接口契约、底盘桥、TF、启动 | [03 · 接入你自己的机器人](docs/usage/03_integrate_your_robot.md) |
-| **向 VLM 提问场景理解问题** | [VLM 场景理解](#vlm-场景理解) |
+| **向 VLM 提问场景理解问题** | [VLM 场景理解](#54-vlm-场景理解) |
 | **了解架构与模块数据流** | [系统架构](docs/architecture/ONS2_ARCHITECTURE.md) · [模块数据流](docs/architecture/MODULE_DATAFLOW.md) |
-| **扫描现场并建导航地图**（Q9000） | [Q9000 教程](docs/Q9000-tutorial/Q9000-tutorial.md) · [`pcd_to_pgm.py`](scripts/map_processing/pcd_to_pgm.py) |
+| **扫描现场并建导航地图**（Q9000 / Odin1） | [建图教程](docs/map-tutorial/map-tutorial.zh-CN.md) · [`pcd_to_pgm.py`](scripts/map_processing/pcd_to_pgm.py) |
 | **在仿真中复现场景**（Real2Sim） | [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
 | **用 Docker 部署**（Jetson，ROS1） | [docker/docker-compose.yml](docker/docker-compose.yml) |
 
 > **中英文档：** 本仓所有指南都提供 `*.zh-CN.md` 中文版与英文版同目录并排（使用指南、调参指南、
 > NeuPAN 优化说明、远程监控），README 本身也有[英文版](README.md)。
 
-## 核心指南
+## 5.2 核心指南
 
 | # | 指南 | 用途 |
 |---|---|---|
@@ -355,7 +357,7 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 | 2 | [参数调优](docs/usage/02_parameter_tuning.md) | 为各平台调整速度、底盘尺寸、间隙和跟踪参数 |
 | 3 | [接入你自己的机器人](docs/usage/03_integrate_your_robot.md) | 接入新机器人：接口契约、底盘桥接、TF、启动 |
 
-## 功能在哪个版本可用
+## 5.3 功能在哪个版本可用
 
 | 能力 | ROS 1（Noetic） | ROS 2（Jazzy） |
 |---|---|---|
@@ -366,7 +368,7 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 | 3DGS 导航控制台 *（可选，联系我们获取）* | ✅ | ✅ |
 
 
-## VLM 场景理解
+## 5.4 VLM 场景理解
 
 启动 VLM 服务器（llama.cpp，兼容 OpenAI API），然后启动终端客户端：
 
@@ -378,7 +380,7 @@ roslaunch odin_vlm_terminal odin_vlm_terminal.launch          # ROS1
 
 在资源有限的车载计算机上，请在配套机器上运行 VLM 服务器。另外我们不推荐使用此功能，可以使用Florance-2完全替代。
 
-## 巡检感知（Florence-2）
+## 5.5 巡检感知（Florence-2）
 
 > **可选模块 —— 不装它 ONS2 也能完整运行。** 接入感知是“两进程旁挂”，不是重新构建：
 > 无需重编本栈、无需改 launch、无需动任何导航参数，随时装也随时拆。
@@ -413,11 +415,11 @@ odin driver ──► /odin1/image/undistorted
 
 > 上文的 `odin_vlm_terminal` 是另一条轻量级路径：它将图像转发给兼容 OpenAI 的 VLM 服务器进行自由问答。当你需要可重复、由清单驱动的巡检判定结果时，请使用 `Odin-perception`。
 
-# 架构
+# 6. 架构
 
 该栈采用分层结构：Odin1 感知与 TF → `pointcloud_to_laserscan` → `sliding_map` 障碍物记忆 → A\* 全局规划（`map_planner`）→ NeuPAN 局部控制（`neupan_ros`）→ 底盘桥接，由 `mission_manager` 协调。同一时刻只允许一个节点发布 `/cmd_vel`。控制权通过 `/neupan/stop` 从 NeuPAN 移交给 `atomic_move`。
 
-# 仓库结构 (Repository Structure)
+# 7. 仓库结构 (Repository Structure)
 
 ```text
 Odin-Nav-Stack2/
@@ -467,30 +469,30 @@ Odin-Nav-Stack2/
     └── TUNING_GUIDE.md            # 完整参数字典与症状排障手册
 ```
 
-# 常见问题
+# 8. 常见问题
 
-## 如何检查重定位？
+## 8.1 如何检查重定位？
 
 打开 RViz（ROS1 用 `rviz`，ROS2 用 `rviz2`），将固定坐标系设为 `map`，并添加 `TF` 显示。当 `map → odom → odin1_base_link` 连接成功时，表示重定位成功。
 
-## 发布目标后，起点或目标点被占用
+## 8.2 发布目标后，起点或目标点被占用
 
 在 RViz 中检查膨胀地图（`/inflated_map`）。起点和目标点必须位于膨胀区域之外。调整 `robots/<robot>/robot.yaml` 中的 `navigation.inflation_radius`。
 
-## 机器人接近目标时不停车
+## 8.3 机器人接近目标时不停车
 
 这是 NeuPAN 的容差问题。请参见 [02 · 参数调优](docs/usage/02_parameter_tuning.md) 和[调优指南](docs/TUNING_GUIDE.md)。
 
-## ROS2 节点已运行但彼此不可见
+## 8.4 ROS2 节点已运行但彼此不可见
 
 所有节点必须使用相同的 DDS 域 `ROS_DOMAIN_ID=98`。在手动打开的每个终端中都设置它。
 
-# 致谢
+# 9. 致谢
 
 感谢 [ROS Navigation](https://github.com/ros-planning/navigation)、[NeuPAN](https://github.com/hanruihua/NeuPAN) 和 [Ultralytics YOLO](https://github.com/ultralytics/ultralytics) 的优秀工作。
 
 特别感谢 [hanruihua](https://github.com/hanruihua) 和 Manifold Tech 的 Odin1 团队。
 
-# 许可证
+# 10. 许可证
 
 ONS2 基于 [GNU General Public License v3.0](LICENSE) 发布。第三方组件保留各自的许可证；完整清单包括 NeuPAN（GPL-3.0）、Odin1 驱动（Apache-2.0）、`yolov5`（AGPL-3.0，可选子模块）以及 ASTRALL SDK（专有，不随本仓库分发）。再分发前请检查各组件的许可证。

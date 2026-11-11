@@ -15,5 +15,5 @@ When launching the stack with `--map=<map_name>`, three files with the **same ba
 ## Generating `.pgm` and `.yaml`
 
 - **From an Odin1 live SLAM session:** use [`scripts/map_processing/map_recording.sh`](../../../../scripts/map_processing/map_recording.sh).
-- **From a `.pcd` point cloud (e.g., Q9000 / MindCloud Studio):** use [`scripts/map_processing/pcd_to_pgm.py`](../../../../scripts/map_processing/pcd_to_pgm.py) (see the [Q9000 Tutorial](../../../../docs/Q9000-tutorial/Q9000-tutorial.md)).
+- **From a `.pcd` point cloud (Q9000 / Odin1 + MindCloud Studio):** use [`scripts/map_processing/pcd_to_pgm.py`](../../../../scripts/map_processing/pcd_to_pgm.py) (see the [Map Building & Processing Guide](../../../../docs/map-tutorial/map-tutorial.md)).
 - **Placeholder map:** `empty.pgm` + `empty.yaml` (100 m × 100 m free space) is provided for dry-run testing (`--map=empty`).

@@ -34,7 +34,9 @@
   <img src="figures/ons2_architecture.png" alt="ONS2 System Architecture Overview" width="100%">
 </p>
 
-## Key Features
+# 1. Overview
+
+## 1.1 Key Features
 
 - **High-Accuracy SLAM & Persistent Relocalization** (inside Odin1, not open-sourced)  
   Real-time mapping with long-term relocalization using compact binary maps.
@@ -48,7 +50,7 @@
 - **Dual Runtime, Shared Core**  
   `ros_ws/` (ROS1 Noetic) and `ros2_ws/` (ROS2 Jazzy) share the planner core, the topic / service / action names, and the configuration profiles.
 
-## What's New
+## 1.2 What's New
 
 - **Dramatically faster planning**  
   Plans substantially faster even on low-compute platforms, with smoother execution and nimbler obstacle avoidance.  
@@ -68,7 +70,7 @@
 - **More on the way**  
   Further capabilities will land in upcoming releases.
 
-## Related Work
+## 1.3 Related Work
 
 - **[Odin-Nav-Stack](https://github.com/ManifoldTechLtd/Odin-Nav-Stack)** — The ROS1-based open-source navigation stack that this project builds on.
 - **[SRU × Odin1: Mapless Navigation with Spatially-Enhanced Recurrent Memory](https://github.com/ManifoldTechLtd/SRU-Odin)** — Mapless navigation on Odin1 (the SRU backend).
@@ -78,7 +80,7 @@
 - **[Odin RTK](https://github.com/ManifoldTechLtd/Odin-RTK)** — Odin RTK Fusion: fuses Odin SLAM odometry with RTK/GNSS GGA data to output globally referenced poses.
 - **[Odin Perception](https://github.com/ManifoldTechLtd/Odin-perception)** — the on-device inspection perception component for ONS2: feed one image to a vision model and get decidable verdicts against a structured checklist (yes/no, state, count, read-text, describe), with evidence image and latency.
 
-# Supported Platforms
+# 2. Supported Platforms
 
 | Robot | Runtime | Status |
 |---|---|---|
@@ -89,7 +91,7 @@
 
 Unitree Go2 is supported by the ROS1 stack only.
 
-# Local Planner: NeuPAN or SRU
+# 3. Local Planner: NeuPAN or SRU
 
 > [!NOTE]
 > The SRU training code is already published. SRU integrated into the navigation stack will be released soon. Please stay tuned!
@@ -104,7 +106,7 @@ By default the stack uses **NeuPAN** on a global A\* path. ONS2 can also replace
 | Model | Analytic: no training for a new chassis | ONNX policy: **must be trained for your robot** |
 | Select with | Default | `--local-planner=sru` |
 
-## Running NeuPAN
+## 3.1 Running NeuPAN
 
 NeuPAN is the default local planner (`--local-planner=neupan`) and requires no neural-network training for new robot footprints:
 
@@ -125,11 +127,11 @@ NeuPAN is the default local planner (`--local-planner=neupan`) and requires no n
   bash scripts/ons2_dobot_lumo.sh --map=NAME
   ```
 
-> `--map=NAME` (e.g., `--map=parkinglot`) selects your map triplet (`NAME.yaml`, `NAME.pgm`, and `customer_file/NAME.bin`). For how to build, convert, and place these map files, see the [Q9000 Map Scanning & Processing Guide](docs/Q9000-tutorial/Q9000-tutorial.md).
+> `--map=NAME` (e.g., `--map=parkinglot`) selects your map triplet (`NAME.yaml`, `NAME.pgm`, and `customer_file/NAME.bin`). For how to build, convert, and place these map files (via Q9000 or Odin1), see the [Map Building & Processing Guide](docs/map-tutorial/map-tutorial.md).
 
 For parameter tuning (speed, footprint, safety clearance, stuck escape), see [02 · Parameter Tuning](docs/usage/02_parameter_tuning.md).
 
-## Running SRU
+## 3.2 Running SRU
 
 > **SRU requires training.** Obtain the locomotion controller from your robot's manufacturer — it is not provided by us. The trained ONNX models (policy and VAE encoder) are **not included** in this repository. Train the policy in the SRU repository, then deploy the exported models to the SRU workspace on the robot:
 >
@@ -167,13 +169,13 @@ Common notes:
 - `--navigation-mode` has no effect in SRU mode.
 - SRU outputs a body-frame `Twist`, so any robot with a `/cmd_vel` bridge can use it. See [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md).
 
-# Installation and Build
+# 4. Installation and Build
 
 Both runtimes share the same clone step and the same Odin1 USB rule. Then follow **one** runtime section below.
 
-## Common steps
+## 4.1 Common Steps
 
-### 1. Clone the repository
+### 4.1.1 Clone the Repository
 
 ``` shell
 git clone --recursive https://github.com/ManifoldTechLtd/Odin-Nav-Stack2.git
@@ -191,7 +193,7 @@ git submodule update --init odin_rtk_fusion               # optional: RTK input
 
 Both `ros_ws/src/odin_ros_driver` and `ros2_ws/src/odin_ros_driver` are submodules pointing to [manifoldsdk/odin_ros_driver](https://github.com/manifoldsdk/odin_ros_driver/).
 
-### 2. Odin1 USB rule
+### 4.1.2 Odin1 USB Rule
 
 For details, see the [Odin1 Ubuntu Quick Start — Create udev rules](https://manifoldtechltd.github.io/wiki/en/odin_series/odin1/7.%20Odin1%20Quick%20start%20for%20ubuntu.html#74-create-udev-rules):
 
@@ -209,11 +211,11 @@ SUBSYSTEM=="usb", ATTR{idVendor}=="2207", ATTR{idProduct}=="0019", MODE="0666", 
 sudo udevadm control --reload && sudo udevadm trigger
 ```
 
-## ROS1 Noetic (Ubuntu 20.04)
+## 4.2 ROS1 Noetic (Ubuntu 20.04)
 
 Both ROS1 and ROS2 use the **NeuPAN** local planner by default (`NeuPAN/` requires **Python ≥ 3.10**). Because Ubuntu 20.04 ships with system Python 3.8, create a Python 3.10 conda environment for NeuPAN while building the ROS1 C++ packages against your system ROS Noetic installation.
 
-### Install
+### 4.2.1 Install
 
 1. **System ROS1 dependencies:**
    ``` shell
@@ -236,7 +238,7 @@ Both ROS1 and ROS2 use the **NeuPAN** local planner by default (`NeuPAN/` requir
    ```
    *(Alternative: if you prefer a self-contained RoboStack environment without system `/opt/ros/noetic`, you can install `ros-noetic-desktop` into the `neupan` environment via `mamba` and the `robostack-noetic` channel.)*
 
-### Build
+### 4.2.2 Build
 
 1. **Robot-specific chassis SDKs:**
    - **Unitree Go2:** Install the official [unitree_sdk2](https://github.com/unitreerobotics/unitree_sdk2) first (see also the [Unitree SDK Developer Guide](https://support.unitree.com/home/zh/developer/Obtain%20SDK)), as `ros_ws/src/unitree_control` links against `unitree_sdk2`.
@@ -254,7 +256,7 @@ Both ROS1 and ROS2 use the **NeuPAN** local planner by default (`NeuPAN/` requir
      -DCATKIN_WHITELIST_PACKAGES="nav_interfaces;odin_ros_driver;map_planner;sliding_map;neupan_ros;mission_manager;atomic_move;sw01_ros_control;dobot_ros_control"
    ```
 
-### Launch
+### 4.2.3 Launch
 
 ``` shell
 bash scripts/ons2_go2.sh --map=NAME  # Unitree Go2 (ROS1)
@@ -264,11 +266,11 @@ bash scripts/ons2_sw01.sh --ros1 --map=NAME  # ASTRALL SW01 (ROS1)
 
 Stop: `bash scripts/ons2_go2_stop.sh`, `bash scripts/ons2_dobot_lumo_stop.sh`, or `bash scripts/ons2_sw01_stop.sh`.
 
-## ROS2 Jazzy (Ubuntu 24.04)
+## 4.3 ROS2 Jazzy (Ubuntu 24.04)
 
 The ROS2 stack (`ros2_ws/`) has been validated on **ASTRALL SW01** and supports any ROS2 robot configured through `robots/<robot>/robot.yaml` (see [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md)). Because Ubuntu 24.04 ships with system **Python 3.12** (which already satisfies NeuPAN's Python ≥ 3.10 requirement), both the ROS2 nodes and the NeuPAN local planner run directly on the system Python without needing conda.
 
-### Install
+### 4.3.1 Install
 
 1. **System ROS2 Jazzy dependencies** (required by `ros2_ws/src/*/package.xml` and `ons2_bringup`):
    ``` shell
@@ -291,7 +293,7 @@ The ROS2 stack (`ros2_ws/`) has been validated on **ASTRALL SW01** and supports 
 
 > Keep `numpy` below 2.0 so it stays ABI-compatible with the system ROS2 `cv_bridge` package.
 
-### Build
+### 4.3.2 Build
 
 1. **Robot-specific chassis SDKs:**
    - **ASTRALL SW01:** The SW01 chassis SDK and driver support are provided by ASTRALL Dynamics. Contact them through their official website: [https://www.astralldynamics.com/index.html](https://www.astralldynamics.com/index.html).
@@ -305,7 +307,7 @@ The ROS2 stack (`ros2_ws/`) has been validated on **ASTRALL SW01** and supports 
    cd ..
    ```
 
-### Launch
+### 4.3.3 Launch
 
 ``` shell
 bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2, or your own robot launcher)
@@ -313,7 +315,7 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2, or your own robot la
 
 Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal you open by hand; the launch script sets it by default.
 
-## Differences between ROS1 and ROS2
+## 4.4 Differences between ROS1 and ROS2
 
 | Item | ROS1 (Noetic) | ROS2 (Jazzy) |
 |---|---|---|
@@ -329,9 +331,9 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | Robots | Go2, Dobot Lumo, SW01 | SW01 |
 | Odin driver | Submodule `ros_ws/src/odin_ros_driver` | Submodule `ros2_ws/src/odin_ros_driver` |
 
-# Documentation
+# 5. Documentation
 
-## Feature index — start from what you want to do
+## 5.1 Feature Index — Start from What You Want to Do
 
 | I want to… | Read |
 |---|---|
@@ -344,16 +346,16 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | **Pick or write a platform profile** | [Robot Profiles](docs/architecture/ROBOT_PROFILE.md) |
 | **Add automated inspection** — checklist verdicts, annotated frames | [Perception guide](perception/README.md) → [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) |
 | **Connect a new robot** — interface contract, chassis bridge, TF, launch | [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md) |
-| **Ask a VLM questions about the scene** | [VLM Scene Understanding](#vlm-scene-understanding) |
+| **Ask a VLM questions about the scene** | [VLM Scene Understanding](#54-vlm-scene-understanding) |
 | **Understand the architecture / module dataflow** | [Architecture](docs/architecture/ONS2_ARCHITECTURE.md) · [Module Dataflow](docs/architecture/MODULE_DATAFLOW.md) |
-| **Scan a site and build a navigation map** (Q9000) | [Q9000 Tutorial](docs/Q9000-tutorial/Q9000-tutorial.md) · [`pcd_to_pgm.py`](scripts/map_processing/pcd_to_pgm.py) |
+| **Scan a site and build a navigation map** (Q9000 / Odin1) | [Map Tutorial](docs/map-tutorial/map-tutorial.md) · [`pcd_to_pgm.py`](scripts/map_processing/pcd_to_pgm.py) |
 | **Reproduce a scenario in simulation** (Real2Sim) | [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
 | **Deploy with Docker** (Jetson, ROS1) | [docker/docker-compose.yml](docker/docker-compose.yml) |
 
 > **Chinese docs:** every guide in this repository has a `*.zh-CN.md` sibling (usage guides,
 > tuning guide, NeuPAN notes, remote monitor), and the README itself has a [中文版](README.zh-CN.md).
 
-## Core guides
+## 5.2 Core Guides
 
 | # | Guide | Use it to |
 |---|---|---|
@@ -361,7 +363,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | 2 | [Parameter Tuning](docs/usage/02_parameter_tuning.md) | Change speed, footprint, clearance, and tracking for each platform |
 | 3 | [Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md) | Connect a new robot: interface contract, chassis bridge, TF, launch |
 
-## Feature status at a glance
+## 5.3 Feature Status at a Glance
 
 | Capability | ROS 1 (Noetic) | ROS 2 (Jazzy) |
 |---|---|---|
@@ -371,7 +373,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | Remote web monitor (camera / intercom / e-stop) | ❌ not yet | ✅ SW01 |
 | 3DGS navigation console *(optional, contact us)* | ✅ | ✅ |
 
-## VLM Scene Understanding
+## 5.4 VLM Scene Understanding
 
 Start a VLM server (llama.cpp, OpenAI-compatible API), then the terminal client:
 
@@ -383,7 +385,7 @@ roslaunch odin_vlm_terminal odin_vlm_terminal.launch          # ROS1
 
 On an onboard computer with limited resources, run the VLM server on a companion machine. Note that we no longer recommend this path — Florence-2 (see below) fully supersedes it.
 
-## Inspection Perception (Florence-2)
+## 5.5 Inspection Perception (Florence-2)
 
 > **Optional module — ONS2 runs fully without it.** Adding perception is a two-process
 > side-car, not a rebuild: you do not have to recompile this stack, touch its launch files,
@@ -429,11 +431,11 @@ Prerequisite on this side: the Odin driver must actually publish images, i.e. `s
 > OpenAI-compatible VLM server for free-form Q&A. Use Odin-perception when you need repeatable,
 > checklist-driven inspection verdicts.
 
-# Architecture
+# 6. Architecture
 
 The stack is layered: Odin1 sensing and TF → `pointcloud_to_laserscan` → `sliding_map` obstacle memory → A\* global planning (`map_planner`) → NeuPAN local control (`neupan_ros`) → chassis bridge, coordinated by `mission_manager`. Only one node may publish `/cmd_vel` at a time. Control passes from NeuPAN to `atomic_move` through `/neupan/stop`.
 
-# Repository Structure
+# 7. Repository Structure
 
 ```text
 Odin-Nav-Stack2/
@@ -483,30 +485,30 @@ Odin-Nav-Stack2/
     └── TUNING_GUIDE.md            # Detailed parameter dictionary & troubleshooting reference
 ```
 
-# FAQ
+# 8. FAQ
 
-## How do I check relocalization?
+## 8.1 How do I check relocalization?
 
 Open RViz (`rviz` on ROS1, `rviz2` on ROS2), set the fixed frame to `map`, and add the `TF` display. Relocalization succeeded when `map → odom → odin1_base_link` is connected.
 
-## The start or goal is occupied after I publish a goal
+## 8.2 The start or goal is occupied after I publish a goal
 
 Check the inflated map (`/inflated_map`) in RViz. The start and goal must lie outside the inflation area. Adjust `navigation.inflation_radius` in `robots/<robot>/robot.yaml`.
 
-## The robot does not stop near the target
+## 8.3 The robot does not stop near the target
 
 This is a NeuPAN tolerance issue. See [02 · Parameter Tuning](docs/usage/02_parameter_tuning.md) and the [tuning guide](docs/TUNING_GUIDE.md).
 
-## ROS2 nodes run but cannot see each other
+## 8.4 ROS2 nodes run but cannot see each other
 
 All nodes must use the same DDS domain, `ROS_DOMAIN_ID=98`. Set it in every terminal you open by hand.
 
-# Acknowledgements
+# 9. Acknowledgements
 
 Thanks to the excellent work by [ROS Navigation](https://github.com/ros-planning/navigation), [NeuPAN](https://github.com/hanruihua/NeuPAN), and [Ultralytics YOLO](https://github.com/ultralytics/ultralytics).
 
 Special thanks to [hanruihua](https://github.com/hanruihua) and the Odin1 team at Manifold Tech.
 
-# License
+# 10. License
 
 ONS2 is released under the [GNU General Public License v3.0](LICENSE). Third-party components keep their own licenses; the full list includes NeuPAN (GPL-3.0), the Odin1 driver (Apache-2.0), `yolov5` (AGPL-3.0, optional submodule), and the ASTRALL SDK (proprietary, not distributed with this repository). Check the license of each component before redistributing it.
