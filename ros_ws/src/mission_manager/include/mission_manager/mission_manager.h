@@ -333,6 +333,13 @@ private:
   ros::Time last_periodic_replan_at_;
   std::future<PeriodicReplanResult> periodic_replan_future_;
   bool periodic_replan_running_{false};
+  // Path-validity watchdog: when the active path corridor is blocked (install
+  // gate blocked hysteresis), trigger a replan immediately instead of waiting
+  // periodic_replan_sec_. Cooldown avoids a replan storm while stuck. Requires
+  // install_gate enabled (blocked detection only runs when the gate is active).
+  bool path_block_replan_enable_{false};
+  double path_block_replan_cooldown_sec_{0.5};
+  ros::Time last_path_block_replan_at_;
   bool route_segment_enable_{true};
   double route_segment_length_m_{10.0};
   double route_segment_overlap_m_{3.0};

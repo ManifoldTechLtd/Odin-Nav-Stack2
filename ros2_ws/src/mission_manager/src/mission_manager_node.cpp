@@ -65,6 +65,10 @@ MissionManager::MissionManager(const rclcpp::Node::SharedPtr &node) : node_(node
   replan_cooldown_sec_ = node_->declare_parameter("replan_cooldown_sec", replan_cooldown_sec_);
   navigation_mode_ = node_->declare_parameter("navigation_mode", navigation_mode_);
   periodic_replan_sec_ = node_->declare_parameter("periodic_replan_sec", periodic_replan_sec_);
+  path_block_replan_enable_ =
+      node_->declare_parameter("path_block_replan_enable", path_block_replan_enable_);
+  path_block_replan_cooldown_sec_ =
+      node_->declare_parameter("path_block_replan_cooldown_sec", path_block_replan_cooldown_sec_);
   route_segment_enable_ = node_->declare_parameter("route_segment_enable", route_segment_enable_);
   route_segment_length_m_ =
       node_->declare_parameter("route_segment_length_m", route_segment_length_m_);
@@ -200,6 +204,12 @@ MissionManager::MissionManager(const rclcpp::Node::SharedPtr &node) : node_(node
     }
   }
   if (periodic_replan_sec_ <= 0.0) periodic_replan_sec_ = 2.0;
+  if (path_block_replan_enable_ && !install_gate_enable_ && !install_gate_shadow_) {
+    RCLCPP_WARN(node_->get_logger(),
+                "[path_block_watchdog] enabled but install_gate is disabled; "
+                "blocked detection is inactive so the watchdog will not fire. "
+                "Set install_gate_enable:=true (or install_gate_shadow:=true).");
+  }
   if (route_segment_length_m_ <= 0.0) route_segment_length_m_ = 10.0;
   route_segment_overlap_m_ = std::max(
       0.0, std::min(route_segment_overlap_m_, route_segment_length_m_ * 0.5));
@@ -1692,12 +1702,32 @@ void MissionManager::processPeriodicReplan() {
   }
   if (!pathScanFresh() || (route_segment_enable_ && global_route_.poses.empty())) return;
   const rclcpp::Time now = node_->now();
-  if (last_periodic_replan_at_.nanoseconds() != 0 &&
-      (now - last_periodic_replan_at_).seconds() < periodic_replan_sec_) {
-    return;
+  const bool periodic_due =
+      last_periodic_replan_at_.nanoseconds() == 0 ||
+      (now - last_periodic_replan_at_).seconds() >= periodic_replan_sec_;
+  // Path-validity watchdog: when the active path corridor is blocked (install
+  // gate blocked hysteresis), replan immediately instead of waiting the periodic
+  // interval; cooldown avoids a replan storm while stuck. Direction stability is
+  // handled by the install gate (heading_worsen / side-lock). Requires gate on.
+  bool watchdog_due = false;
+  if (path_block_replan_enable_ && install_gate_blocked_gated_.load()) {
+    if (last_path_block_replan_at_.nanoseconds() == 0 ||
+        (now - last_path_block_replan_at_).seconds() >= path_block_replan_cooldown_sec_) {
+      watchdog_due = true;
+    }
   }
+  if (!periodic_due && !watchdog_due) return;
   last_periodic_replan_at_ = now;
-  EC_TRACE(ec::REPLAN_TRIGGER, "periodic_replan", "wp=%d", current_index_);
+  if (watchdog_due) {
+    last_path_block_replan_at_ = now;
+    RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
+                         "[path_block_watchdog] active path corridor blocked -> "
+                         "immediate replan (wp=%d min_lat=%.2fm)",
+                         current_index_, install_gate_min_lateral_m_.load());
+    EC_TRACE(ec::REPLAN_TRIGGER, "path_block_watchdog", "wp=%d", current_index_);
+  } else {
+    EC_TRACE(ec::REPLAN_TRIGGER, "periodic_replan", "wp=%d", current_index_);
+  }
   std::vector<RouteTarget> targets;
   if (route_segment_enable_ && !global_route_.poses.empty()) {
     geometry_msgs::msg::PoseStamped pose;

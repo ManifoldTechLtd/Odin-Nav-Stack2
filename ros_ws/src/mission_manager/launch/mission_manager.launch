@@ -48,7 +48,14 @@
   <arg name="follow_search_scan_topic" default="/scan_360" />
 
   <!-- Periodic replan install gate (pass install_gate_shadow:=true for shadow-only logging) -->
-  <arg name="install_gate_enable" default="false" />
+  <arg name="install_gate_enable" default="true" />
+  <!-- Path-validity watchdog (default true): when the active path corridor is
+       blocked (install gate blocked hysteresis), replan immediately instead of
+       waiting periodic_replan_sec (2s); 0.5s cooldown avoids a replan storm while
+       stuck. Direction stability comes from the install gate heading hysteresis.
+       Requires install_gate_enable=true. -->
+  <arg name="path_block_replan_enable" default="true" />
+  <arg name="path_block_replan_cooldown_sec" default="0.5" />
 
   <node pkg="mission_manager" type="mission_manager_node" name="mission_manager" output="screen"
         respawn="true" respawn_delay="3">
@@ -77,6 +84,8 @@
     <param name="route_segment_length_m" value="$(arg route_segment_length_m)" />
     <param name="route_segment_overlap_m" value="$(arg route_segment_overlap_m)" />
     <param name="install_gate_enable" value="$(arg install_gate_enable)" />
+    <param name="path_block_replan_enable" value="$(arg path_block_replan_enable)" />
+    <param name="path_block_replan_cooldown_sec" value="$(arg path_block_replan_cooldown_sec)" />
     <param name="recovery_shadow_enable" value="$(arg recovery_shadow_enable)" />
     <param name="recovery_behavior_enable" value="$(arg recovery_behavior_enable)" />
     <param name="enable_dynamic_mode" value="$(arg enable_dynamic_mode)" />

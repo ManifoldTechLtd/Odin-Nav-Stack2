@@ -114,9 +114,15 @@ def generate_launch_description():
         'follow_search_total_limit_deg': 0.0,
         'follow_search_turn_service': '/atomic_move/turn',
         'follow_search_scan_topic': '/scan_360',
-        # Periodic replan install gate
-        'install_gate_enable': False,
+        # Periodic replan install gate (heading hysteresis; prerequisite for the
+        # path-validity watchdog blocked detection)
+        'install_gate_enable': True,
         'install_gate_shadow': False,
+        # Path-validity watchdog: replan immediately when the active path corridor
+        # is blocked, instead of waiting periodic_replan_sec; 0.5s cooldown avoids
+        # a replan storm while stuck. Requires install_gate_enable=True.
+        'path_block_replan_enable': True,
+        'path_block_replan_cooldown_sec': 0.5,
     }
 
     node = Node(
