@@ -1,0 +1,41 @@
+# Runtime parameters for the SRU navigation node — ROS1 distribution.
+#
+# Loaded with <rosparam command="load"> inside the node tag (private params).
+# The node reads every value through a *private* parameter lookup, so
+# renaming a topic is done by editing this file, NOT by a <remap>.
+
+# ---- Topics ---------------------------------------------------------------
+depth_topic: "/odin1/depth_img_competetion"   # sensor_msgs/Image (32FC1, meters)
+odom_topic: "/odin1/odometry_highfreq"        # nav_msgs/Odometry (~400 Hz)
+goal_topic: "/sru/goal_pose"                  # geometry_msgs/PoseStamped
+                                              #   frame_id MUST equal the odom frame
+cmd_vel_topic: "/sru/cmd_vel"                 # geometry_msgs/Twist (body frame)
+# Gated contract: sru_cmd_vel_relay.py forwards /sru/cmd_vel to /cmd_vel only
+# while /sru/cmd_vel_enable is true (default false). To run without the relay,
+# edit these two values.
+
+# ---- Models ---------------------------------------------------------------
+# Models are NOT bundled with this repository (see sru/README.md).
+# Pass ABSOLUTE paths in production so the loaded policy is unambiguous;
+# empty values fall back to <package>/models/<basename> discovery.
+vae_model_path: ""
+policy_model_path: ""
+
+# ---- Depth filter -----------------------------------------------------------
+min_depth: 0.25
+max_depth: 10.0
+
+# ---- Control ----------------------------------------------------------------
+control_frequency: 5.0                        # Hz, must match training
+# Timer-driven control cadence: cmd_vel is published at control_frequency
+# using the newest depth frame. A frame older than depth_stale_sec counts
+# as perception failure -> explicit zero twist.
+depth_stale_sec: 0.5
+policy_scale: [0.6, 0.3, 0.6]                 # [vx_max, vy_max, omega_max]
+                                              #   conservative start: [0.3, 0.15, 0.3]
+
+# ---- Odom frame flag ----------------------------------------------------------
+# false (default): twist is world-frame -> the node rotates it into the base
+#                  frame. true: twist already body-frame -> passed through.
+# MUST be measured on the real robot before the first run.
+use_sim: false

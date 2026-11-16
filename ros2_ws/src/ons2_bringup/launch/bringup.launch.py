@@ -21,6 +21,7 @@ from robot_profile import (
     local_planner_launch,
     map_planner_parameters,
     neupan_config_path,
+    local_planner_config_path,
     pc_to_scan_parameters,
     sensor_mount_config,
 )
@@ -136,9 +137,16 @@ def _include_profile_nodes(context, *args, **kwargs):
     elif lp_backend != 'neupan':
         lp_pkg, lp_launch = local_planner_launch(profile, lp_backend)
         if lp_pkg and lp_launch:
+            # Optional per-robot overrides (backends.<name>.config in
+            # robot.yaml), e.g. robots/sw01/sru/config.yaml -> params_file.
+            lp_args = {}
+            lp_cfg = local_planner_config_path(profile, lp_backend)
+            if lp_cfg:
+                lp_args['params_file'] = lp_cfg
             planner_actions.append(IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(os.path.join(
                     get_package_share_directory(lp_pkg), 'launch', lp_launch)),
+                launch_arguments=lp_args.items(),
             ))
 
     bridge_pkg, bridge_launch = bridge_launch_file(profile, 'ros2')

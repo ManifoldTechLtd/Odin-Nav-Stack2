@@ -1,0 +1,17 @@
+# Shared test fixture for ros2_shim_check.py and node_smoke_ros2.py.
+# Topics are deliberately NON-default: both tests read them back through the
+# node's private parameter lookup, proving the params file actually wires up
+# (the shim check asserts depth_topic == "/from_yaml/depth").
+sru_nav_node:
+  ros__parameters:
+    depth_topic: "/from_yaml/depth"
+    odom_topic: "/from_yaml/odom"
+    goal_topic: "/from_yaml/goal"
+    cmd_vel_topic: "/from_yaml/cmd_vel"
+    vae_model_path: "/tmp/vae_encoder.onnx"
+    policy_model_path: "/tmp/nav_policy.onnx"
+    min_depth: 0.25
+    max_depth: 10.0
+    control_frequency: 5.0
+    policy_scale: [0.6, 0.3, 0.6]
+    use_sim: false

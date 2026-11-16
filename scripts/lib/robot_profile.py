@@ -13,9 +13,18 @@ def load_profile(path) -> dict:
     return data
 
 
-def neupan_config_path(profile: dict) -> str:
-    rel = profile.get('local_planner', {}).get('backends', {}).get('neupan', {}).get('config', '')
+def local_planner_config_path(profile: dict, backend: str) -> str:
+    """Optional per-robot config file of a local-planner backend.
+
+    Relative paths are resolved against the profile directory, e.g.
+    robots/sw01/sru/config.yaml for backends.sru.config: sru/config.yaml.
+    """
+    rel = profile.get('local_planner', {}).get('backends', {}).get(backend, {}).get('config', '')
     return str((Path(profile['_profile_dir']) / rel).resolve()) if rel else ''
+
+
+def neupan_config_path(profile: dict) -> str:
+    return local_planner_config_path(profile, 'neupan')
 
 
 def local_planner_backend(profile: dict, override: str = '') -> str:

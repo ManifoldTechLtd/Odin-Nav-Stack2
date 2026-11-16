@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+"""ROS1 (catkin) entry point for the SRU navigation node.
+
+Delegates to ``sru.node_main`` — the same implementation the ROS2 ament
+entry point runs — so the ROS1 and ROS2 distributions cannot drift apart.
+"""
+from sru.node_main import main
+
+if __name__ == '__main__':
+    main()

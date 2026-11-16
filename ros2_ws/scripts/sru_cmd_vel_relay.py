@@ -1,15 +1,28 @@
 #!/usr/bin/env python3
-"""Gated cmd_vel relay for the SRU local planner backend (ROS 2 Jazzy).
+# -*- coding: utf-8 -*-
+"""Gated relay for the SRU velocity output (ROS2).
 
-Forwards `/sru/cmd_vel` to `/cmd_vel` only when `/sru/cmd_vel_enable` (transient_local Bool)
-is True, yielding `/cmd_vel` ownership to `atomic_move` during final heading alignment.
+    /sru/cmd_vel -> [this node, gated by /sru/cmd_vel_enable] -> /cmd_vel
+
+The gate (transient_local Bool, published by mission_manager) defaults to
+closed: while closed nothing is published, leaving /cmd_vel to atomic_move.
+If the relay dies, the chassis bridge sees no publisher and its 0.5 s
+timeout commands zero velocity. ROS1 twin: ros_ws/scripts/sru_cmd_vel_relay.py.
+
+Usage: python3 sru_cmd_vel_relay.py
 """
 import rclpy
 from geometry_msgs.msg import Twist
 from rclpy.node import Node
-from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
+from rclpy.qos import (
+    QoSDurabilityPolicy,
+    QoSHistoryPolicy,
+    QoSProfile,
+    QoSReliabilityPolicy,
+)
 from std_msgs.msg import Bool
 
+# Contract topics (must match mission_manager; not parameterized by design)
 SRU_CMD_VEL_TOPIC = "/sru/cmd_vel"
 SRU_ENABLE_TOPIC = "/sru/cmd_vel_enable"
 OUTPUT_CMD_VEL_TOPIC = "/cmd_vel"
@@ -25,6 +38,8 @@ class SruCmdVelRelay(Node):
 
         self.pub = self.create_publisher(Twist, OUTPUT_CMD_VEL_TOPIC, 1)
         self.create_subscription(Twist, SRU_CMD_VEL_TOPIC, self._cmd_vel_callback, 1)
+        # Gate QoS must match the publisher (TRANSIENT_LOCAL + RELIABLE),
+        # otherwise the enable state is silently missed.
         gate_qos = QoSProfile(
             depth=1,
             history=QoSHistoryPolicy.KEEP_LAST,
@@ -33,14 +48,16 @@ class SruCmdVelRelay(Node):
         )
         self.create_subscription(Bool, SRU_ENABLE_TOPIC, self._enable_callback, gate_qos)
         self.get_logger().info(
-            f"ready: {SRU_CMD_VEL_TOPIC} -> {OUTPUT_CMD_VEL_TOPIC} (gate={SRU_ENABLE_TOPIC}, default closed)"
-        )
+            "ready: %s -> %s (gate=%s, default closed)"
+            % (SRU_CMD_VEL_TOPIC, OUTPUT_CMD_VEL_TOPIC, SRU_ENABLE_TOPIC))
 
     def _enable_callback(self, msg):
         enable = bool(msg.data)
         if enable != self.enabled:
-            state = "OPEN (forwarding SRU cmd_vel)" if enable else "CLOSED (hand over to atomic_move)"
-            self.get_logger().info(f"gate {state}")
+            self.get_logger().info(
+                "gate %s" % (
+                    "OPEN (forwarding SRU cmd_vel)" if enable
+                    else "CLOSED (hand over to atomic_move)"))
         self.enabled = enable
 
     def _cmd_vel_callback(self, msg):
@@ -49,12 +66,13 @@ class SruCmdVelRelay(Node):
             return
         self.forwarded += 1
         self.pub.publish(msg)
+        # ~30 s stats line (ROS1 twin uses loginfo_throttle)
         now_ns = self.get_clock().now().nanoseconds
         if now_ns - self._last_stats_ns > 30_000_000_000:
             self._last_stats_ns = now_ns
             self.get_logger().info(
-                f"forwarded={self.forwarded} suppressed={self.suppressed} enabled={self.enabled}"
-            )
+                "forwarded=%d suppressed=%d enabled=%s"
+                % (self.forwarded, self.suppressed, self.enabled))
 
 
 def main():

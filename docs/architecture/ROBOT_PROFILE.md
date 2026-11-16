@@ -201,9 +201,15 @@ local_planner:
         enable_topic: /sru/cmd_vel_enable
         relay_output: /cmd_vel
         odom_topic: /odin1/odometry
-      package: sru_nav_go2_ros1
-      launch: sru_nav_go2.launch
+      package: sru_nav
+      launch: sru_nav.launch
 ```
+
+Any backend may declare an optional `config:` file (relative to the profile
+directory), e.g. `config: sru/config.yaml` under `sru:`. The ROS2 bringup
+passes it to the planner launch as `params_file`; this is how robot-specific
+overrides (such as the conservative SW01 `policy_scale`) stay out of the
+shared planner package. NeuPAN's `config:`/`planner:` follow the same rule.
 
 NeuPAN and SRU have different control contracts (verified in the repository):
 

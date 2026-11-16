@@ -1,0 +1,46 @@
+# Runtime parameters for the SRU navigation node — ROS2 distribution.
+#
+# Loaded via a params file, NOT `rosparam` (ROS1 only). The node reads every
+# value through a *private* parameter lookup, so:
+#   * the node name below MUST match the launched node name (`sru_nav_node`)
+#   * renaming a topic is done by editing this file, NOT by a <remap>/--remap-from
+#
+# Launch override:  ros2 launch sru_nav sru_nav.launch.py use_sim:=true
+sru_nav_node:
+  ros__parameters:
+    # ---- Topics -----------------------------------------------------------
+    depth_topic: "/odin1/depth_img_competetion"   # sensor_msgs/Image (32FC1, meters)
+    odom_topic: "/odin1/odometry_highfreq"        # nav_msgs/Odometry (~400 Hz)
+    goal_topic: "/sru/goal_pose"                  # geometry_msgs/PoseStamped
+                                                  #   frame_id MUST equal the odom frame
+    cmd_vel_topic: "/sru/cmd_vel"                 # geometry_msgs/Twist (body frame)
+    # Gated contract: sru_cmd_vel_relay.py forwards /sru/cmd_vel to /cmd_vel
+    # only while /sru/cmd_vel_enable is true (default false). To run without
+    # the relay, edit these two values (or pass your own params file).
+
+    # ---- Models -----------------------------------------------------------
+    # Models are NOT bundled with this repository (see sru/README.md).
+    # Pass ABSOLUTE paths in production so the loaded policy is unambiguous;
+    # empty values fall back to <package_share>/models/<basename> discovery.
+    vae_model_path: ""
+    policy_model_path: ""
+
+    # ---- Depth filter -----------------------------------------------------
+    min_depth: 0.25
+    max_depth: 10.0
+
+    # ---- Control ----------------------------------------------------------
+    control_frequency: 5.0                        # Hz, must match training
+    # Timer-driven control cadence: cmd_vel is published at control_frequency
+    # using the newest depth frame. A frame older than depth_stale_sec counts
+    # as perception failure -> explicit zero twist (keeps the chassis bridge
+    # fed at 5 Hz so its 0.5 s timeout never injects jerks by surprise).
+    depth_stale_sec: 0.5
+    policy_scale: [0.6, 0.3, 0.6]                 # [vx_max, vy_max, omega_max]
+                                                  #   conservative start: [0.3, 0.15, 0.3]
+
+    # ---- Odom frame flag --------------------------------------------------
+    # false (default): twist is world-frame -> the node rotates it into the base
+    #                  frame. true: twist already body-frame -> passed through.
+    # MUST be measured on the real robot before the first run.
+    use_sim: false

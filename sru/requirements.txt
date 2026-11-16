@@ -1,0 +1,7 @@
+# SRU inference dependencies (install in a dedicated venv; see sru/README.md).
+# cv_bridge and message packages come from the ROS distribution, not pip.
+# numpy<2: ROS Jazzy's cv_bridge/cv2 are built against the numpy 1.x ABI.
+numpy<2
+onnxruntime
+scipy
+opencv-python

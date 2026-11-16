@@ -93,7 +93,7 @@ Unitree Go2 仅由 ROS1 栈支持。
 # 3. 局部规划器：NeuPAN 或 SRU
 
 > [!NOTE]
-> SRU 训练代码已发布。融入导航的 SRU 将在近期发布。敬请期待！
+> SRU 训练代码已发布于 [SRU-Odin](https://github.com/ManifoldTechLtd/SRU-Odin)。SRU 推理后端现已并入本仓库：共享核心在 `sru/`，ROS2 包 `ros2_ws/src/sru_nav`，ROS1 包 `ros_ws/src/sru_nav`。训练好的 ONNX 模型**不随仓库分发**。
 
 默认情况下，该栈在全局 A\* 路径上使用 **NeuPAN**。ONS2 也可以用 **SRU** 端到端策略替代 NeuPAN，后者直接将深度图像和目标映射为速度指令。
 
@@ -132,7 +132,7 @@ NeuPAN 是默认的局部规划器（`--local-planner=neupan`），适配新机�
 
 ## 3.2 运行 SRU
 
-> **SRU 需要训练。** 请联系厂家获得机器人的运控。训练好的 ONNX 模型（策略和 VAE 编码器）**不包含**在本仓库中。请在 SRU 仓库中训练策略，然后将导出的模型部署到机器人上的 SRU 工作空间：
+> **SRU 需要训练。** 请联系厂家获得机器人的运控。训练好的 ONNX 模型（策略和 VAE 编码器）**不包含**在本仓库中。请在 SRU 仓库中训练策略，然后将导出的模型放到 `<repo>/sru/models/`（默认文件名 `vae_encoder.onnx` 与 `nav_policy.onnx`），或用 `SRU_VAE_MODEL` / `SRU_POLICY_MODEL` 指向它们：
 >
 > **[ManifoldTechLtd/SRU-Odin](https://github.com/ManifoldTechLtd/SRU-Odin)** —— 训练（`Train/`）、部署（`Deployment/`）与移植指南。
 
@@ -142,24 +142,20 @@ NeuPAN 是默认的局部规划器（`--local-planner=neupan`），适配新机�
 
 - **Unitree Go2（ROS1）：**
   ``` shell
-  export SRU_WS=/path/to/sru_ros1_workspace
   bash scripts/ons2_go2.sh --local-planner=sru --map=NAME
-  # 可选：通过 --sru-policy=FILE 指定策略模型文件
   ```
 - **ASTRALL SW01（ROS2 或 ROS1）：**
   ``` shell
   # ROS2（默认）
-  export SRU_WS_ROS2=/path/to/sru_ros2_workspace
   bash scripts/ons2_sw01.sh --local-planner=sru --map=NAME
 
   # ROS1
-  export SRU_WS=/path/to/sru_ros1_workspace
   bash scripts/ons2_sw01.sh --ros1 --local-planner=sru --map=NAME
   ```
 
 通用说明：
-- 在 ROS2 下，启动脚本通过 `ros2_ws/scripts/sru/start_sru_ros2.sh` 与 `ros2_ws/scripts/sru/sru_cmd_vel_relay.py` 启动 SRU 策略节点与速度门控 relay（模型默认从 `$SRU_WS_ROS2/Deployment/models` 读取，可通过 `SRU_MODELS_DIR` 覆盖）。
-- 在 ROS1 下，SRU 启动脚本默认使用 `sru_nav_go2_ros1`；可通过设置 `SRU_PKG` 和 `SRU_LAUNCH`（或在 `robots/<robot>/robot.yaml` 的 `planner.local` 中配置）指定对应机器人的 SRU 包和 launch 文件。
+- 平台启动脚本经 `robots/<robot>/robot.yaml` 的 sru 后端配置直接 include 仓库内的 `sru_nav` 包。速度门控 relay **不会自动启动**：需随栈另跑 `python3 ros2_ws/scripts/sru_cmd_vel_relay.py`（ROS2）或 `python3 ros_ws/scripts/sru_cmd_vel_relay.py`（ROS1）。它仅在 `/sru/cmd_vel_enable` 为 true（默认 false）时把 `/sru/cmd_vel` 转发到 `/cmd_vel`。
+- 单独启动脚本：`ros2_ws/scripts/start_sru_ros2.sh`（ROS2）与 `ros_ws/scripts/start_sru.sh`（ROS1）。模型默认从 `<repo>/sru/models` 读取，可用 `SRU_MODELS_DIR` / `SRU_VAE_MODEL` / `SRU_POLICY_MODEL` 覆盖。详见 [`sru/README.md`](sru/README.md)。
 - `--navigation-mode` 在 SRU 模式下无效。
 - SRU 输出机体坐标系下的 `Twist`，因此任何具备 `/cmd_vel` 桥接的机器人都可以使用。详见 [03 · 接入你自己的机器人](docs/usage/03_integrate_your_robot.md)。
 

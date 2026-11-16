@@ -96,3 +96,16 @@ local_planner:
         stop_topic: /neupan/stop
       config: neupan/config.yaml
       planner: neupan/planner.yaml
+    sru:
+      interface:
+        mode: goal_pose
+        goal_topic: /sru/goal_pose
+        cmd_vel_topic: /sru/cmd_vel
+        enable_topic: /sru/cmd_vel_enable
+        relay_output: /cmd_vel
+        odom_topic: /odin1/odometry
+      package: sru_nav
+      launch: sru_nav.launch.py
+      # Robot-specific overrides (conservative policy_scale), passed to the
+      # planner launch as params_file; same pattern as neupan.config above.
+      config: sru/config.yaml

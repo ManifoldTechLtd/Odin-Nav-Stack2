@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>sru_nav</name>
+  <version>1.0.0</version>
+  <description>
+    ROS2 (Jazzy) distribution of the SRU mapless visual navigation controller
+    (Odin1 spatial-memory sensor). Shares its entire Python implementation with
+    the ROS1 side via sru.ros_shim (single source tree in sru/src), so both
+    distributions execute one code path. This package only adds the ament
+    build, launch and parameter-file plumbing.
+  </description>
+  <maintainer email="mohongle@manifoldtech.cn">Hongle Mo</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>builtin_interfaces</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>cv_bridge</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <!-- Python inference deps with rosdep keys; onnxruntime is pip-only,
+       see sru/requirements.txt -->
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-scipy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,0 +1,12 @@
+# SW01 (D-160) overrides for the SRU node (ROS2); only values that differ
+# from the package default (sru_nav/config/sru_nav_ros2.yaml) are listed.
+# Declared by robot.yaml (backends.sru.config); bringup passes it as
+# params_file, and start_sru_ros2.sh picks it up when ONS2_ROBOT=sw01.
+sru_nav_node:
+  ros__parameters:
+    # Conservative start. The chassis SDK hard-limits vx/vy to +/-1.0 m/s and
+    # yaw to +/-1.0 rad/s and silently CLIPS anything larger, so a scale above
+    # 1.0 is meaningless. Raise to [0.6, 0.3, 0.6] only after the robot is
+    # verified to track commands safely. The policy ONNX must be trained on
+    # this robot body (models are provided separately).
+    policy_scale: [0.3, 0.15, 0.3]

@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>sru_nav</name>
+  <version>1.0.0</version>
+  <description>
+    ROS1 (Noetic) distribution of the SRU mapless visual navigation controller
+    (Odin1 spatial-memory sensor). Shares its entire Python implementation with
+    the ROS2 side via sru.ros_shim (single source tree in sru/src), so both
+    distributions execute one code path. This package only adds the catkin
+    build, entry script and parameter-file plumbing.
+  </description>
+  <maintainer email="mohongle@manifoldtech.cn">Hongle Mo</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>rospy</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>cv_bridge</depend>
+  <!-- Python inference deps with rosdep keys; onnxruntime is pip-only,
+       see sru/requirements.txt -->
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-scipy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
+</package>

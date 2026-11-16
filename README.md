@@ -94,7 +94,7 @@ Unitree Go2 is supported by the ROS1 stack only.
 # 3. Local Planner: NeuPAN or SRU
 
 > [!NOTE]
-> The SRU training code is already published. SRU integrated into the navigation stack will be released soon. Please stay tuned!
+> The SRU training code is published in [SRU-Odin](https://github.com/ManifoldTechLtd/SRU-Odin). The SRU inference backend is now part of this repository: shared core in `sru/`, ROS2 package `ros2_ws/src/sru_nav`, ROS1 package `ros_ws/src/sru_nav`. Trained ONNX models are **not bundled**.
 
 By default the stack uses **NeuPAN** on a global A\* path. ONS2 can also replace NeuPAN with the **SRU** end-to-end policy, which maps the depth image and the goal directly to velocity commands.
 
@@ -133,7 +133,7 @@ For parameter tuning (speed, footprint, safety clearance, stuck escape), see [02
 
 ## 3.2 Running SRU
 
-> **SRU requires training.** Obtain the locomotion controller from your robot's manufacturer — it is not provided by us. The trained ONNX models (policy and VAE encoder) are **not included** in this repository. Train the policy in the SRU repository, then deploy the exported models to the SRU workspace on the robot:
+> **SRU requires training.** Obtain the locomotion controller from your robot's manufacturer — it is not provided by us. The trained ONNX models (policy and VAE encoder) are **not included** in this repository. Train the policy in the SRU repository, then place the exported models in `<repo>/sru/models/` (default names `vae_encoder.onnx` and `nav_policy.onnx`), or point `SRU_VAE_MODEL` / `SRU_POLICY_MODEL` at them:
 >
 > **[ManifoldTechLtd/SRU-Odin](https://github.com/ManifoldTechLtd/SRU-Odin)** — training (`Train/`), deployment (`Deployment/`), and the porting guide.
 
@@ -143,29 +143,24 @@ Pass `--local-planner=sru` to any platform launcher to switch from NeuPAN to the
 
 - **Unitree Go2 (ROS1):**
   ``` shell
-  export SRU_WS=/path/to/sru_ros1_workspace
   bash scripts/ons2_go2.sh --local-planner=sru --map=NAME
-  # Optional: select a specific policy file with --sru-policy=FILE
   ```
 - **ASTRALL SW01 (ROS2 or ROS1):**
   ``` shell
   # ROS2 (default)
-  export SRU_WS_ROS2=/path/to/sru_ros2_workspace
   bash scripts/ons2_sw01.sh --local-planner=sru --map=NAME
 
   # ROS1
-  export SRU_WS=/path/to/sru_ros1_workspace
   bash scripts/ons2_sw01.sh --ros1 --local-planner=sru --map=NAME
   ```
 - **Dobot Lumo (ROS1):**
   ``` shell
-  export SRU_WS=/path/to/sru_ros1_workspace
   bash scripts/ons2_dobot_lumo.sh --local-planner=sru --map=NAME
   ```
 
 Common notes:
-- On ROS2, the launcher starts the SRU policy node and velocity relay via `ros2_ws/scripts/sru/start_sru_ros2.sh` and `ros2_ws/scripts/sru/sru_cmd_vel_relay.py` (models default to `$SRU_WS_ROS2/Deployment/models`, overridable via `SRU_MODELS_DIR`).
-- On ROS1, the SRU helper defaults to `sru_nav_go2_ros1`; set `SRU_PKG` and `SRU_LAUNCH` (or configure `planner.local` in `robots/<robot>/robot.yaml`) to point to your robot's SRU package and launch file.
+- The platform launchers include the in-repo `sru_nav` package via the `sru` backend in `robots/<robot>/robot.yaml`. The velocity gate relay is **not** auto-started: run `python3 ros2_ws/scripts/sru_cmd_vel_relay.py` (ROS2) or `python3 ros_ws/scripts/sru_cmd_vel_relay.py` (ROS1) alongside the stack. It forwards `/sru/cmd_vel` to `/cmd_vel` only while `/sru/cmd_vel_enable` is true (default false).
+- Standalone helpers: `ros2_ws/scripts/start_sru_ros2.sh` (ROS2) and `ros_ws/scripts/start_sru.sh` (ROS1). Models default to `<repo>/sru/models`, overridable via `SRU_MODELS_DIR` / `SRU_VAE_MODEL` / `SRU_POLICY_MODEL`. See [`sru/README.md`](sru/README.md).
 - `--navigation-mode` has no effect in SRU mode.
 - SRU outputs a body-frame `Twist`, so any robot with a `/cmd_vel` bridge can use it. See [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md).
 

@@ -91,5 +91,5 @@ local_planner:
         enable_topic: /sru/cmd_vel_enable
         relay_output: /cmd_vel
         odom_topic: /odin1/odometry
-      package: sru_nav_go2_ros1
-      launch: sru_nav_go2.launch
+      package: sru_nav
+      launch: sru_nav.launch
