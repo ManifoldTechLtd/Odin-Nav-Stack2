@@ -53,6 +53,35 @@ def _include_profile_nodes(context, *args, **kwargs):
     qz = math.sin(half_yaw)
     qw = math.cos(half_yaw)
 
+    map_planner_share = get_package_share_directory('map_planner')
+    cloud_filter_mode = (
+        LaunchConfiguration('cloud_filter').perform(context).strip().lower() or 'on'
+    )
+    if cloud_filter_mode not in ('off', 'shadow', 'on'):
+        raise RuntimeError(f"cloud_filter must be 'off', 'shadow', or 'on' (got {cloud_filter_mode!r})")
+
+    cloud_filter_nodes = []
+    pc_additional_env = None
+    nav_cloud_topic = '/odin1/cloud_slam'
+    if cloud_filter_mode in ('shadow', 'on'):
+        cloud_filter_params_file = os.path.join(
+            map_planner_share, 'config', 'odin_cloud_filter.yaml')
+        cloud_filter_fastdds_file = os.path.join(
+            map_planner_share, 'config', 'odin_cloud_filter_fastdds.xml')
+        pc_additional_env = {'FASTRTPS_DEFAULT_PROFILES_FILE': cloud_filter_fastdds_file}
+        cloud_filter_nodes.append(Node(
+            package='map_planner',
+            executable='odin_slam_temporal_filter.py',
+            name='odin_cloud_temporal_filter',
+            output='screen',
+            respawn=True,
+            respawn_delay=3.0,
+            additional_env=pc_additional_env,
+            parameters=[cloud_filter_params_file],
+        ))
+        if cloud_filter_mode == 'on':
+            nav_cloud_topic = '/odin1/cloud_filtered'
+
     pc_params = {
         'target_frame': 'odin1_base_link',
         'qos_overrides./tf.subscription.reliability': 'best_effort',
@@ -72,9 +101,10 @@ def _include_profile_nodes(context, *args, **kwargs):
         output='screen',
         respawn=True,
         respawn_delay=3.0,
+        additional_env=pc_additional_env,
         parameters=[pc_params],
         remappings=[
-            ('cloud_in', '/odin1/cloud_slam'),
+            ('cloud_in', nav_cloud_topic),
             ('scan', '/scan_raw'),
         ],
     )
@@ -189,6 +219,7 @@ def _include_profile_nodes(context, *args, **kwargs):
             qz=0.499,
             qw=0.504,
         ),
+        *cloud_filter_nodes,
         pc_to_scan,
         sliding_map_node,
         *planner_actions,
@@ -199,6 +230,9 @@ def generate_launch_description():
     declare_profile = DeclareLaunchArgument(
         'profile',
         description='Path to robots/<robot>/robot.yaml')
+    declare_cloud_filter = DeclareLaunchArgument(
+        'cloud_filter', default_value='on',
+        description='Odin SLAM point-cloud persistence filter mode: on (default) | shadow | off')
     declare_global_planner = DeclareLaunchArgument(
         'global_planner', default_value='',
         description='Optional override for global_planner.backend in robot.yaml')
@@ -229,6 +263,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         declare_profile,
+        declare_cloud_filter,
         declare_global_planner,
         declare_local_planner,
         declare_neupan_config,

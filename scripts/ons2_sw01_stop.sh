@@ -30,6 +30,7 @@ fi
 log "3. Force killing residual processes"
 for pat in neupan_action_node neupan_node mission_manager atomic_move \
            map_planner sliding_map pointcloud_to_laserscan scan_temporal_filter \
+           odin_slam_temporal_filter odin_cloud_temporal_filter \
            nav2_map_server waypoint_goal_bridge test_nav_control_ros2 \
            rosbridge_server rosbridge_websocket foxglove_bridge \
            odin_ros_driver host_sdk_sample mock_odin_driver; do
@@ -41,7 +42,7 @@ pkill -9 -f "ros2 launch ${REPO_ROOT}" 2>/dev/null || true
 sleep 2
 
 log "4. Final verification"
-LEFT=$(pgrep -a -f "sw01_cmd_vel_bridge|neupan_action_node|neupan_node|mission_manager|atomic_move|map_planner|sliding_map|pointcloud_to_laserscan|scan_temporal_filter|nav2_map_server|waypoint_goal_bridge|test_nav_control_ros2|rosbridge_server|rosbridge_websocket|foxglove_bridge|odin_ros_driver|host_sdk_sample|mock_odin_driver" 2>/dev/null \
+LEFT=$(pgrep -a -f "sw01_cmd_vel_bridge|neupan_action_node|neupan_node|mission_manager|atomic_move|map_planner|sliding_map|pointcloud_to_laserscan|scan_temporal_filter|odin_slam_temporal_filter|odin_cloud_temporal_filter|nav2_map_server|waypoint_goal_bridge|test_nav_control_ros2|rosbridge_server|rosbridge_websocket|foxglove_bridge|odin_ros_driver|host_sdk_sample|mock_odin_driver" 2>/dev/null \
        | grep -vE "ons2_sw01_stop|$$" || true)
 if [[ -z "$LEFT" ]]; then
   log "   [OK] All processes cleaned up"

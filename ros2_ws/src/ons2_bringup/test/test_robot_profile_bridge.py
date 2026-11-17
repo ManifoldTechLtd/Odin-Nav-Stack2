@@ -69,3 +69,46 @@ def test_ros1_bringup_only_receives_the_bridge_topic():
     assert args['bridge_cmd_vel_topic'] == '/cmd_vel'
     assert 'cmd_vel_decay_window' not in args
     assert 'dry_run' not in args
+
+
+def test_bringup_launches_cloud_filter_on_by_default_and_wires_pc_to_scan():
+    from launch import LaunchContext
+    from launch.actions import DeclareLaunchArgument
+    from launch.utilities import perform_substitutions
+    from launch_ros.actions import Node
+
+    bringup_file = REPO / 'ros2_ws' / 'src' / 'ons2_bringup' / 'launch' / 'bringup.launch.py'
+    spec = importlib.util.spec_from_file_location('ons2_bringup_launch', bringup_file)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    ctx = LaunchContext()
+    ctx.launch_configurations['profile'] = str(REPO / 'robots' / 'sw01' / 'robot.yaml')
+    for entity in module.generate_launch_description().entities:
+        if isinstance(entity, DeclareLaunchArgument):
+            entity.visit(ctx)
+
+    actions = module._include_profile_nodes(ctx)
+    nodes = {
+        getattr(action, '_Node__node_name', None): action
+        for action in actions if isinstance(action, Node)
+    }
+    assert 'odin_cloud_temporal_filter' in nodes, 'Cloud filter node missing from default SW01 bringup'
+    assert 'pc_to_scan' in nodes
+
+    _eval = lambda v: v if isinstance(v, str) else perform_substitutions(ctx, v)
+    cloud_filter = nodes['odin_cloud_temporal_filter']
+    pc_to_scan = nodes['pc_to_scan']
+    assert _eval(cloud_filter._Node__node_executable) == 'odin_slam_temporal_filter.py'
+    remaps = {
+        _eval(src): _eval(dst)
+        for src, dst in (pc_to_scan._Node__remappings or ())
+    }
+    assert remaps.get('cloud_in') == '/odin1/cloud_filtered'
+    for node in (cloud_filter, pc_to_scan):
+        raw_env = getattr(node, 'additional_env', None) or ()
+        env = {
+            _eval(k): _eval(v)
+            for k, v in (raw_env.items() if isinstance(raw_env, dict) else raw_env)
+        }
+        assert env.get('FASTRTPS_DEFAULT_PROFILES_FILE', '').endswith('odin_cloud_filter_fastdds.xml')

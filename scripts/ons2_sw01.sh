@@ -76,6 +76,7 @@ tmux send-keys -t "${SESSION}:sw01" \
   "${ENV_PREFIX} && ros2 launch ons2_bringup bringup.launch.py profile:=${ROBOT_PROFILE} global_planner:=${GLOBAL_PLANNER} local_planner:=${LOCAL_PLANNER} neupan_config:=${NEUPAN_CONFIG} navigation_mode:=${NAVIGATION_MODE} periodic_replan_sec:=${PERIODIC_REPLAN_SEC} 2>&1 | tee ${LOG_DIR}/sw01.log" C-m
 ons2_log "w3 starting SW01 navigation stack (global_planner=${GLOBAL_PLANNER}, local_planner=${LOCAL_PLANNER}, mode=${LOCAL_PLANNER_MODE})..."
 sleep 15
+ons2_wait_for "ros2 topic list" '/odin1/cloud_filtered$' 30 "cloud_filter"
 ons2_wait_for "ros2 topic list" '/scan$' 30 "pc_to_scan"
 ons2_wait_for "ros2 topic list" '/scan_360$' 30 "sliding_map"
 ons2_wait_for "ros2 node list" '/sw01_cmd_vel_bridge$' 30 "sw01 bridge"
