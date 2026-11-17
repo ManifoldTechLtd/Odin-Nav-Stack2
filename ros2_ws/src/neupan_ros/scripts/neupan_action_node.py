@@ -103,6 +103,9 @@ class NeupanActionCompat(UpstreamNeupanCore, rclpy.node.Node):
         self._lock = threading.RLock()
         self._control_enabled = False
         self._control_generation = 0
+        self._stop_latched = False
+        self._stop_seq = 0
+        self._accepted_stop_seq = {}
         self._goal_preempt = threading.Event()
         self._path_preempt = threading.Event()
         self._planner_abort_reason = None
@@ -157,6 +160,8 @@ class NeupanActionCompat(UpstreamNeupanCore, rclpy.node.Node):
 
     def _handle_accepted(self, goal_handle, kind):
         with self._lock:
+            self._stop_latched = False
+            self._accepted_stop_seq[id(goal_handle)] = self._stop_seq
             if kind == "goal":
                 if self._active_goal_handle is None:
                     self._active_goal_handle = goal_handle
@@ -195,6 +200,8 @@ class NeupanActionCompat(UpstreamNeupanCore, rclpy.node.Node):
 
     def _stop_callback(self, _msg):
         with self._lock:
+            self._stop_latched = True
+            self._stop_seq += 1
             self._clear_navigation("Stopped by user command")
             self._discard_pending_goals(status=2)
             if self._active_goal_handle is not None:
@@ -263,16 +270,35 @@ class NeupanActionCompat(UpstreamNeupanCore, rclpy.node.Node):
             self._control_generation += 1
             self._control_enabled = True
 
+    def _topic_input_blocked(self, source):
+        if (
+            self._stop_latched
+            or self._active_goal_handle is not None
+            or self._active_path_handle is not None
+        ):
+            self.get_logger().warn(
+                "[neupan_action_compat] ignoring %s topic while stop_latched=%s or action active"
+                % (source, self._stop_latched)
+            )
+            return True
+        return False
+
     def path_callback(self, path):
         with self._lock:
+            if self._topic_input_blocked("path"):
+                return
             return super().path_callback(path)
 
     def waypoints_callback(self, path):
         with self._lock:
+            if self._topic_input_blocked("waypoints"):
+                return
             return super().waypoints_callback(path)
 
     def goal_callback(self, goal):
         with self._lock:
+            if self._topic_input_blocked("goal"):
+                return
             return super().goal_callback(goal)
 
     def _handle_planner_exception(self, source, exc):
@@ -340,27 +366,41 @@ class NeupanActionCompat(UpstreamNeupanCore, rclpy.node.Node):
         )
         return True
 
+    def _goal_preempted_by_stop(self, goal_handle):
+        accepted_seq = self._accepted_stop_seq.get(id(goal_handle))
+        return accepted_seq is not None and accepted_seq != self._stop_seq
+
     def _execute_goal(self, goal_handle):
         result = NavAction.Result()
         try:
             with self._lock:
-                if self._goal_preempt.is_set() or goal_handle.is_cancel_requested:
+                if (
+                    self._goal_preempt.is_set()
+                    or goal_handle.is_cancel_requested
+                    or self._goal_preempted_by_stop(goal_handle)
+                ):
                     return self._finish_goal(goal_handle, result, preempt=True)
+                self._stop_latched = False
                 self._clear_navigation("new goal accepted")
-                self.goal_callback(goal_handle.request.target_pose)
+                super().goal_callback(goal_handle.request.target_pose)
             feedback = NavAction.Feedback()
             while rclpy.ok():
                 with self._lock:
-                    preempted = self._goal_preempt.is_set()
-                if preempted or goal_handle.is_cancel_requested:
-                    self._clear_navigation("goal action preempted")
-                    return self._finish_goal(goal_handle, result, preempt=True)
-                if self.arrive:
-                    result.status = 0
-                    goal_handle.succeed()
-                    return result
+                    preempted = (
+                        self._goal_preempt.is_set()
+                        or self._goal_preempted_by_stop(goal_handle)
+                    )
+                    if preempted or goal_handle.is_cancel_requested:
+                        self._clear_navigation("goal action preempted")
+                        return self._finish_goal(goal_handle, result, preempt=True)
+                    if self.arrive:
+                        self._clear_navigation("goal arrived")
+                        result.status = 0
+                        goal_handle.succeed()
+                        return result
                 self._publish_goal_feedback(goal_handle, feedback)
-                time.sleep(0.1)
+                self._goal_preempt.wait(timeout=0.05)
+            self._clear_navigation("goal action shutdown")
             result.status = 1
             goal_handle.abort()
             return result
@@ -379,10 +419,15 @@ class NeupanActionCompat(UpstreamNeupanCore, rclpy.node.Node):
                 preinstalled = self._preinstalled_path_handle is goal_handle
                 if preinstalled:
                     self._preinstalled_path_handle = None
-                if self._path_preempt.is_set() or goal_handle.is_cancel_requested:
+                if (
+                    self._path_preempt.is_set()
+                    or goal_handle.is_cancel_requested
+                    or self._goal_preempted_by_stop(goal_handle)
+                ):
                     if preinstalled:
                         self._clear_navigation("preinstalled path preempted before execution")
                     return self._finish_path(goal_handle, result, preempt=True)
+                self._stop_latched = False
                 if not preinstalled and not self._set_path_from_action(goal_handle.request.path):
                     result.status = 1
                     goal_handle.abort()
@@ -391,12 +436,16 @@ class NeupanActionCompat(UpstreamNeupanCore, rclpy.node.Node):
             feedback = NavPathAction.Feedback()
             while rclpy.ok():
                 with self._lock:
-                    preempted = self._path_preempt.is_set()
+                    preempted = (
+                        self._path_preempt.is_set()
+                        or self._goal_preempted_by_stop(goal_handle)
+                    )
                     pending = self._pending_path_handle
                     if preempted or goal_handle.is_cancel_requested:
                         if (
                             self._hot_path_enabled
                             and pending is not None
+                            and not self._goal_preempted_by_stop(pending)
                             and not goal_handle.is_cancel_requested
                             and not self._planner_abort_reason
                             and self._control_enabled
@@ -424,11 +473,13 @@ class NeupanActionCompat(UpstreamNeupanCore, rclpy.node.Node):
                         self._clear_navigation("path action preempted")
                         return self._finish_path(goal_handle, result, preempt=True)
                     if self.arrive:
+                        self._clear_navigation("path arrived")
                         result.status = 0
                         goal_handle.succeed()
                         return result
                 self._publish_goal_feedback(goal_handle, feedback)
-                time.sleep(0.1)
+                self._path_preempt.wait(timeout=0.05)
+            self._clear_navigation("path action shutdown")
             result.status = 1
             goal_handle.abort()
             return result
@@ -460,6 +511,7 @@ class NeupanActionCompat(UpstreamNeupanCore, rclpy.node.Node):
     def _release_and_promote(self, kind, finished_handle):
         """Promote the next queued goal once the active goal finishes."""
         with self._lock:
+            self._accepted_stop_seq.pop(id(finished_handle), None)
             if kind == "goal":
                 if self._active_goal_handle is not finished_handle:
                     return

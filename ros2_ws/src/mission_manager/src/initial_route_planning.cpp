@@ -20,6 +20,7 @@ bool MissionManager::startInitialRoutePlan() {
   if (current_index_ < 0 || current_index_ >= static_cast<int>(waypoints_.size())) {
     return false;
   }
+  stopNavigation();
   clearRouteSegment();
   resetInstallGateState("waypoint");
   active_path_.poses.clear();

@@ -438,6 +438,9 @@ private:
   std::uint64_t pending_route_goal_generation_{0};
   rclcpp::Time pending_route_sent_at_{0, 0, RCL_ROS_TIME};
   std::atomic<std::uint64_t> accepted_path_generation_{0};
+  std::atomic<bool> stop_latched_{false};
+  std::atomic<bool> navigation_stopped_{true};
+  std::atomic<int> live_action_goals_{0};
   bool path_safety_waiting_{false};
   double path_safety_scan_max_age_sec_{1.0};
   std::atomic<std::int64_t> path_safety_scan_stamp_ns_{0};

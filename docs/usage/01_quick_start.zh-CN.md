@@ -50,7 +50,14 @@ bash scripts/ons2_sw01.sh --map=NAME
 - 就绪闸门在主终端打印；长驻节点跑在 `ons2_sw01` 这个 tmux 会话里（`odin / map_server / sw01 / mission / atomic / waypoint / rosbridge / foxglove / health / control`）。
 - 进入会话：`tmux attach -t ons2_sw01`。
 - 脚本里设了 `ROS_DOMAIN_ID=98`。你手动开的终端要自己 export 同样的值。
-- 机器人的几何参数、全局规划参数、桥接话题与 NeuPAN 配置从 `robots/sw01/robot.yaml` 和 `robots/sw01/neupan/` 加载。
+- 机器人的几何参数、全局规划参数、底盘桥参数与 NeuPAN 配置从 `robots/sw01/robot.yaml` 和 `robots/sw01/neupan/` 加载。
+- **底盘运动启动时处于禁止（未使能）状态。** 先用遥控器将机器人站立并切换到 MOVE 模式，释放遥控器控制权，确认周围清场后，在 `control` 窗口按 `[c]`（需 `--allow-motion`）或执行以下命令手动使能：
+
+  ```bash
+  ros2 service call /sw01_cmd_vel_bridge/enable std_srvs/srv/SetBool "{data: true}"
+  ```
+
+  桥节点在启动/重启、丢失控制权（例如遥控器接管）、SDK 链路断开或底盘报错时会自动解除使能，且只执行最近一次使能之后收到的速度指令。桥默认不会自行站立或切换姿态（`auto_enter_move_mode: false`）；当前使能状态通过 `/sw01_cmd_vel_bridge/motion_enabled` 发布。
 
 停止：
 

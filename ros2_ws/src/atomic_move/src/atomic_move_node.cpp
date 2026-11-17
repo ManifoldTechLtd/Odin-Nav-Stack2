@@ -18,10 +18,28 @@
 
 #include <tf2/time.h>
 
+namespace {
+struct ActionSlotGuard {
+  std::atomic<bool>& flag;
+  bool acquired{false};
+  explicit ActionSlotGuard(std::atomic<bool>& f) : flag(f) {
+    bool expected = false;
+    acquired = flag.compare_exchange_strong(expected, true, std::memory_order_acq_rel);
+  }
+  ~ActionSlotGuard() {
+    if (acquired) {
+      flag.store(false, std::memory_order_release);
+    }
+  }
+};
+}  // namespace
+
 AtomicMoveNode::AtomicMoveNode() : rclcpp::Node("atomic_move_node") {
-  // Place all services and the stop subscription in a shared Reentrant callback group
-  // so MultiThreadedExecutor(2) can deliver /neupan/stop while a service callback is executing.
+  // Services use a Reentrant group so concurrent calls can be immediately rejected
+  // with ATOMIC_MOVE_BUSY without queuing, while /neupan/stop uses its own dedicated
+  // callback group so stop delivery is never delayed behind service dispatch.
   cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  stop_cb_group_ = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
 
   linear_kp_ = this->declare_parameter("linear_kp", linear_kp_);
   linear_ki_ = this->declare_parameter("linear_ki", linear_ki_);
@@ -60,6 +78,7 @@ AtomicMoveNode::AtomicMoveNode() : rclcpp::Node("atomic_move_node") {
       this->declare_parameter("linear_stuck_tolerance", linear_stuck_tolerance_);
   angular_stuck_tolerance_ =
       this->declare_parameter("angular_stuck_tolerance", angular_stuck_tolerance_);
+  stop_hold_sec_ = this->declare_parameter("stop_hold_sec", stop_hold_sec_);
 
   cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
 
@@ -67,22 +86,22 @@ AtomicMoveNode::AtomicMoveNode() : rclcpp::Node("atomic_move_node") {
       "~/move",
       std::bind(&AtomicMoveNode::moveCallback, this, std::placeholders::_1,
                 std::placeholders::_2),
-      rmw_qos_profile_services_default, cb_group_);
+      rclcpp::ServicesQoS(), cb_group_);
   turn_service_ = this->create_service<atomic_move::srv::Turn>(
       "~/turn",
       std::bind(&AtomicMoveNode::turnCallback, this, std::placeholders::_1,
                 std::placeholders::_2),
-      rmw_qos_profile_services_default, cb_group_);
+      rclcpp::ServicesQoS(), cb_group_);
   align_service_ = this->create_service<atomic_move::srv::AlignTo>(
       "~/align",
       std::bind(&AtomicMoveNode::alignCallback, this, std::placeholders::_1,
                 std::placeholders::_2),
-      rmw_qos_profile_services_default, cb_group_);
+      rclcpp::ServicesQoS(), cb_group_);
 
   rclcpp::SubscriptionOptions sub_opts;
-  sub_opts.callback_group = cb_group_;
+  sub_opts.callback_group = stop_cb_group_;
   stop_sub_ = this->create_subscription<std_msgs::msg::Empty>(
-      "/neupan/stop", rclcpp::QoS(1),
+      "/neupan/stop", rclcpp::QoS(10),
       std::bind(&AtomicMoveNode::stopCallback, this, std::placeholders::_1), sub_opts);
 
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -114,6 +133,19 @@ bool AtomicMoveNode::getTransform(TransformStamped& transform) {
 void AtomicMoveNode::moveCallback(
     const std::shared_ptr<atomic_move::srv::Move::Request> req,
     std::shared_ptr<atomic_move::srv::Move::Response> res) {
+  ActionSlotGuard slot(action_active_);
+  if (!slot.acquired) {
+    res->success = false;
+    res->message = "ATOMIC_MOVE_BUSY";
+    return;
+  }
+  const std::uint64_t start_stop_seq = stop_seq_.load(std::memory_order_acquire);
+  if (inStopHoldWindow()) {
+    stopMsg();
+    res->success = false;
+    res->message = "MOVE_CANCELLED";
+    return;
+  }
   const auto started_at = std::chrono::steady_clock::now();
   RCLCPP_INFO(this->get_logger(), "[atomic_move] move request distance=%.3f m frame=%s",
               req->distance, control_frame_.c_str());
@@ -129,13 +161,18 @@ void AtomicMoveNode::moveCallback(
     res->message = "MOVE_TRANSFORM_UNAVAILABLE";
     return;
   }
+  if (stoppedSince(start_stop_seq)) {
+    stopMsg();
+    res->success = false;
+    res->message = "MOVE_CANCELLED";
+    return;
+  }
   const double start_yaw = tf2::getYaw(start_transform.transform.rotation);
   RCLCPP_INFO(this->get_logger(),
               "[atomic_move] move start frame=%s pose=(%.3f, %.3f) yaw=%.3f rad",
               control_frame_.c_str(), start_transform.transform.translation.x,
               start_transform.transform.translation.y, start_yaw);
 
-  stop_requested_.store(false);
   const bool backward = req->distance < 0.0;
   const double target = std::abs(req->distance);
   double last_progress_x = start_transform.transform.translation.x;
@@ -148,7 +185,7 @@ void AtomicMoveNode::moveCallback(
   TransformStamped final_transform = start_transform;
 
   while (rclcpp::ok()) {
-    if (stop_requested_.load()) {
+    if (stoppedSince(start_stop_seq)) {
       stopMsg();
       res->success = false;
       res->message = "MOVE_CANCELLED";
@@ -203,7 +240,12 @@ void AtomicMoveNode::moveCallback(
     const double error = target - distance_moved;
     if (std::abs(error) <= linear_tolerance_) {
       stopMsg();
-      sleepSec(linear_settle_duration_);
+      if (!sleepInterruptible(linear_settle_duration_, start_stop_seq)) {
+        stopMsg();
+        res->success = false;
+        res->message = "MOVE_CANCELLED";
+        return;
+      }
       TransformStamped settled_transform;
       if (!getTransform(settled_transform)) {
         res->success = false;
@@ -246,9 +288,9 @@ void AtomicMoveNode::moveCallback(
     command.linear.x = velocity;
     cmd_vel_pub_->publish(command);
     if (std::abs(error) <= linear_fine_window_) {
-      sleepSec(linear_pulse_duration_);
+      sleepInterruptible(linear_pulse_duration_, start_stop_seq);
       stopMsg();
-      sleepSec(linear_settle_duration_);
+      sleepInterruptible(linear_settle_duration_, start_stop_seq);
     } else {
       rate.sleep();
     }
@@ -269,6 +311,19 @@ void AtomicMoveNode::moveCallback(
 void AtomicMoveNode::turnCallback(
     const std::shared_ptr<atomic_move::srv::Turn::Request> req,
     std::shared_ptr<atomic_move::srv::Turn::Response> res) {
+  ActionSlotGuard slot(action_active_);
+  if (!slot.acquired) {
+    res->success = false;
+    res->message = "ATOMIC_MOVE_BUSY";
+    return;
+  }
+  const std::uint64_t start_stop_seq = stop_seq_.load(std::memory_order_acquire);
+  if (inStopHoldWindow()) {
+    stopMsg();
+    res->success = false;
+    res->message = "TURN_CANCELLED";
+    return;
+  }
   const auto started_at = std::chrono::steady_clock::now();
   const double target = req->angle * M_PI / 180.0;
   RCLCPP_INFO(this->get_logger(), "[atomic_move] turn request angle=%.3f deg target=%.3f rad",
@@ -282,13 +337,18 @@ void AtomicMoveNode::turnCallback(
                  res->message.c_str(), elapsedSec(started_at));
     return;
   }
+  if (stoppedSince(start_stop_seq)) {
+    stopMsg();
+    res->success = false;
+    res->message = "TURN_CANCELLED";
+    return;
+  }
   RCLCPP_INFO(this->get_logger(),
               "[atomic_move] turn start frame=%s pose=(%.3f, %.3f) yaw=%.3f rad",
               control_frame_.c_str(), start_transform.transform.translation.x,
               start_transform.transform.translation.y,
               tf2::getYaw(start_transform.transform.rotation));
 
-  stop_requested_.store(false);
   double last_yaw = tf2::getYaw(start_transform.transform.rotation);
   double turned = 0.0;
   double last_progress_angle = 0.0;
@@ -299,7 +359,7 @@ void AtomicMoveNode::turnCallback(
   TransformStamped final_transform = start_transform;
 
   while (rclcpp::ok()) {
-    if (stop_requested_.load()) {
+    if (stoppedSince(start_stop_seq)) {
       stopMsg();
       res->success = false;
       res->message = "TURN_CANCELLED";
@@ -351,7 +411,7 @@ void AtomicMoveNode::turnCallback(
       kick.angular.z = std::copysign(angular_max_vel_, error);
       const int kick_cycles = std::max(
           1, static_cast<int>(std::ceil(angular_kick_duration_ * control_frequency_)));
-      for (int i = 0; i < kick_cycles && rclcpp::ok() && !stop_requested_.load(); ++i) {
+      for (int i = 0; i < kick_cycles && rclcpp::ok() && !stoppedSince(start_stop_seq); ++i) {
         cmd_vel_pub_->publish(kick);
         rate.sleep();
       }
@@ -362,7 +422,12 @@ void AtomicMoveNode::turnCallback(
     }
     if (std::abs(error) <= angular_tolerance_) {
       stopMsg();
-      sleepSec(angular_settle_duration_);
+      if (!sleepInterruptible(angular_settle_duration_, start_stop_seq)) {
+        stopMsg();
+        res->success = false;
+        res->message = "TURN_CANCELLED";
+        return;
+      }
       TransformStamped settled_transform;
       if (!getTransform(settled_transform)) {
         res->success = false;
@@ -400,9 +465,9 @@ void AtomicMoveNode::turnCallback(
     command.angular.z = velocity;
     cmd_vel_pub_->publish(command);
     if (std::abs(error) <= angular_fine_window_) {
-      sleepSec(angular_pulse_duration_);
+      sleepInterruptible(angular_pulse_duration_, start_stop_seq);
       stopMsg();
-      sleepSec(angular_settle_duration_);
+      sleepInterruptible(angular_settle_duration_, start_stop_seq);
     } else {
       rate.sleep();
     }
@@ -421,10 +486,22 @@ void AtomicMoveNode::turnCallback(
 void AtomicMoveNode::alignCallback(
     const std::shared_ptr<atomic_move::srv::AlignTo::Request> req,
     std::shared_ptr<atomic_move::srv::AlignTo::Response> res) {
+  ActionSlotGuard slot(action_active_);
+  if (!slot.acquired) {
+    res->success = false;
+    res->message = "ATOMIC_MOVE_BUSY";
+    return;
+  }
+  const std::uint64_t start_stop_seq = stop_seq_.load(std::memory_order_acquire);
+  if (inStopHoldWindow()) {
+    stopMsg();
+    res->success = false;
+    res->message = "ALIGN_CANCELLED";
+    return;
+  }
   const auto started_at = std::chrono::steady_clock::now();
   RCLCPP_INFO(this->get_logger(), "[atomic_move] align request frame=%s target=(%.3f, %.3f, yaw=%.3f)",
               control_frame_.c_str(), req->x, req->y, req->yaw);
-  stop_requested_.store(false);
   rclcpp::WallRate rate(control_frequency_);
   double linear_integral = 0.0;
   double angular_integral = 0.0;
@@ -439,7 +516,7 @@ void AtomicMoveNode::alignCallback(
   double last_yaw_error = 0.0;
 
   while (rclcpp::ok()) {
-    if (stop_requested_.load()) {
+    if (stoppedSince(start_stop_seq)) {
       stopMsg();
       res->success = false;
       res->message = "ALIGN_CANCELLED";
@@ -547,9 +624,9 @@ void AtomicMoveNode::alignCallback(
         command.linear.x = linear_velocity;
         if (distance_error <= linear_fine_window_) {
           cmd_vel_pub_->publish(command);
-          sleepSec(linear_pulse_duration_);
+          sleepInterruptible(linear_pulse_duration_, start_stop_seq);
           stopMsg();
-          sleepSec(linear_settle_duration_);
+          sleepInterruptible(linear_settle_duration_, start_stop_seq);
           continue;
         }
       }
@@ -573,12 +650,12 @@ void AtomicMoveNode::alignCallback(
         kick.angular.z = std::copysign(angular_max_vel_, yaw_error);
         const int kick_cycles = std::max(
             1, static_cast<int>(std::ceil(angular_kick_duration_ * control_frequency_)));
-        for (int i = 0; i < kick_cycles && rclcpp::ok() && !stop_requested_.load(); ++i) {
+        for (int i = 0; i < kick_cycles && rclcpp::ok() && !stoppedSince(start_stop_seq); ++i) {
           cmd_vel_pub_->publish(kick);
           rate.sleep();
         }
         stopMsg();
-        sleepSec(angular_settle_duration_);
+        sleepInterruptible(angular_settle_duration_, start_stop_seq);
         last_yaw_progress_error = yaw_error;
         last_yaw_progress_time = std::chrono::steady_clock::now();
         continue;
@@ -608,13 +685,46 @@ void AtomicMoveNode::alignCallback(
   res->message = "ALIGN_ROS_SHUTDOWN";
 }
 
+bool AtomicMoveNode::inStopHoldWindow() const {
+  if (stop_hold_sec_ <= 0.0) {
+    return false;
+  }
+  const std::int64_t last_ns = last_stop_steady_ns_.load(std::memory_order_acquire);
+  if (last_ns <= 0) {
+    return false;
+  }
+  const std::int64_t now_ns =
+      std::chrono::steady_clock::now().time_since_epoch().count();
+  return static_cast<double>(now_ns - last_ns) * 1e-9 < stop_hold_sec_;
+}
+
+bool AtomicMoveNode::sleepInterruptible(double seconds,
+                                        std::uint64_t start_stop_seq) const {
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::duration<double>(std::max(0.0, seconds));
+  while (rclcpp::ok() && !stoppedSince(start_stop_seq)) {
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= deadline) {
+      return true;
+    }
+    const auto chunk = std::min<std::chrono::nanoseconds>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(deadline - now),
+        std::chrono::milliseconds(10));
+    rclcpp::sleep_for(chunk);
+  }
+  return false;
+}
+
 void AtomicMoveNode::stopMsg() {
   geometry_msgs::msg::Twist command;
   cmd_vel_pub_->publish(command);
 }
 
 void AtomicMoveNode::stopCallback(const std_msgs::msg::Empty::SharedPtr) {
-  stop_requested_.store(true);
+  last_stop_steady_ns_.store(
+      std::chrono::steady_clock::now().time_since_epoch().count(),
+      std::memory_order_release);
+  stop_seq_.fetch_add(1, std::memory_order_acq_rel);
   stopMsg();
 }
 
@@ -627,7 +737,7 @@ double AtomicMoveNode::normalizeAngle(double angle) {
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<AtomicMoveNode>();
-  rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
+  rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 4);
   executor.add_node(node);
   executor.spin();
   rclcpp::shutdown();

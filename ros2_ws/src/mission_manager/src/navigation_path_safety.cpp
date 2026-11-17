@@ -55,14 +55,17 @@ bool MissionManager::validateForInstall(nav_msgs::msg::Path &path,
 }
 
 void MissionManager::holdForPathSafety(const std::string &reason) {
-  if (path_safety_waiting_) return;
+  if (path_safety_waiting_ && navigation_stopped_.load()) return;
+  const bool was_waiting = path_safety_waiting_;
   stopNavigation();
   active_path_.poses.clear();
   path_safety_waiting_ = true;
   last_periodic_replan_at_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
-  RCLCPP_WARN(node_->get_logger(), "[path_safety] stopped; waiting for safe path: %s",
-              reason.c_str());
-  publishEvent("PATH_SAFETY_WAIT", reason);
+  if (!was_waiting) {
+    RCLCPP_WARN(node_->get_logger(), "[path_safety] stopped; waiting for safe path: %s",
+                reason.c_str());
+    publishEvent("PATH_SAFETY_WAIT", reason);
+  }
 }
 
 void MissionManager::processPathSafety() {

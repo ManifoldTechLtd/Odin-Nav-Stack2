@@ -85,6 +85,8 @@ class NavigationRig:
         self.delay_seen = threading.Event()
         self.reject_next = False
         self.rejected_goals = []
+        self.complete_current = False
+        self.cancel_delay = 0.0
         qos = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.map_pub = self.node.create_publisher(OccupancyGrid, "/map", qos)
         self.fake_pub = self.node.create_publisher(OccupancyGrid, "/sliding_map", qos)
@@ -236,10 +238,13 @@ class NavigationRig:
         client = self.node.create_client(StartMission, "/waypoint_manager/start_mission")
         assert client.wait_for_service(timeout_sec=10.0)
         request = StartMission.Request()
-        waypoint = Waypoint()
-        waypoint.x = goal
-        waypoint.y = 0.0
-        request.waypoints = [waypoint]
+        goals = goal if isinstance(goal, (list, tuple)) else [goal]
+        request.waypoints = []
+        for gx in goals:
+            waypoint = Waypoint()
+            waypoint.x = float(gx)
+            waypoint.y = 0.0
+            request.waypoints.append(waypoint)
         begin = time.monotonic()
         result = self.call(client, request)
         self.start_response_seconds = time.monotonic() - begin
@@ -256,13 +261,22 @@ class NavigationRig:
     def execute_path(self, handle):
         self.latest_handle = handle
         self.paths.append(handle.request.path)
-        while self.running and handle == self.latest_handle and not handle.is_cancel_requested:
+        while (self.running and handle == self.latest_handle
+               and not handle.is_cancel_requested and not self.complete_current):
             feedback = NavPath.Feedback()
             goal = handle.request.path.poses[-1].pose.position
             feedback.distance_remaining = math.hypot(
                 goal.x - self.robot[0], goal.y - self.robot[1])
             handle.publish_feedback(feedback)
             time.sleep(0.04)
+        if self.complete_current and handle == self.latest_handle:
+            self.complete_current = False
+            handle.succeed()
+            result = NavPath.Result()
+            result.status = 0
+            return result
+        if handle.is_cancel_requested and self.cancel_delay > 0.0:
+            time.sleep(self.cancel_delay)
         if handle.status == GoalStatus.STATUS_EXECUTING:
             handle.abort()
         elif handle.is_cancel_requested:
@@ -684,3 +698,116 @@ def test_default_navigation_build_is_release(package, requested, expected, tmp_p
     assert result.returncode == 0, result.stdout + result.stderr
     cache = (build / "CMakeCache.txt").read_text()
     assert "CMAKE_BUILD_TYPE:STRING=" + expected in cache, "Navigation build type was not respected"
+
+
+def test_initial_route_plan_stops_previous_navigation_immediately(rig):
+    rig.start_mission(goal=[3.0, 9.0], delayed_plan=True)
+    assert len(rig.paths) == 1
+    stops_before = len(rig.stops)
+    rig.plan_delay = 1.2
+    rig.delay_seen.clear()
+    rig.complete_current = True
+
+    # While waypoint 2 is waiting in startInitialRoutePlan() (path_safety_waiting_ == true),
+    # mission_manager must immediately emit stopNavigation() before the delayed plan finishes.
+    assert rig.delay_seen.wait(timeout=3.0)
+    wait_until(lambda: len(rig.stops) > stops_before, timeout=0.6)
+    assert len(rig.paths) == 1, "Stop arrived only after the new plan was already installed"
+    wait_until(lambda: len(rig.paths) >= 2, timeout=5.0)
+
+
+def test_stop_reasserts_cancel_until_stubborn_action_terminates_and_latches(rig):
+    rig.cancel_delay = 0.45
+    rig.start_mission()
+    stops_before = len(rig.stops)
+    cancel = rig.node.create_client(Trigger, "/waypoint_manager/cancel")
+    assert cancel.wait_for_service(timeout_sec=2.0)
+    assert rig.call(cancel, Trigger.Request()).success
+
+    # Because the action goal stays live for ~0.45s while canceling, mission_manager
+    # must re-assert /neupan/stop across process() ticks rather than firing only once.
+    wait_until(lambda: len(rig.stops) - stops_before >= 2, timeout=2.0)
+    paths_after_cancel = len(rig.paths)
+
+    replan_pub = rig.node.create_publisher(Empty, "/neupan/replan", 10)
+    for _ in range(3):
+        replan_pub.publish(Empty())
+        time.sleep(0.1)
+    time.sleep(0.4)
+    assert len(rig.paths) == paths_after_cancel, "Latched stop allowed a replan trigger to send a path"
+
+    rig.cancel_delay = 0.0
+    rig.submit_mission(4.0)
+    wait_until(lambda: len(rig.paths) > paths_after_cancel, timeout=5.0)
+
+
+def test_atomic_move_rejects_concurrent_request_without_clearing_stop(rig):
+    from atomic_move.srv import Move, Turn
+    from geometry_msgs.msg import Twist
+
+    commands = []
+    rig.node.create_subscription(Twist, "/safety_test/atomic_conc_cmd_vel", commands.append, 50)
+    stop = rig.node.create_publisher(Empty, "/safety_test/atomic_conc_stop", 10)
+    rig.start_node("atomic_move", "atomic_move_node", [
+        "-r", "__node:=atomic_conc_test",
+        "-r", "/cmd_vel:=/safety_test/atomic_conc_cmd_vel",
+        "-r", "/neupan/stop:=/safety_test/atomic_conc_stop",
+        "-p", "control_frame:=map"])
+    move_cli = rig.node.create_client(Move, "/atomic_conc_test/move")
+    turn_cli = rig.node.create_client(Turn, "/atomic_conc_test/turn")
+    assert move_cli.wait_for_service(timeout_sec=5.0)
+    assert turn_cli.wait_for_service(timeout_sec=5.0)
+    wait_until(lambda: len(rig.node.get_subscriptions_info_by_topic("/tf")) >= 2)
+    wait_until(lambda: rig.node.get_subscriptions_info_by_topic("/safety_test/atomic_conc_stop"))
+
+    move_fut = move_cli.call_async(Move.Request(distance=1.5))
+    try:
+        wait_until(lambda: any(m.linear.x > 0.05 for m in commands), timeout=3.0)
+
+        turn_fut = turn_cli.call_async(Turn.Request(angle=90.0))
+        wait_until(turn_fut.done, timeout=1.0)
+        assert not turn_fut.result().success
+        assert "BUSY" in turn_fut.result().message
+        assert not any(abs(m.angular.z) > 1e-6 for m in commands)
+
+        stop.publish(Empty())
+        wait_until(move_fut.done, timeout=1.5)
+        assert not move_fut.result().success
+        assert "CANCELLED" in move_fut.result().message
+        assert commands and abs(commands[-1].linear.x) == 0.0 and abs(commands[-1].angular.z) == 0.0
+    finally:
+        stop.publish(Empty())
+        wait_until(move_fut.done, timeout=3.0)
+
+
+def test_atomic_move_stop_wins_race_against_simultaneous_new_request(rig):
+    from atomic_move.srv import AlignTo
+    from geometry_msgs.msg import Twist
+
+    commands = []
+    rig.node.create_subscription(Twist, "/safety_test/atomic_race_cmd_vel", commands.append, 50)
+    stop = rig.node.create_publisher(Empty, "/safety_test/atomic_race_stop", 10)
+    rig.start_node("atomic_move", "atomic_move_node", [
+        "-r", "__node:=atomic_race_test",
+        "-r", "/cmd_vel:=/safety_test/atomic_race_cmd_vel",
+        "-r", "/neupan/stop:=/safety_test/atomic_race_stop",
+        "-p", "control_frame:=map",
+        "-p", "stop_hold_sec:=0.08"])
+    align_cli = rig.node.create_client(AlignTo, "/atomic_race_test/align")
+    assert align_cli.wait_for_service(timeout_sec=5.0)
+    wait_until(lambda: len(rig.node.get_subscriptions_info_by_topic("/tf")) >= 2)
+    wait_until(lambda: rig.node.get_subscriptions_info_by_topic("/safety_test/atomic_race_stop"))
+
+    stop.publish(Empty())
+    time.sleep(0.01)
+    race_fut = align_cli.call_async(AlignTo.Request(x=1.5, y=0.0, yaw=0.0))
+    wait_until(race_fut.done, timeout=1.5)
+    assert not race_fut.result().success
+    assert "CANCELLED" in race_fut.result().message
+    assert not any(abs(m.linear.x) > 1e-6 or abs(m.angular.z) > 1e-6 for m in commands), (
+        "New request arriving immediately after /neupan/stop overwrote stop and drove the robot")
+
+    time.sleep(0.12)
+    ok_fut = align_cli.call_async(AlignTo.Request(x=0.0, y=0.0, yaw=0.0))
+    wait_until(ok_fut.done, timeout=2.0)
+    assert ok_fut.result().success

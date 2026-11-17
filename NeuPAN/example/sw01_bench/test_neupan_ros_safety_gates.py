@@ -196,3 +196,122 @@ def test_clear_navigation_stops_even_if_planner_reset_fails(ros_context, monkeyp
     finally:
         node.destroy_node()
         ros2_shim.bind_node(None)
+
+
+def _load_action_node_module():
+    import importlib.util
+
+    script = ROOT.parent / "ros2_ws" / "src" / "neupan_ros" / "scripts" / "neupan_action_node.py"
+    spec = importlib.util.spec_from_file_location(
+        "neupan_action_node_test_%d" % (time.monotonic_ns() % 1000000), script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _make_ros_path(xs=(0.0, 0.5, 1.0)):
+    from geometry_msgs.msg import PoseStamped
+    from nav_msgs.msg import Path as RosPath
+
+    path = RosPath()
+    path.header.frame_id = "map"
+    for x in xs:
+        pose = PoseStamped()
+        pose.header.frame_id = "map"
+        pose.pose.position.x = float(x)
+        pose.pose.orientation.w = 1.0
+        path.poses.append(pose)
+    return path
+
+
+class _FakeActionGoalHandle:
+    def __init__(self, path):
+        from nav_interfaces.action import NavPath
+
+        self.request = NavPath.Goal()
+        self.request.path = path
+        self.is_cancel_requested = False
+        self.is_active = True
+        self.succeeded = False
+        self.aborted = False
+        self.canceled_flag = False
+        self.feedbacks = []
+
+    def succeed(self):
+        self.succeeded = True
+        self.is_active = False
+
+    def abort(self):
+        self.aborted = True
+        self.is_active = False
+
+    def canceled(self):
+        self.canceled_flag = True
+        self.is_active = False
+
+    def publish_feedback(self, fb):
+        self.feedbacks.append(fb)
+
+    def execute(self, cb=None):
+        if cb is not None:
+            return cb(self)
+
+
+def test_action_arrival_closes_control_gate_and_publishes_zero(ros_context, monkeypatch):
+    from neupan.ros import ros2_shim
+
+    monkeypatch.setenv("NEUPAN_ROS_CONFIG", str(CONFIG))
+    module = _load_action_node_module()
+    node = module.NeupanActionCompat()
+    try:
+        published = []
+        monkeypatch.setattr(node.vel_pub, "publish", published.append)
+        handle = _FakeActionGoalHandle(_make_ros_path())
+        node._active_path_handle = handle
+        assert node._set_path_from_action(handle.request.path)
+        node._preinstalled_path_handle = handle
+        assert node._control_cycle_token() is not None
+        node.arrive = True
+
+        result = node._execute_path(handle)
+        assert result.status == 0
+        assert handle.succeeded
+        assert node._control_cycle_token() is None, "Arrival left the action control gate open"
+        assert published and _is_zero(published[-1]), "Arrival did not publish an immediate zero Twist"
+    finally:
+        node.destroy_node()
+        ros2_shim.bind_node(None)
+
+
+def test_stop_latches_against_stray_topic_path_until_new_action(ros_context, monkeypatch):
+    from std_msgs.msg import Empty
+    from neupan.ros import ros2_shim
+
+    monkeypatch.setenv("NEUPAN_ROS_CONFIG", str(CONFIG))
+    module = _load_action_node_module()
+    node = module.NeupanActionCompat()
+    try:
+        published = []
+        monkeypatch.setattr(node.vel_pub, "publish", published.append)
+        node._stop_callback(Empty())
+        assert node._control_cycle_token() is None
+
+        # A stray topic message on /initial_path must NOT unlatch /neupan/stop.
+        node.path_callback(_make_ros_path())
+        assert node._control_cycle_token() is None, "Stray topic path unlatched /neupan/stop"
+
+        # An explicit new Action goal must cleanly unlatch and open the gate.
+        handle = _FakeActionGoalHandle(_make_ros_path())
+        node._handle_accepted(handle, "path")
+        # Inspect gate inside the first feedback hook, then mark arrived so _execute_path exits.
+        seen_tokens = []
+        monkeypatch.setattr(
+            node, "_publish_goal_feedback",
+            lambda gh, fb: (seen_tokens.append(node._control_cycle_token()), setattr(node, "arrive", True)))
+        result = node._execute_path(handle)
+        assert seen_tokens and seen_tokens[0] is not None
+        assert result.status == 0
+        assert node._control_cycle_token() is None
+    finally:
+        node.destroy_node()
+        ros2_shim.bind_node(None)

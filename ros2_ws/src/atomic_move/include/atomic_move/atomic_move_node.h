@@ -22,6 +22,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -59,12 +60,14 @@ private:
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - t0)
         .count();
   }
-  static void sleepSec(double seconds) {
-    rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::duration<double>(seconds)));
+  bool stoppedSince(std::uint64_t start_stop_seq) const {
+    return stop_seq_.load(std::memory_order_acquire) != start_stop_seq;
   }
+  bool inStopHoldWindow() const;
+  bool sleepInterruptible(double seconds, std::uint64_t start_stop_seq) const;
 
   rclcpp::CallbackGroup::SharedPtr cb_group_;
+  rclcpp::CallbackGroup::SharedPtr stop_cb_group_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
   rclcpp::Service<atomic_move::srv::Move>::SharedPtr move_service_;
   rclcpp::Service<atomic_move::srv::Turn>::SharedPtr turn_service_;
@@ -72,7 +75,10 @@ private:
   rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr stop_sub_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
-  std::atomic<bool> stop_requested_{false};
+  std::atomic<bool> action_active_{false};
+  std::atomic<std::uint64_t> stop_seq_{0};
+  std::atomic<std::int64_t> last_stop_steady_ns_{0};
+  double stop_hold_sec_{0.05};
   double linear_kp_{1.0};
   double linear_ki_{0.02};
   double linear_kd_{0.02};
