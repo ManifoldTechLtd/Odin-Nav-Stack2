@@ -129,7 +129,11 @@ def run(args, hub):
                 img_sub["handle"].unregister()
                 img_sub["handle"] = None
 
+    def list_topics():
+        return {name: [typ] for name, typ in rospy.get_published_topics()}
+
     hub.bind(
+        list_topics=list_topics,
         call_trigger=call_trigger,
         publish_cmd_vel=publish_cmd_vel,
         publish_neupan_stop=lambda: neupan_stop_pub.publish(Empty()),

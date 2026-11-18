@@ -204,3 +204,57 @@ def test_speak_tts_returns_before_playback_finishes(tmp_path):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_stack_state_lists_maps_and_mode_options(tmp_path):
+    from web_console.stack import MODES, NavStack
+
+    maps = tmp_path / "ros2_ws" / "src" / "map_planner" / "maps"
+    maps.mkdir(parents=True)
+    (maps / "floor2.yaml").write_text("image: x\n")
+    (maps / "floor2.pgm").write_bytes(b"P5")
+    hub = MonitorStateHub(intercom=None)
+    hub.stack = NavStack(repo_root=str(tmp_path), session_active=lambda: False)
+    server = make_server("127.0.0.1", 0, hub, enable_tls=False)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        base = "http://127.0.0.1:{}".format(server.server_address[1])
+        status, _, body = get(base + "/api/stack/state")
+        payload = json.loads(body)
+        assert status == 200 and payload["state"] == "stopped"
+        assert [m["name"] for m in payload["maps"]] == ["floor2"]
+        assert payload["modes"] == list(MODES)
+        status, res = post(base + "/api/stack/start", {"map": "nope", "navigation_mode": "escape"})
+        assert status == 400 and res["ok"] is False
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_record_start_and_topics_endpoints(tmp_path):
+    from web_console.recorder import BagRecorder
+    from web_console.tests.test_recorder import FakeTmux
+
+    hub = MonitorStateHub(intercom=None)
+    hub.recorder = BagRecorder(bag_root=str(tmp_path), run=FakeTmux(), has_tmux=lambda: True)
+    hub._list_topics = lambda: {"/cmd_vel": ["geometry_msgs/msg/Twist"],
+                                "/odin1/cloud_filtered": ["sensor_msgs/msg/PointCloud2"]}
+    server = make_server("127.0.0.1", 0, hub, enable_tls=False)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        base = "http://127.0.0.1:{}".format(server.server_address[1])
+        status, _, body = get(base + "/api/record/topics")
+        topics = json.loads(body)["topics"]
+        assert [t["name"] for t in topics] == ["/cmd_vel", "/odin1/cloud_filtered"]
+        assert [t["heavy"] for t in topics] == [False, True]
+        status, res = post(base + "/api/record/start", {"topics": "", "name": "x"})
+        assert status == 400
+        status, res = post(base + "/api/record/start", {"topics": ["/cmd_vel"], "name": "run"})
+        assert status == 200 and res["ok"] is True and res["topics"] == ["/cmd_vel"]
+        status, _, body = get(base + "/api/record/state")
+        assert json.loads(body)["active"] is True
+        status, res = post(base + "/api/record/stop", {})
+        assert status == 200 and res["ok"] is True
+    finally:
+        server.shutdown()
+        server.server_close()

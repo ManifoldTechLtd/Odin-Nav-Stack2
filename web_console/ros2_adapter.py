@@ -148,6 +148,9 @@ def run(args, hub):
                 time.sleep(0.02)
             return None, "调用服务 {} 超时".format(name)
 
+        def list_topics(self):
+            return {name: list(types) for name, types in self.get_topic_names_and_types()}
+
         def call_trigger(self, name):
             client = self._triggers.get(name)
             if client is None:
@@ -186,7 +189,7 @@ def run(args, hub):
     hub.bind(call_trigger=node.call_trigger, publish_cmd_vel=node.publish_cmd_vel,
              publish_neupan_stop=node.publish_neupan_stop, publish_estop=node.publish_estop,
              subscribe_image=node.subscribe_image, unsubscribe_image=node.unsubscribe_image,
-             start_mission=node.start_mission, set_chassis=node.set_chassis)
+             start_mission=node.start_mission, set_chassis=node.set_chassis, list_topics=node.list_topics)
     executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(node)
     try:

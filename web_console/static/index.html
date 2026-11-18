@@ -57,6 +57,13 @@
   kbd { background: #0f141b; border: 1px solid #3a4454; border-radius: 4px; padding: 0 4px; font-size: 11px; }
   #cam { width: 100%; border-radius: 6px; background: #0a0d12; min-height: 60px; display: none; margin-top: 6px; }
   .hidden { display: none !important; }
+  pre.log { background: #0a0d12; border: 1px solid var(--line); border-radius: 6px; padding: 6px; margin: 6px 0;
+    max-height: 190px; overflow: auto; font: 11px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; color: #aab3c0; }
+  pre.log .ok { color: var(--ok); } pre.log .bad { color: var(--bad); } pre.log .warn { color: var(--warn); }
+  #topicList { max-height: 200px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px; font-size: 12px; }
+  #topicList label { display: flex; gap: 6px; align-items: center; padding: 1px 2px; }
+  #topicList .type { color: var(--muted); font-size: 11px; }
+  .tag { font-size: 10px; border: 1px solid rgba(227,179,65,.5); color: var(--warn); border-radius: 4px; padding: 0 3px; }
 </style>
 </head>
 <body>
@@ -87,6 +94,42 @@
   </div>
 
   <div id="side">
+    <div class="card" id="navCard">
+      <h3>导航（SW01）<span class="chip" id="navChip" style="margin-left:8px">--</span></h3>
+      <div class="row"><span class="muted">地图</span><select id="mapSel" class="wide"></select></div>
+      <div class="row"><span class="muted">模式</span>
+        <select id="modeSel" class="wide">
+          <option value="replan_periodic">replan_periodic（默认）</option>
+          <option value="escape">escape</option>
+          <option value="neupan_only">neupan_only</option>
+        </select>
+      </div>
+      <div class="row">
+        <button class="primary" id="bNavStart" style="flex:1">启动导航</button>
+        <button class="danger" id="bNavStop" style="flex:1">停止导航</button>
+      </div>
+      <pre class="log" id="navLog"></pre>
+      <div class="toast" id="navToast"></div>
+    </div>
+
+    <div class="card" id="recCard">
+      <h3>录包<span class="chip" id="recChip" style="margin-left:8px">--</span></h3>
+      <div class="muted" id="recInfo" style="font-size:12px;margin-bottom:6px">--</div>
+      <div class="row" id="recPresets"></div>
+      <div class="row">
+        <input type="text" class="wide" id="topicFilter" placeholder="筛选话题">
+        <button id="bTopicsRefresh">刷新</button>
+      </div>
+      <div id="topicList"></div>
+      <div class="row" style="margin-top:6px"><input type="text" class="wide" id="recCustom" placeholder="手动追加话题（空格或逗号分隔）"></div>
+      <div class="row"><input type="text" class="wide" id="recName" placeholder="录包名称（可选）"></div>
+      <div class="row">
+        <button class="primary" id="bRecStart" style="flex:1">开始录包</button>
+        <button class="danger" id="bRecStop" style="flex:1">结束录包</button>
+      </div>
+      <div class="toast" id="recToast"></div>
+    </div>
+
     <div class="card" id="missionCard">
       <h3>任务</h3>
       <div class="grid2">
@@ -705,6 +748,142 @@
       });
   }
 
+  // ---------- navigation stack ----------
+  var navKey = '', recKey = '', topics = [], recSel = {}, opsTick = 0;
+  var NAV_STATE = { stopped: ['未运行', ''], starting: ['启动中…', 'warn'], running: ['运行中', 'ok'],
+    stopping: ['停止中…', 'warn'], failed: ['启动失败', 'bad'] };
+  function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function fmtBytes(n) {
+    if (n >= 1073741824) return (n / 1073741824).toFixed(2) + ' GB';
+    if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+    return Math.round(n / 1024) + ' KB';
+  }
+  function renderNav(sn) {
+    var st = NAV_STATE[sn.state] || [sn.state, ''];
+    $('navChip').textContent = st[0]; $('navChip').className = 'chip ' + st[1];
+    var key = (sn.maps || []).map(function (m) { return m.name + (m.reloc ? '*' : ''); }).join('|');
+    if (key !== navKey) {
+      navKey = key;
+      var sel = $('mapSel'), prev = sel.value;
+      sel.innerHTML = '';
+      (sn.maps || []).forEach(function (m) {
+        var o = document.createElement('option');
+        o.value = m.name; o.textContent = m.name + (m.reloc ? '（有重定位文件）' : '（无重定位文件）');
+        sel.appendChild(o);
+      });
+      if (prev) sel.value = prev;
+    }
+    var busy = sn.state === 'starting' || sn.state === 'stopping';
+    if (sn.tmux === false) { $('navChip').textContent = '未安装 tmux'; $('navChip').className = 'chip bad'; }
+    $('bNavStart').disabled = busy || sn.state === 'running' || sn.tmux === false;
+    $('bNavStop').disabled = busy || sn.state === 'stopped' || sn.tmux === false;
+    var logEl = $('navLog'), lines = sn.log || [];
+    if (logEl.dataset.n !== String(lines.length) + '|' + (lines[lines.length - 1] || '')) {
+      logEl.dataset.n = String(lines.length) + '|' + (lines[lines.length - 1] || '');
+      logEl.innerHTML = lines.map(function (l) {
+        var cls = /FAIL|timed out|failed|ERROR|Error/.test(l) ? 'bad' : /\[OK\]/.test(l) ? 'ok' : '';
+        return '<span class="' + cls + '">' + esc(l) + '</span>';
+      }).join('\n');
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+  }
+  $('bNavStart').onclick = function () {
+    var map = $('mapSel').value, mode = $('modeSel').value;
+    if (!map) return setToast('navToast', '请先选择地图');
+    if (!confirm('启动导航？\n地图：' + map + '\n模式：' + mode +
+        '\n将依次启动 odin、map_server 和导航栈。底盘运动仍需单独使能。')) return;
+    post('/api/stack/start', { map: map, navigation_mode: mode }).then(function (res) {
+      setToast('navToast', describe(res, '启动导航')); pollOps();
+    });
+  };
+  $('bNavStop').onclick = function () {
+    if (!confirm('停止导航？\n将关闭 ons2_sw01 会话并清理残留进程。机器人保持当前运动模式，请先用遥控器切换到安全模式。')) return;
+    post('/api/stack/stop', {}).then(function (res) { setToast('navToast', describe(res, '停止导航')); pollOps(); });
+  };
+
+  // ---------- bag recording ----------
+  function renderRecord(rs) {
+    if (rs.active) {
+      $('recChip').textContent = '录制中'; $('recChip').className = 'chip bad';
+      $('recInfo').textContent = '目录 ' + (rs.dir || '') + ' · 已录 ' + Math.round(rs.elapsed_sec) + ' s · ' +
+        fmtBytes(rs.size_bytes) + ' · 剩余空间 ' + fmtBytes(rs.free_bytes) + ' · ' + rs.topics.length + ' 个话题';
+    } else {
+      $('recChip').textContent = '未录制'; $('recChip').className = 'chip';
+      $('recInfo').textContent = '剩余空间 ' + fmtBytes(rs.free_bytes) + '，保存到 ' + '~/sw01_bag_recordings/';
+    }
+    if (rs.tmux === false) { $('recChip').textContent = '未安装 tmux'; $('recChip').className = 'chip bad'; }
+    $('bRecStart').disabled = !!rs.active || rs.tmux === false;
+    $('bRecStop').disabled = !rs.active || rs.tmux === false;
+    var presets = $('recPresets');
+    if (!presets.childElementCount && rs.presets) {
+      Object.keys(rs.presets).forEach(function (key) {
+        var b = document.createElement('button');
+        b.textContent = rs.presets[key].label;
+        b.onclick = function () {
+          var names = {}; topics.forEach(function (t) { names[t.name] = true; });
+          rs.presets[key].topics.forEach(function (n) { if (names[n]) recSel[n] = true; });
+          renderTopics(true);
+        };
+        presets.appendChild(b);
+      });
+    }
+  }
+  function renderTopics(force) {
+    var filter = $('topicFilter').value.trim().toLowerCase();
+    var key = topics.map(function (t) { return t.name; }).join('|') + '#' + filter + '#' + Object.keys(recSel).join('|');
+    if (!force && key === recKey) return;
+    recKey = key;
+    var list = $('topicList'); list.innerHTML = '';
+    topics.filter(function (t) { return !filter || t.name.toLowerCase().indexOf(filter) >= 0; })
+      .forEach(function (t) {
+        var row = document.createElement('label');
+        var box = document.createElement('input'); box.type = 'checkbox'; box.checked = !!recSel[t.name];
+        box.onchange = function () { recSel[t.name] = box.checked; renderTopics(true); };
+        row.appendChild(box);
+        var name = document.createElement('span'); name.textContent = t.name; row.appendChild(name);
+        var typ = document.createElement('span'); typ.className = 'type'; typ.textContent = t.types.join(', ');
+        row.appendChild(typ);
+        if (t.heavy) { var tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = '大'; row.appendChild(tag); }
+        list.appendChild(row);
+      });
+    if (!list.childElementCount) list.innerHTML = '<span class="muted">没有匹配的话题（导航栈未运行时话题可能为空，可在下方手动追加）</span>';
+  }
+  function loadTopics() {
+    return fetch('/api/record/topics', { cache: 'no-store' }).then(readJson).then(function (res) {
+      topics = res.topics || []; renderTopics(false);
+    }).catch(function () {});
+  }
+  $('topicFilter').addEventListener('input', function () { renderTopics(true); });
+  $('bTopicsRefresh').onclick = function () { loadTopics(); };
+  $('bRecStart').onclick = function () {
+    var names = Object.keys(recSel).filter(function (n) { return recSel[n]; });
+    var extra = $('recCustom').value.trim();
+    if (extra) names = names.concat(extra.split(/[\s,]+/).filter(Boolean));
+    if (!names.length) return setToast('recToast', '请选择至少一个话题');
+    var heavy = topics.filter(function (t) { return recSel[t.name] && t.heavy; }).map(function (t) { return t.name; });
+    var msg = '开始录包？\n话题 ' + names.length + ' 个。保存到 ~/sw01_bag_recordings/。';
+    if (heavy.length) msg += '\n注意：包含大体积话题（' + heavy.join('、') + '），文件增长较快。';
+    if (!confirm(msg)) return;
+    post('/api/record/start', { topics: names, name: $('recName').value.trim() }).then(function (res) {
+      var text = describe(res, '开始录包');
+      if (res.warnings && res.warnings.length) text += '（大体积：' + res.warnings.join('、') + '）';
+      setToast('recToast', text); pollOps();
+    });
+  };
+  $('bRecStop').onclick = function () {
+    if (!confirm('结束录包？数据会先写入磁盘，请等待提示完成。')) return;
+    post('/api/record/stop', {}).then(function (res) {
+      setToast('recToast', describe(res, '结束录包') + (res.size_bytes ? '，共 ' + fmtBytes(res.size_bytes) : ''));
+      pollOps();
+    });
+  };
+
+  function pollOps() {
+    fetch('/api/stack/state', { cache: 'no-store' }).then(readJson).then(renderNav).catch(function () {});
+    fetch('/api/record/state', { cache: 'no-store' }).then(readJson).then(renderRecord).catch(function () {});
+    if (++opsTick % 5 === 0) loadTopics();
+  }
+
   $('center').addEventListener('click', centerRobot);
   $('fit').addEventListener('click', function () { fitMap(); draw(); });
   window.addEventListener('resize', resize);
@@ -712,6 +891,8 @@
   resize();
   refresh();
   setInterval(refresh, 300);
+  pollOps(); loadTopics();
+  setInterval(pollOps, 1000);
 })();
 </script>
 </body>

@@ -62,11 +62,9 @@ python3 -m web_console.run --port 18090
 ROS_VERSION=1 /usr/bin/python3 -m web_console.run --port 18090
 ```
 
-Or let the launcher start it in the robot's tmux session (off by default):
-
-```bash
-ENABLE_WEB_CONSOLE=1 bash scripts/ons2_sw01.sh     # also ons2_go2.sh / ons2_dobot_lumo.sh
-```
+On the SW01 host it runs as the systemd service `scripts/systemd/web-console.service`, so it starts at
+boot and is not tied to the navigation tmux session (stopping navigation never stops the console).
+The launchers no longer start it.
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -82,9 +80,24 @@ ENABLE_WEB_CONSOLE=1 bash scripts/ons2_sw01.sh     # also ons2_go2.sh / ons2_dob
 | `--stall-window-sec` / `--stall-radius-m` | `30` / `0.20` | Stall detection window and radius |
 | `--ros-version` | `$ROS_VERSION` | `1` or `2` |
 
-Environment variable for the launchers: `WEB_CONSOLE_PORT` (default `18090`).
-
 ---
+
+## Navigation stack and bag recording (SW01)
+
+**Navigation.** Pick a map and a navigation mode, then start or stop the stack. The console runs the
+existing launchers (`scripts/ons2_sw01.sh --map=<map> --navigation-mode=<mode>` and
+`scripts/ons2_sw01_stop.sh`) and streams their output into the log panel, where `[OK]` gates are green and
+failures are red. Maps come from `ros2_ws/src/map_planner/maps/`; `*` marks a map with a relocalization file in
+`customer_file/`. Starting is refused while the `ons2_sw01` session exists. Starting navigation does not move
+the robot: chassis motion stays disabled until enabled.
+
+**Bag recording.** Tick the topics to record (live list from ROS, with presets for navigation core,
+perception and debug). Recording runs `ros2 bag record` in its own tmux session `ons2_bag`, so a console
+restart does not interrupt it. Stop sends Ctrl-C so the bag is finalized. Bags are written to
+`~/sw01_bag_recordings/` (override with `ONS2_BAG_ROOT`). Topics marked **大** (point clouds, images) make
+large files.
+
+Both start/stop actions and recording start/stop ask for confirmation first.
 
 ## Interfaces used
 

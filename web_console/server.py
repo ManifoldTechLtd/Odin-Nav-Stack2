@@ -99,6 +99,11 @@ def _post_routes(hub):
             req.get("waypoints"), loop=req.get("loop", False), temporary=req.get("temporary", False)),
         "/api/mission/command": lambda req: hub.mission.command(req.get("action", "")),
         "/api/chassis/control": lambda req: hub.mission.set_chassis(req.get("enabled", False)),
+        "/api/stack/start": lambda req: hub.stack.start(req.get("map", ""), req.get("navigation_mode", "replan_periodic")),
+        "/api/stack/stop": lambda req: hub.stack.stop(),
+        "/api/record/start": lambda req: hub.recorder.start(
+            req.get("topics"), name=req.get("name", ""), topic_types=hub.topic_types()),
+        "/api/record/stop": lambda req: hub.recorder.stop(),
     }
 
 
@@ -151,6 +156,16 @@ def make_handler(hub):
                 if self.headers.get("If-None-Match") == etag:
                     return self._send(304, b"", "image/png", [("ETag", etag)])
                 return self._send(200, png, "image/png", [("ETag", etag)])
+            if path == "/api/stack/state":
+                from web_console.stack import MODES
+                payload = hub.stack.status()
+                payload.update({"maps": hub.stack.list_maps(), "modes": list(MODES)})
+                return self._send_json(payload)
+            if path == "/api/record/state":
+                from web_console.recorder import PRESETS
+                return self._send_json(dict(hub.recorder.status(), presets=PRESETS))
+            if path == "/api/record/topics":
+                return self._send_json({"topics": hub.topics()})
             if path == "/api/camera/frame.jpg":
                 jpeg, _, _ = hub.camera.get_latest_frame()
                 if not jpeg and hub.camera.enabled:

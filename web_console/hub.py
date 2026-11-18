@@ -1,6 +1,7 @@
 """Aggregates pose, map, safety, camera, intercom, mission and control state for the HTTP API."""
 
 import json
+import os
 import threading
 import time
 from typing import Callable, Optional
@@ -9,10 +10,14 @@ from web_console.camera import OnDemandImageGate
 from web_console.core import ConsoleState
 from web_console.intercom import AudioIntercom
 from web_console.mission import MissionController
+from web_console.recorder import HEAVY_TYPES, BagRecorder
 from web_console.safety import StallDetector
+from web_console.stack import NavStack
 from web_console.teleop import NavigationAndTeleopController
 
 API_VERSION = 2
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+BAG_ROOT = os.environ.get("ONS2_BAG_ROOT", os.path.expanduser("~/sw01_bag_recordings"))
 
 
 class MonitorStateHub:
@@ -26,13 +31,18 @@ class MonitorStateHub:
         self.intercom = intercom or AudioIntercom()
         self.nav = NavigationAndTeleopController()
         self.mission = MissionController()
+        self.stack = NavStack(repo_root=REPO_ROOT)
+        self.recorder = BagRecorder(bag_root=BAG_ROOT, repo_root=REPO_ROOT)
+        self._list_topics: Callable[[], dict] = lambda: {}
         self._lock = threading.Lock()
         self.system_health: Optional[dict] = None
         self.started_at = time.time()
 
     def bind(self, call_trigger: Callable, publish_cmd_vel: Callable, publish_neupan_stop: Callable,
              publish_estop: Callable, subscribe_image: Callable, unsubscribe_image: Callable,
-             start_mission: Callable, set_chassis: Callable) -> None:
+             start_mission: Callable, set_chassis: Callable, list_topics: Optional[Callable] = None) -> None:
+        if list_topics is not None:
+            self._list_topics = list_topics
         self.camera._subscribe_fn = subscribe_image
         self.camera._unsubscribe_fn = unsubscribe_image
         self.nav._call_service_fn = call_trigger
@@ -40,6 +50,13 @@ class MonitorStateHub:
         self.nav._publish_neupan_stop_fn = publish_neupan_stop
         self.nav._publish_estop_fn = publish_estop
         self.mission.bind(start_mission, call_trigger, set_chassis)
+
+    def topic_types(self) -> dict:
+        return {name: list(types) for name, types in self._list_topics().items()}
+
+    def topics(self) -> list:
+        return [{"name": n, "types": t, "heavy": any(x in HEAVY_TYPES for x in t)}
+                for n, t in sorted(self.topic_types().items())]
 
     def on_odom(self, x, y, vx, vy, vyaw, yaw) -> None:
         self.stall.update_odom(x, y, vx=vx, vy=vy, vyaw=vyaw, yaw=yaw)

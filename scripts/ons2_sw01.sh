@@ -98,15 +98,6 @@ ons2_start_window "${SESSION}" foxglove "${ENV_PREFIX} && ros2 run foxglove_brid
 ons2_start_window "${SESSION}" health "${ENV_PREFIX} && python3 ${REPO_ROOT}/ros2_ws/scripts/node_health_monitor.py 2>&1 | tee ${LOG_DIR}/health.log"
 ons2_start_window "${SESSION}" control "${ENV_PREFIX} && python3 ${REPO_ROOT}/ros2_ws/scripts/test_nav_control_ros2.py --allow-motion"
 
-# Optional web console (off by default): map, mission, e-stop, teleop, camera and intercom.
-#   ENABLE_WEB_CONSOLE=1 bash scripts/ons2_sw01.sh [WEB_CONSOLE_PORT=18090]
-# Single port serving both HTTP and HTTPS, so a NAT tunnel only needs one port.
-# No authentication: keep it on trusted networks or behind a VPN.
-# See docs/remote_monitoring.md for the network prerequisites (4G / tunnel / VPS).
-if [ "${ENABLE_WEB_CONSOLE:-0}" = "1" ]; then
-  WEB_CONSOLE_PORT="${WEB_CONSOLE_PORT:-18090}"
-  ons2_start_window "${SESSION}" web_console "${ENV_PREFIX} && cd ${REPO_ROOT} && python3 -m web_console.run --port ${WEB_CONSOLE_PORT} 2>&1 | tee ${LOG_DIR}/web_console.log"
-fi
 
 ons2_log "=================================================="
 ons2_log "SW01 stack started"
@@ -114,9 +105,6 @@ ons2_log "  Local planner : ${LOCAL_PLANNER}"
 ons2_log "  Navigation    : ${NAVIGATION_MODE}"
 ons2_log "  Map           : ${MAP_FILE_NAME}"
 ons2_log "  Attach        : tmux attach -t ${SESSION}"
-if [ "${ENABLE_WEB_CONSOLE:-0}" = "1" ]; then
-  ons2_log "  Web console   : http://<robot-ip>:${WEB_CONSOLE_PORT:-18090}  (ENABLE_WEB_CONSOLE=1)"
-fi
 ons2_log "  Stop          : bash ${SCRIPT_DIR}/ons2_sw01_stop.sh"
 ons2_log "  Chassis       : motion DISABLED until enabled (control window [c], or:"
 ons2_log "                  ros2 service call /sw01_cmd_vel_bridge/enable std_srvs/srv/SetBool \"{data: true}\")"

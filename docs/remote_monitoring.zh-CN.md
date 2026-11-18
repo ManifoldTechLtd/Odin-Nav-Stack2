@@ -55,11 +55,7 @@ python3 -m web_console.run --port 18090
 ROS_VERSION=1 /usr/bin/python3 -m web_console.run --port 18090
 ```
 
-也可以由启动脚本在机器人的 tmux 会话里拉起（默认关闭）：
-
-```bash
-ENABLE_WEB_CONSOLE=1 bash scripts/ons2_sw01.sh     # 同样支持 ons2_go2.sh / ons2_dobot_lumo.sh
-```
+在 SW01 主机上，控制台以 systemd 服务 `scripts/systemd/web-console.service` 运行，开机自起，且不依赖导航的 tmux 会话（停止导航不会停止控制台）。启动脚本不再拉起它。
 
 | 参数 | 默认值 | 含义 |
 |---|---|---|
@@ -75,9 +71,15 @@ ENABLE_WEB_CONSOLE=1 bash scripts/ons2_sw01.sh     # 同样支持 ons2_go2.sh / 
 | `--stall-window-sec` / `--stall-radius-m` | `30` / `0.20` | 停止检测的窗口与半径 |
 | `--ros-version` | `$ROS_VERSION` | `1` 或 `2` |
 
-启动脚本使用的环境变量：`WEB_CONSOLE_PORT`（默认 `18090`）。
-
 ---
+
+## 导航栈与录包（SW01）
+
+**导航**：选择地图和导航模式后启动或停止导航。控制台调用现有的启动脚本（`scripts/ons2_sw01.sh --map=<地图> --navigation-mode=<模式>`）和停止脚本（`scripts/ons2_sw01_stop.sh`），把输出实时显示在日志区：`[OK]` 为绿色，失败为红色。地图来自 `ros2_ws/src/map_planner/maps/`，带 `*` 的地图在 `customer_file/` 里有重定位文件。`ons2_sw01` 会话存在时拒绝再次启动。启动导航不会让机器人运动，底盘运动仍需单独使能。
+
+**录包**：勾选要录的话题（来自 ROS 实时列表，提供导航核心、感知、调试三组预设）。录包运行在独立的 tmux 会话 `ons2_bag` 里，控制台重启不会中断录包。结束时发送 Ctrl-C，让 bag 正常收尾。文件保存到 `~/sw01_bag_recordings/`（可用 `ONS2_BAG_ROOT` 修改）。标记为 **大** 的话题（点云、图像）会产生较大的文件。
+
+导航启停和录包的开始、结束都会先弹确认框。
 
 ## 使用的接口
 
