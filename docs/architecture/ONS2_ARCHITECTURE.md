@@ -28,7 +28,7 @@ flowchart TB
 
     subgraph Sensor["2. Sensor Relocalization Gates & Perception Base"]
         ODIN["odin_ros_driver (custom_map_mode=2 Relocalization)<br/>Gate 1: Device Ready → Gate 2: Reloc / TF Ready"]
-        BASE_PERC["Perception & TF Base (ons2_bringup)<br/>• Static TF: odin1_base_link → base_link (sensor_mount)<br/>• map_server: maps/&lt;map&gt;.yaml → /map<br/>• pc_to_scan: /odin1/cloud_slam → /scan<br/>• sliding_map_node: /scan + odom → /scan_360, /sliding_map"]
+        BASE_PERC["Perception & TF Base (ons2_bringup)<br/>• Static TF: odin1_base_link → base_link (sensor_mount)<br/>• map_server: maps/&lt;map&gt;.yaml → /map<br/>• pc_to_scan: /odin1/cloud_filtered → /scan (ROS 2 default; /odin1/cloud_slam when cloud_filter≠on)<br/>• sliding_map_node: /scan + odom → /scan_360, /sliding_map"]
         PROFILE --> ODIN --> BASE_PERC
     end
 
@@ -136,7 +136,8 @@ base_inspection/
 - **Gate 1** waits for `Device ready and streams activated`; **Gate 2** waits for `relocalization success` (or `odom -> map` TF on O1L) before launching downstream navigation nodes.
 
 ### 5.2 Perception Chain (`pc_to_scan` -> `scan_temporal_filter` -> `sliding_map`)
-- **`pc_to_scan`**: Projects `/odin1/cloud_slam` into `odin1_base_link` using `navigation.min_height` and `navigation.max_height` from `robots/<robot>/robot.yaml`.
+- **Cloud persistence filter (`odin_cloud_temporal_filter`, ROS 2)**: Launched by `ons2_bringup` with `cloud_filter` (`on` | `shadow` | `off`, default `on`). It consumes `/odin1/cloud_slam` + `/odin1/odometry` and publishes `/odin1/cloud_filtered`; with `on`, `pc_to_scan` reads the filtered cloud, with `shadow` the filter runs without redirecting `pc_to_scan`, and with `off` it is not launched. The ROS 1 `whole.launch` defaults `cloud_filter_mode` to `off`. Parameters: `map_planner/config/odin_cloud_filter.yaml`.
+- **`pc_to_scan`**: Projects the active cloud (`/odin1/cloud_filtered` when `cloud_filter=on`, otherwise `/odin1/cloud_slam`) into `odin1_base_link` using `navigation.min_height` and `navigation.max_height` from `robots/<robot>/robot.yaml`.
 - **`sliding_map`**: Compensates for the forward sensor's ~90-degree horizontal FOV by accumulating scans in an ego-centric grid (`/sliding_map` and 360-degree `/scan_360`), filtering out returns inside the robot's own footprint (`geometry.footprint` in `robot.yaml`), and decaying blind-spot cells after `cell_decay_sec` (`8.0 s`) while immediately clearing cells traversed by visible free rays.
 
 ### 5.3 Pluggable Global Planner (`global_planner`)
@@ -176,4 +177,5 @@ stateDiagram-v2
     NAVIGATING --> CANCELLED: cancel
 ```
 
+- **Periodic replan install gate (`install_gate_enable`, default `true` on both ROS 1 `mission_manager.launch` and ROS 2 `mission_manager.launch.py`)**: before a periodic replan result replaces the active path, `mission_manager` checks the candidate and rejects it with `REQUIRES_ALIGNMENT`, `HEADING_WORSEN`, `NO_CHANGE` or `SIDE_LOCK`. `install_gate_shadow` (default `false`) only logs the decision without blocking. The path-validity watchdog (`path_block_replan_enable`, default `true`) depends on this gate's blocked detection.
 - Upon reaching a waypoint (`ARRIVED`), `mission_manager` publishes `stop_topic` (`/neupan/stop`) and disables `enable_topic` (`/sru/cmd_vel_enable`) to guarantee exclusive `/cmd_vel` ownership before invoking `atomic_move` (`/atomic_move/align`) for closed-loop final yaw alignment.

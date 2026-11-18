@@ -54,7 +54,7 @@ flowchart LR
 | Module | Subscribed Inputs | Published Outputs / Services | Key Config Source | Primary Diagnostic Signal |
 |---|---|---|---|---|
 | `odin_ros_driver` | Sensor USB / Ethernet | `/odin1/cloud_slam`, `/odin1/odometry`, TF `map->odom->imu` | `control_command.yaml` (`custom_map_mode=2`) | `rostopic hz /odin1/odometry` |
-| `pc_to_scan` | `/odin1/cloud_slam` | `/scan` (or `/scan_raw`), 90° FOV (`±0.7853 rad`), `range_max=5.0 m` | `robots/<robot>/robot.yaml` (`navigation.min/max_height`) | `rostopic hz /scan` |
+| `pc_to_scan` | `/odin1/cloud_filtered` (ROS 2 default, `cloud_filter=on`) or `/odin1/cloud_slam` (ROS 1 default, or `cloud_filter=off`) | `/scan` (or `/scan_raw`), 90° FOV (`±0.7853 rad`), `range_max=5.0 m` | `robots/<robot>/robot.yaml` (`navigation.min/max_height`) | `rostopic hz /scan` |
 | `scan_temporal_filter` | `/scan_raw` | `/scan` | `enable: false` (passthrough by default) | `/scan_temporal_filter/trace` |
 | `sliding_map_node` | `/scan`, `/odin1/odometry`, TF | `/scan_360`, `/sliding_map` | `robots/<robot>/robot.yaml` (`geometry.footprint`), `cell_decay_sec=8.0` | `/sliding_map` occupied cell count |
 | `map_planner` | `/map`, `/sliding_map` | `/initial_path`, `/inflated_map`, srv `/map_planner/plan`, `/map_planner/validate_path` | `map_planner/config/nav_params.yaml` + `robot.yaml` overrides | Plan latency log & `/inflated_map` |

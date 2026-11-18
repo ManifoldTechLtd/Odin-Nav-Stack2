@@ -9,7 +9,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# SLAM navigation filtering is opt-in: --cloud-filter=on (default: off).
+# Launched by ons2_bringup bringup.launch.py with cloud_filter:=on|shadow|off (ROS 2 default: on).
+# on: pc_to_scan reads /odin1/cloud_filtered; shadow: filter runs but pc_to_scan keeps /odin1/cloud_slam; off: not launched.
+# ROS 1 (map_planner whole.launch) cloud_filter_mode defaults to off.
 # Voxel persistence + near-field blind-spot point cloud filter (single-threaded subscription to cloud_slam and odometry).
 odin_cloud_temporal_filter:
   ros__parameters:
