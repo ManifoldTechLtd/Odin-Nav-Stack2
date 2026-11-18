@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ONS2 Web Console</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #14171c; color: #e6e9ef;
+    font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans CJK SC", sans-serif; }
+  #bar { position: fixed; top: 0; left: 0; right: 0; height: 44px; display: flex; align-items: center;
+    gap: 16px; padding: 0 14px; background: rgba(20, 23, 28, 0.92); border-bottom: 1px solid #2a2f38; z-index: 1; }
+  #bar .title { font-weight: 600; }
+  #bar .item { font-size: 13px; color: #9aa3b2; white-space: nowrap; }
+  #bar .item b { color: #e6e9ef; font-weight: 500; }
+  #bar .spacer { flex: 1; }
+  button { background: #262c36; color: #e6e9ef; border: 1px solid #3a414e; border-radius: 4px;
+    padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  button:hover { background: #313845; }
+  #dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #e0a030; margin-right: 6px; }
+  #dot.ok { background: #3fb950; }
+  #dot.bad { background: #f85149; }
+  #map { position: fixed; top: 44px; left: 0; right: 0; bottom: 0; width: 100%; height: calc(100% - 44px);
+    display: block; cursor: grab; }
+  #map.dragging { cursor: grabbing; }
+  #hint { position: fixed; bottom: 10px; left: 14px; font-size: 12px; color: #6b7585; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <span class="title"><span id="dot"></span>ONS2 控制台</span>
+  <span class="item">位置 <b id="pos">--</b></span>
+  <span class="item">朝向 <b id="yaw">--</b></span>
+  <span class="item">地图 <b id="mapinfo">--</b></span>
+  <span class="item" id="status">等待数据</span>
+  <span class="spacer"></span>
+  <button id="center">居中机器人</button>
+  <button id="fit">适应地图</button>
+</div>
+<canvas id="map"></canvas>
+<div id="hint">滚轮缩放 · 拖拽平移</div>
+<script>
+(function () {
+  var canvas = document.getElementById('map');
+  var ctx = canvas.getContext('2d');
+  var mapImg = null, mapMeta = null, mapVersion = -1;
+  var state = null, online = false;
+  var view = { zoom: 1, ox: 0, oy: 0, fitted: false };
+  var drag = null;
+
+  function resize() {
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(canvas.clientWidth * dpr);
+    canvas.height = Math.round(canvas.clientHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+
+  // Map cell coordinates (column, row from the top of the PNG) for a world pose.
+  function worldToCell(x, y) {
+    return { c: (x - mapMeta.origin.x) / mapMeta.resolution,
+             r: mapMeta.height - (y - mapMeta.origin.y) / mapMeta.resolution };
+  }
+
+  function cellToScreen(c, r) {
+    return { x: view.ox + c * view.zoom, y: view.oy + r * view.zoom };
+  }
+
+  function fitMap() {
+    if (!mapMeta) return;
+    var cw = canvas.clientWidth, ch = canvas.clientHeight;
+    view.zoom = Math.min(cw / mapMeta.width, ch / mapMeta.height) * 0.95;
+    view.ox = (cw - mapMeta.width * view.zoom) / 2;
+    view.oy = (ch - mapMeta.height * view.zoom) / 2;
+    view.fitted = true;
+  }
+
+  function centerRobot() {
+    if (!mapMeta || !state || !state.pose) return;
+    var p = worldToCell(state.pose.x, state.pose.y);
+    view.ox = canvas.clientWidth / 2 - p.c * view.zoom;
+    view.oy = canvas.clientHeight / 2 - p.r * view.zoom;
+  }
+
+  function drawRobot() {
+    if (!mapMeta || !state || !state.pose) return;
+    var p = worldToCell(state.pose.x, state.pose.y);
+    var s = cellToScreen(p.c, p.r);
+    var stale = state.pose.age_sec > 2.0;
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(-state.pose.yaw);
+    var size = Math.max(8, Math.min(18, 0.45 / mapMeta.resolution * view.zoom));
+    ctx.beginPath();
+    ctx.moveTo(size, 0);
+    ctx.lineTo(-size * 0.7, size * 0.6);
+    ctx.lineTo(-size * 0.4, 0);
+    ctx.lineTo(-size * 0.7, -size * 0.6);
+    ctx.closePath();
+    ctx.fillStyle = stale ? '#8b949e' : '#3fb950';
+    ctx.strokeStyle = '#0d1117';
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function draw() {
+    var cw = canvas.clientWidth, ch = canvas.clientHeight;
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, cw, ch);
+    if (mapImg && mapMeta) {
+      ctx.imageSmoothingEnabled = view.zoom < 1;
+      ctx.drawImage(mapImg, view.ox, view.oy, mapMeta.width * view.zoom, mapMeta.height * view.zoom);
+    } else {
+      ctx.fillStyle = '#6b7585';
+      ctx.font = '14px system-ui, sans-serif';
+      ctx.fillText('等待地图（/map）…', 20, 40);
+    }
+    drawRobot();
+  }
+
+  function updateBar() {
+    var dot = document.getElementById('dot');
+    var status = document.getElementById('status');
+    dot.className = online ? 'ok' : 'bad';
+    status.textContent = !online ? '连接中断' : !state ? '连接中' : !state.map ? '未收到地图' :
+      !state.pose ? '无定位（map→base_link 不可用）' :
+      state.pose.age_sec > 2.0 ? '位姿过期' : '定位正常';
+    var pos = document.getElementById('pos');
+    var yaw = document.getElementById('yaw');
+    var info = document.getElementById('mapinfo');
+    pos.textContent = state && state.pose ? state.pose.x.toFixed(2) + ', ' + state.pose.y.toFixed(2) + ' m' : '--';
+    yaw.textContent = state && state.pose ? state.pose.yaw_deg.toFixed(1) + '°' : '--';
+    info.textContent = mapMeta ? mapMeta.width + '×' + mapMeta.height + ' @ ' + mapMeta.resolution.toFixed(3) + ' m/格' : '--';
+  }
+
+  function loadMap(meta) {
+    mapMeta = meta;
+    mapVersion = meta.version;
+    var img = new Image();
+    img.onload = function () {
+      mapImg = img;
+      if (!view.fitted) fitMap();
+      draw();
+    };
+    img.src = '/api/map.png?v=' + meta.version;
+  }
+
+  function poll() {
+    fetch('/api/state', { cache: 'no-store' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        online = true;
+        state = data;
+        if (data.map && data.map.version !== mapVersion) loadMap(data.map);
+        updateBar();
+        draw();
+      })
+      .catch(function () {
+        online = false;
+        updateBar();
+      });
+  }
+
+  canvas.addEventListener('wheel', function (e) {
+    if (!mapMeta) return;
+    e.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    var factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    var next = Math.min(Math.max(view.zoom * factor, 0.05), 40);
+    view.ox = mx - (mx - view.ox) * (next / view.zoom);
+    view.oy = my - (my - view.oy) * (next / view.zoom);
+    view.zoom = next;
+    draw();
+  }, { passive: false });
+
+  canvas.addEventListener('mousedown', function (e) {
+    drag = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy };
+    canvas.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', function (e) {
+    if (!drag) return;
+    view.ox = drag.ox + (e.clientX - drag.x);
+    view.oy = drag.oy + (e.clientY - drag.y);
+    draw();
+  });
+  window.addEventListener('mouseup', function () {
+    drag = null;
+    canvas.classList.remove('dragging');
+  });
+
+  document.getElementById('center').addEventListener('click', centerRobot);
+  document.getElementById('fit').addEventListener('click', function () { fitMap(); draw(); });
+  window.addEventListener('resize', resize);
+
+  resize();
+  poll();
+  setInterval(poll, 200);
+})();
+</script>
+</body>
+</html>
