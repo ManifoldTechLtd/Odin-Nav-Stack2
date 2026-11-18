@@ -68,6 +68,7 @@
     <span class="item">朝向 <b id="yaw">--</b></span>
     <span class="item">地图 <b id="mapinfo">--</b></span>
     <span class="chip" id="locChip">--</span>
+    <span class="chip bad" id="verChip" hidden>控制台版本过旧，请重启 web_console</span>
     <span class="chip" id="estopChip" hidden>急停中</span>
     <span class="chip" id="alarmChip" hidden>安全告警</span>
     <span class="chip" id="chassisChip" hidden>底盘</span>
@@ -182,6 +183,7 @@
         <span class="muted">帧率</span>
         <select id="fps"><option>1</option><option selected>2</option><option>5</option></select>
       </div>
+      <div class="muted" id="camStatus" style="font-size:12px;margin-top:6px">相机关闭</div>
       <img id="cam" alt="">
     </div>
 
@@ -214,7 +216,7 @@
   var teleop = { held: {}, timer: null, keyDir: {} };
   var alarm = { ctx: null, timer: null, enabled: false };
   var camTimer = null, camLoading = false, camFps = 2;
-  var presetsReady = false;
+  var presetsReady = false, lastIcErr = null, API_VERSION = 2;
 
   function setToast(id, text) { $(id).textContent = text || ''; }
   function describe(res, fallback) {
@@ -222,9 +224,18 @@
     if (res.message) return res.message;
     return res.ok ? (fallback + ' 成功') : (fallback + ' 失败');
   }
+  function readJson(res) {
+    return res.text().then(function (txt) {
+      try { return JSON.parse(txt); } catch (e) {
+        return { ok: false, message: 'HTTP ' + res.status + '：服务端返回了非 JSON 内容，控制台进程可能是旧版本，请重启 web_console' };
+      }
+    });
+  }
   function post(url, body) {
     return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); });
+      body: JSON.stringify(body || {}) }).then(readJson, function (err) {
+        return { ok: false, message: '网络错误：' + err.message };
+      });
   }
 
   // ---------- map view ----------
@@ -590,7 +601,7 @@
         setToast('intercomToast', '上传录音…');
         fetch('/api/audio/speak_raw?volume=100&mime=' + encodeURIComponent(type),
           { method: 'POST', headers: { 'Content-Type': type }, body: blob })
-          .then(function (r) { return r.json(); })
+          .then(readJson)
           .then(function (res) { setToast('intercomToast', describe(res, '录音播报')); });
       };
       recorder.start(); $('bMic').textContent = '停止录音';
@@ -602,7 +613,7 @@
     setToast('intercomToast', '上传音频…');
     fetch('/api/audio/speak_raw?volume=100&mime=' + encodeURIComponent(file.type || 'audio/mpeg'),
       { method: 'POST', headers: { 'Content-Type': file.type || 'audio/mpeg' }, body: file })
-      .then(function (r) { return r.json(); })
+      .then(readJson)
       .then(function (res) { setToast('intercomToast', describe(res, '音频播报')); });
     this.value = '';
   });
@@ -627,6 +638,7 @@
     var now = new Date();
     $('clock').textContent = now.toLocaleTimeString();
     if (!S) return;
+    $('verChip').hidden = S.api_version === API_VERSION;
     var pose = S.pose;
     $('pos').textContent = pose ? pose.x.toFixed(2) + ', ' + pose.y.toFixed(2) + ' m' : '--';
     $('yaw').textContent = pose ? pose.yaw_deg.toFixed(1) + '°' : '--';
@@ -651,7 +663,7 @@
     $('chassisChip').hidden = !supported;
     $('chassisChip').className = 'chip ' + (chassisOn ? 'ok' : 'warn');
     $('chassisChip').textContent = chassisOn ? '底盘已使能' : '底盘未使能';
-    $('chassisText').textContent = supported ? (chassisOn ? '底盘：已使能' : '底盘：未使能（运动被禁止）') : '当前平台无底盘使能接口';
+    $('chassisText').textContent = supported ? (chassisOn ? '底盘：已使能' : '底盘：未使能（运动被禁止）') : '未检测到底盘使能接口（需要 SW01 底盘桥运行并发布 motion_enabled）';
     $('bChassisOn').disabled = !supported; $('bChassisOff').disabled = !supported;
 
     var saf = S.safety || {};
@@ -666,13 +678,23 @@
     var cam = S.camera || {};
     $('bCam').textContent = cam.enabled ? '关闭相机' : '开启相机';
     $('bCam').classList.toggle('on', !!cam.enabled);
-    $('cam').style.display = cam.enabled ? 'block' : 'none';
+    if (!cam.enabled) $('camStatus').textContent = '相机关闭';
+    else if (!cam.frame_seq) $('camStatus').textContent = '已开启，等待图像：' + (cam.topic || '') +
+      ' 暂无数据（请检查驱动的 sendrgbcompressed 是否开启）';
+    else $('camStatus').textContent = '帧 ' + cam.frame_seq + ' · 最近一帧 ' +
+      (cam.frame_age_sec != null ? cam.frame_age_sec.toFixed(1) + ' s 前' : '--') + ' · ' +
+      Math.round((cam.frame_size_bytes || 0) / 1024) + ' KB';
+    $('cam').style.display = cam.enabled && cam.frame_seq ? 'block' : 'none';
     if (cam.enabled && !camTimer && !camLoading) frameLoop();
 
-    renderPresets(S.intercom && S.intercom.presets);
+    var ic = S.intercom || {};
+    if (ic.last_error && ic.last_error !== lastIcErr) {
+      lastIcErr = ic.last_error; setToast('intercomToast', '播报失败：' + ic.last_error);
+    }
+    renderPresets(ic.presets);
   }
   function refresh() {
-    return fetch('/api/state', { cache: 'no-store' }).then(function (r) { return r.json(); })
+    return fetch('/api/state', { cache: 'no-store' }).then(readJson)
       .then(function (data) {
         online = true; S = data;
         $('linkChip').className = 'chip ok'; $('linkChip').textContent = '已连接';

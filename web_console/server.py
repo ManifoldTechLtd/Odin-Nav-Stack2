@@ -88,7 +88,7 @@ def _post_routes(hub):
             "ok": True, "camera": hub.camera.set_enabled(bool(req.get("enabled", False)), fps=req.get("fps"))},
         "/api/safety/control": safety_control,
         "/api/safety/ack": safety_ack,
-        "/api/audio/speak_tts": lambda req: hub.intercom.speak_tts(
+        "/api/audio/speak_tts": lambda req: hub.intercom.speak_tts_async(
             text=req.get("text", ""), volume=int(req.get("volume", 100)), voice=req.get("voice")),
         "/api/nav/command": lambda req: hub.nav.execute_nav_command(req.get("action", "")),
         "/api/teleop/control": lambda req: hub.nav.set_teleop_takeover(
@@ -168,7 +168,7 @@ def make_handler(hub):
                     qs = parse_qs(parsed.query)
                     volume = int((qs.get("volume") or ["100"])[0])
                     mime = (qs.get("mime") or [self.headers.get("Content-Type", "webm")])[0]
-                    return self._send_json(hub.intercom.speak_raw_audio(body, mime_or_ext=mime, volume=volume))
+                    return self._send_json(hub.intercom.speak_raw_async(body, mime_or_ext=mime, volume=volume))
                 handler = routes.get(parsed.path)
                 if handler is None:
                     return self._send_json({"ok": False, "error": "Not Found"}, status=404)

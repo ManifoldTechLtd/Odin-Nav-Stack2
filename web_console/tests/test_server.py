@@ -7,7 +7,7 @@ import urllib.request
 
 import pytest
 
-from web_console.hub import MonitorStateHub
+from web_console.hub import API_VERSION, MonitorStateHub
 from web_console.server import make_server
 
 
@@ -170,6 +170,37 @@ def test_single_port_serves_https_and_http():
         assert status == 200
         status, _, _ = get("http://127.0.0.1:{}/api/state".format(port))
         assert status == 200
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_state_reports_api_version(served):
+    _, _, base = served
+    status, _, body = get(base + "/api/state")
+    assert json.loads(body)["api_version"] == API_VERSION
+
+
+def test_speak_tts_returns_before_playback_finishes(tmp_path):
+    import time
+    from web_console.intercom import AudioIntercom
+
+    def slow_tts(text, out_wav):
+        time.sleep(1.0)
+        with open(out_wav, "wb") as f:
+            f.write(b"x" * 1024)
+
+    hub = MonitorStateHub(intercom=AudioIntercom(cache_dir=str(tmp_path), custom_tts_fn=slow_tts,
+                                                 custom_play_fn=lambda p, m: None))
+    server = make_server("127.0.0.1", 0, hub, enable_tls=False)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        started = time.time()
+        status, res = post("http://127.0.0.1:{}/api/audio/speak_tts".format(server.server_address[1]),
+                           {"text": "请让一让"})
+        assert status == 200 and res["queued"] is True
+        assert time.time() - started < 0.8
     finally:
         server.shutdown()
         server.server_close()

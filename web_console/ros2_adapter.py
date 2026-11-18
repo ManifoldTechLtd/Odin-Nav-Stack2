@@ -138,7 +138,7 @@ def run(args, hub):
                     self._img_sub = None
 
         def _call(self, name, client, request, timeout=5.0):
-            if not client.wait_for_service(timeout_sec=0.5):
+            if not client.wait_for_service(timeout_sec=2.0):
                 return None, "服务 {} 当前未就绪（导航栈可能未启动）".format(name)
             future = client.call_async(request)
             deadline = time.monotonic() + timeout
@@ -178,7 +178,7 @@ def run(args, hub):
             req.data = bool(enabled)
             res, err = self._call(CHASSIS_ENABLE_SERVICE, self._chassis_client, req, timeout=5.0)
             if err:
-                return False, "当前平台没有底盘使能接口（{}）".format(err)
+                return False, "底盘使能服务不可用：{}".format(err)
             return bool(res.success), str(res.message)
 
     rclpy.init()

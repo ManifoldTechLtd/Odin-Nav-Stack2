@@ -12,6 +12,8 @@ from web_console.mission import MissionController
 from web_console.safety import StallDetector
 from web_console.teleop import NavigationAndTeleopController
 
+API_VERSION = 2
+
 
 class MonitorStateHub:
     """Central thread-safe state hub shared between ROS callbacks and the HTTP server."""
@@ -70,6 +72,7 @@ class MonitorStateHub:
         console = self.console.snapshot()
         return {
             "ok": True,
+            "api_version": API_VERSION,
             "server_time": now,
             "uptime_sec": round(now - self.started_at, 1),
             "pose": console["pose"],

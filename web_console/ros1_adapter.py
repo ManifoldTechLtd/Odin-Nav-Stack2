@@ -113,8 +113,8 @@ def run(args, hub):
             rospy.wait_for_service(CHASSIS_ENABLE_SERVICE, timeout=2.0)
             res = rospy.ServiceProxy(CHASSIS_ENABLE_SERVICE, SetBool)(data=bool(enabled))
             return bool(res.success), str(res.message)
-        except (rospy.ROSException, rospy.ServiceException):
-            return False, "当前平台没有底盘使能接口"
+        except (rospy.ROSException, rospy.ServiceException) as exc:
+            return False, "底盘使能服务不可用：{}".format(exc)
 
     def subscribe_image():
         with img_lock:

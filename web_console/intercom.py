@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 import os
 import shutil
 import subprocess
@@ -9,6 +10,9 @@ import tempfile
 import threading
 import time
 from typing import Callable, Optional
+
+
+MAX_QUEUED = 5
 
 
 class AudioIntercom:
@@ -36,9 +40,44 @@ class AudioIntercom:
         self._custom_play_fn = custom_play_fn
         self._custom_tts_fn = custom_tts_fn
         self._play_lock = threading.Lock()
+        self._worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="intercom")
+        self._pending_lock = threading.Lock()
+        self._pending = 0
+        self.last_error: Optional[str] = None
         self.last_spoken_at: Optional[float] = None
         self.last_spoken_summary: str = ""
         self.play_count: int = 0
+
+    def _submit(self, fn, *args):
+        with self._pending_lock:
+            if self._pending >= MAX_QUEUED:
+                raise ValueError("播报队列已满，请稍后再试")
+            self._pending += 1
+
+        def job():
+            try:
+                fn(*args)
+                self.last_error = None
+            except Exception as exc:
+                self.last_error = str(exc) or exc.__class__.__name__
+            finally:
+                with self._pending_lock:
+                    self._pending -= 1
+
+        self._worker.submit(job)
+        return {"ok": True, "queued": True, "message": "已加入播报队列"}
+
+    def speak_tts_async(self, text: str, volume: int = 100, voice: Optional[str] = None) -> dict:
+        clean_text = (text or "").strip()
+        if not clean_text:
+            raise ValueError("播报文字不能为空")
+        res = self._submit(self.speak_tts, clean_text, volume, voice)
+        return dict(res, text=clean_text[:200], volume=volume)
+
+    def speak_raw_async(self, raw_bytes: bytes, mime_or_ext: str = "webm", volume: int = 100) -> dict:
+        if not raw_bytes or len(raw_bytes) < 64:
+            raise ValueError("录音数据为空或过短")
+        return self._submit(self.speak_raw_audio, raw_bytes, mime_or_ext, volume)
 
     def speak_tts(self, text: str, volume: int = 100, voice: Optional[str] = None) -> dict:
         clean_text = (text or "").strip()
@@ -262,6 +301,8 @@ class AudioIntercom:
             "play_count": self.play_count,
             "last_spoken_at": self.last_spoken_at,
             "last_spoken_summary": self.last_spoken_summary,
+            "pending": self._pending,
+            "last_error": self.last_error,
             "presets": list(self.PRESET_PHRASES),
         }
 
