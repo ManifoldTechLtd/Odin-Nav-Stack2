@@ -1,129 +1,102 @@
-# Remote Web Monitor
+# Web Console (remote monitoring and control)
 
 **English** | [中文](remote_monitoring.zh-CN.md)
 
-> [!NOTE]
-> **ROS 2 only.** The monitor is written against `rclpy`, so it runs on ROS 2 platforms only
-> (ASTRALL SW01 today). **ROS 1 platforms (Go2, Dobot Lumo) are not supported**: the ROS 1
-> launchers cannot start it, and no ROS 1 port is provided in this release.
+`web_console/` is the browser console for ONS2 robots. It replaces the terminal navigation
+console (`test_nav_control_*.py`) and the older `ros2_ws/scripts/remote_monitor.py`, which is now
+deprecated. One process, one port, one page:
 
-`ros2_ws/scripts/remote_monitor.py` — a single-process, single-port web console for operating
-an ONS2 robot from a browser anywhere: live status, on-demand camera, audio intercom, and
-navigation control with an emergency stop.
+- **Global map and robot pose** — live map (`/map`) with the robot position and heading (`map → base_link`).
+- **Waypoint missions** — click the map to add waypoints (drag to set heading), edit dwell times,
+  loop / temporary options, import and export JSON, then run. Pause, resume, skip, cancel,
+  return home and reset.
+- **Emergency stop and manual takeover** — latched e-stop, teleop with a watchdog (release the
+  button or key and the robot stops), keyboard `W A S D Q E`.
+- **Chassis enable** (SW01) — enable or disable the motion bridge from the page.
+- **Stall alarm** — flags a robot that stops or creeps during a mission; force monitoring, mute and
+  window / radius settings.
+- **On-demand camera** — frames are only pulled while the camera is on (cellular bandwidth switch).
+- **Intercom** — text-to-speech, preset phrases, browser microphone recording and audio upload,
+  played on the robot speaker.
+
+ROS 2 (ASTRALL SW01) is the verified target. ROS 1 (Go2, Dobot Lumo) is implemented with the same
+behaviour but has not yet been verified on hardware.
 
 ---
 
-## ⚠️ Network prerequisite (read this first)
+## Network prerequisite (read this first)
 
-The script only listens on the robot. **Reaching it from outside the LAN is your
-responsibility** — the component does not include any tunnel or relay. You need **one** of:
+The console only listens on the robot. Reaching it from outside the LAN is your responsibility:
 
 | Option | What you need | Notes |
 |---|---|---|
-| **Same LAN** | Nothing extra | `http://<robot-ip>:18088` works directly. Browser microphone needs HTTPS unless you use `localhost`. |
-| **4G / cellular** | A 4G module (or phone hotspot) on the robot + a reachable public address | Mobile carriers use shared NAT — you cannot dial in directly. Combine with a tunnel (next row). |
-| **NAT traversal / tunnel** | A tunnel service such as frp, natfrp, or another equivalent, **plus a VPS if you self-host** | Map one public port to `127.0.0.1:18088`. This is exactly why the server speaks HTTP and HTTPS on a **single port**. |
-| **Your own public server** | A VPS with a public IPv4 and a reverse proxy | Point the proxy at the robot over an existing tunnel/VPN. |
+| **Same LAN** | Nothing extra | `http://<robot-ip>:18090`. The browser microphone needs HTTPS unless you use `localhost`. |
+| **4G / cellular** | A 4G module (or phone hotspot) plus a reachable public address | Carriers use shared NAT, so you cannot dial in directly. Combine with a tunnel. |
+| **NAT traversal / tunnel** | frp, natfrp or an equivalent, plus a VPS if you self-host | Map one public port to `127.0.0.1:18090`. HTTP and HTTPS share that single port. |
 
-**Why a single port matters:** the server auto-detects TLS on the same port, so your tunnel
-only has to expose **one** port instead of two. HTTPS is also a hard requirement for browser
-microphone access on any non-`localhost` origin.
-
-> There is no cloud account, no relay, and no default credentials in this component.
-> Treat it as a service you deploy behind whatever connectivity you already trust.
+> There is no cloud account, relay or default credential in this component.
 
 ---
 
-## What it does
+## Security
 
-| Module | Class | Function |
-|---|---|---|
-| Safety stall monitor | `StallDetector` | Alerts when net displacement stays below a radius inside a sliding window — distinguishes "stopped", "creeping / blocked" and "odometry dropped out" |
-| On-demand camera | `OnDemandImageGate` | Subscribes to `/odin1/image/compressed` **only while the page requests frames**, then downscales/recompresses for constrained links |
-| Remote intercom | `AudioIntercom` | Browser microphone or text-to-speech, played through the robot's onboard speaker |
-| Navigation & teleop | `NavigationAndTeleopController` | Emergency-stop latch, pause / resume / cancel / skip waypoint, manual takeover with watchdog |
-| State hub | `MonitorStateHub` | Aggregates the above for the HTTP API and the page |
-| Server | `DualProtocolHTTPServer` | HTTP **and** HTTPS on one port |
-
-Design consequences worth knowing:
-
-- **Zero bandwidth by default** — the image topic is *not* subscribed until the page asks for
-  it. An idle console costs the cellular link essentially nothing.
-- **Low-frequency polling** — the page fetches `GET /api/status`; no continuous video stream
-  unless you turn the camera on.
-- **Single process, single port** — default `0.0.0.0:18088`.
+- **No authentication.** Anyone who can reach the port can drive the robot, including moving it
+  and enabling the chassis. Keep it on networks you trust, or put it behind a VPN or a reverse
+  proxy with authentication.
+- HTTPS uses a self-signed certificate generated on first start; browsers will warn.
+- The emergency stop is a software latch. It is **not** a substitute for the physical e-stop.
+- Teleop has a watchdog: if the page stops sending velocity commands, the robot stops.
 
 ---
 
-## Quick start
+## Start
+
+From the repository root, after sourcing the ROS environment:
 
 ```bash
-# ROS 2 environment (the script needs rclpy)
-source /opt/ros/jazzy/setup.bash
-source ros2_ws/install/setup.bash        # or your overlay
+# ROS 2 (SW01)
+source /opt/ros/jazzy/setup.bash && source ros2_ws/install/setup.bash
+python3 -m web_console.run --port 18090
 
-# Start the console
-python3 ros2_ws/scripts/remote_monitor.py --port 18088
+# ROS 1 (Go2 / Dobot Lumo): source the noetic environment first, then set ROS_VERSION=1
+ROS_VERSION=1 /usr/bin/python3 -m web_console.run --port 18090
 ```
 
-Then open `http://<robot-ip>:18088` from the same LAN, or expose it through your tunnel and
-open the public URL.
+Or let the launcher start it in the robot's tmux session (off by default):
 
-Topics default to the ONS2 contract; override them if your setup differs:
+```bash
+ENABLE_WEB_CONSOLE=1 bash scripts/ons2_sw01.sh     # also ons2_go2.sh / ons2_dobot_lumo.sh
+```
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--host` | `0.0.0.0` | Bind address |
-| `--port` | `18088` | Bind port (HTTP + HTTPS together) |
-| `--odom-topic` | `/odin1/odometry` | Odometry used by the stall monitor |
-| `--cmd-vel-topic` | `/cmd_vel` | Motion command topic |
-| `--image-topic` | `/odin1/image/compressed` | Compressed image for the on-demand camera |
-| `--stall-window-sec` | `30` | Sliding window length for stall detection |
-| `--stall-radius-m` | `0.20` | Net displacement radius under which the robot counts as stalled |
+| `--port` | `18090` | HTTP and HTTPS port |
+| `--no-tls` | off | Serve plain HTTP only |
+| `--map-topic` | `/map` | Occupancy grid |
+| `--map-frame` / `--base-frame` | `map` / `base_link` | Pose is `map → base_link` |
+| `--pose-hz` | `10` | Pose refresh rate |
+| `--odom-topic` | `/odin1/odometry` | Used by the stall detector |
+| `--cmd-vel-topic` | `/cmd_vel` | Velocity command topic |
+| `--image-topic` | `/odin1/image/compressed` | Camera topic (subscribed only while the camera is on) |
+| `--stall-window-sec` / `--stall-radius-m` | `30` / `0.20` | Stall detection window and radius |
+| `--ros-version` | `$ROS_VERSION` | `1` or `2` |
+
+Environment variable for the launchers: `WEB_CONSOLE_PORT` (default `18090`).
 
 ---
 
-## What you can do from the page
+## Interfaces used
 
-- **Watch status** — mission state, current waypoint, velocity, stall alarm.
-- **Turn the camera on/off** — frames are only pulled while enabled (this is the cellular
-  bandwidth switch).
-- **Talk to people around the robot** — record from the browser microphone, or type a phrase
-  and let TTS speak it on the robot's speaker.
-- **Control the mission** — pause / resume / cancel / skip waypoint.
-- **Take over manually** — teleop, guarded by a watchdog that stops the robot if the page
-  stops sending commands.
-- **Emergency stop** — a latch that must be explicitly released.
+- Topics: `/map`, `/odin1/odometry`, `/cmd_vel`, `/odin1/image/compressed`,
+  `/waypoint_manager/status`, `/waypoint_manager/system_health`, `/sw01_cmd_vel_bridge/motion_enabled`
+  (read); `/cmd_vel`, `/neupan/stop`, `/emergency_stop` (published).
+- Services: `/waypoint_manager/start_mission`, `pause`, `resume`, `cancel`, `skip`, `return_home`,
+  `reset`, `/waypoint/goal/skip`, `/waypoint/goal/reset`, `/sw01_cmd_vel_bridge/enable` (SW01 only).
 
----
-
-## Dependencies
-
-**Required**: ROS 2 (Jazzy or equivalent) with `rclpy`, `geometry_msgs`, `nav_msgs`,
-`sensor_msgs`, `std_msgs`, `std_srvs`; Python 3 standard library; `openssl` for the
-self-signed certificate (without it the server runs HTTP only).
-
-**Optional** — the component degrades gracefully rather than failing:
-
-| Missing | Effect |
-|---|---|
-| `nav_interfaces` (`MissionStatus`) | Cannot read `/waypoint_manager/status`; monitoring falls back to `/cmd_vel` motion only |
-| `ffmpeg` | Microphone audio is not transcoded; TTS volume gain unavailable |
-| `edge-tts` | TTS falls back to `espeak-ng`, then to a beep (not speech) |
-| `Pillow` | Frames are sent unscaled (~490 KB each) — not advisable on cellular |
-| `aplay` / `paplay` / `pw-play` / `ffplay` | No audio output at all |
-| `amixer` | Mute is not lifted automatically before playback |
-
----
-
-## Security notes
-
-- **No authentication is built in.** Anyone who can reach the port can drive the robot.
-  Put it behind your VPN/tunnel's own access control, or add a reverse proxy with auth.
-- **HTTPS is self-signed** (generated on first start). Browsers will warn; that is expected
-  for a NAT-traversal deployment.
-- The emergency stop is a software latch — it is **not** a substitute for a physical e-stop.
-- Bind to `0.0.0.0` only on networks you control.
+The web page only talks to the console's own HTTP API (`/api/state`, `/api/mission/*`,
+`/api/nav/command`, `/api/teleop/*`, `/api/chassis/control`, `/api/safety/*`, `/api/camera/*`,
+`/api/audio/*`, `/api/map.png`).
 
 ---
 
@@ -131,8 +104,11 @@ self-signed certificate (without it the server runs HTTP only).
 
 | Symptom | Likely cause |
 |---|---|
-| Page loads but no microphone button / mic does not work | Served over plain HTTP on a non-`localhost` origin — browsers require HTTPS for microphone access. Use the HTTPS URL. |
-| Camera panel stays empty | The gate is off, `/odin1/image/compressed` is not published, or the driver's `sendrgbcompressed` is disabled |
-| No audio from the robot | No supported player installed, `amixer` left it muted, or the audio device index changed after replug |
-| Stall alarm fires while the robot is moving | Odometry topic not matching (`--odom-topic`), or the window/radius is too tight for your speed |
-| Cannot connect from outside the LAN | No tunnel configured, or the tunnel maps a different local port than `--port` |
+| Badge says "无定位" | `map → base_link` TF is not available (localization not running) |
+| Map stays empty | `/map` not published (map_server not active) or a different `--map-topic` |
+| Start mission fails with "服务 ... 未就绪" | Navigation stack not running, or the service name differs |
+| Chassis card says the platform has no enable interface | Not an SW01 build; expected on Go2 / Dobot |
+| Teleop refused | Turn on manual takeover first; the watchdog stops motion when the page goes quiet |
+| No microphone | Served over plain HTTP on a non-`localhost` origin; use the HTTPS URL |
+| Camera stays empty | Camera is off, or `/odin1/image/compressed` is not published |
+| Stall alarm while moving | Odometry topic mismatch (`--odom-topic`) or window / radius too tight |

@@ -1,127 +1,106 @@
-# 远程 Web 监控
+# Web 控制台（远程监视与控制）
 
 [English](remote_monitoring.md) | **中文**
 
-> [!NOTE]
-> **仅支持 ROS 2。** 本监控台基于 `rclpy` 实现，只能运行在 ROS 2 平台（当前即 ASTRALL SW01）。
-> **ROS 1 平台（Go2、Dobot Lumo）不支持**：ROS 1 的启动脚本不会拉起它，本版本也不提供 ROS 1 适配。
+`web_console/` 是 ONS2 机器人的浏览器控制台，替代了终端导航控制脚本（`test_nav_control_*.py`），
+以及旧的 `ros2_ws/scripts/remote_monitor.py`（已废弃）。一个进程、一个端口、一个页面：
 
-`ros2_ws/scripts/remote_monitor.py` —— 单进程、单端口的 Web 控制台，可以在任何地方用浏览器
-操作 ONS2 机器人：查看状态、按需开相机、语音喊话、控制导航并急停。
+- **全局地图与机器人位姿**：实时显示 `/map`，并画出机器人位置和朝向（`map → base_link`）。
+- **航点任务**：在地图上左键添加航点（拖动设置朝向），可改停留时间，支持循环、临时插入，
+  导入 / 导出 JSON，下发执行。支持暂停、恢复、跳过当前点、取消、回起点、重置。
+- **急停与人工接管**：锁存式急停；遥控带看门狗（松开按钮或按键即停），支持键盘 `W A S D Q E`。
+- **底盘使能**（仅 SW01）：在页面上使能或断开底盘运动桥。
+- **安全告警**：任务执行中机器人停止或原地蠕动时报警；可强制监测、静音、调整窗口和半径。
+- **按需相机**：只在打开相机时才拉取图像（蜂窝网络省流量）。
+- **喊话**：文字转语音、预设短语、浏览器麦克风录音、上传音频，由机器人扬声器播放。
+
+ROS 2（璇玑 SW01）是已验证的目标平台。ROS 1（Go2、Dobot Lumo）功能一致，但尚未在实机上验证。
 
 ---
 
-## ⚠️ 网络前提（先读这段）
+## 网络前提（请先阅读）
 
-脚本只在本机监听。**从局域网外部访问它，网络这一层要你自己配** —— 组件本身**不含**任何
-隧道或中继。下面四种方式选一种：
+控制台只监听在机器人上，从局域网外访问需要你自行解决连通性：
 
-| 方式 | 你需要准备 | 说明 |
+| 方式 | 需要什么 | 说明 |
 |---|---|---|
-| **同一局域网** | 什么都不用 | 直接开 `http://<机器人IP>:18088`。注意：非 `localhost` 场景下浏览器要用麦克风**必须走 HTTPS** |
-| **4G / 蜂窝网络** | 机器人上装 4G 模块（或手机热点）+ 一个可达的公网地址 | 运营商是共享 NAT，**没法直接拨进来**，要配下面那行的隧道 |
-| **内网穿透 / 隧道** | frp、natfrp 或其他隧道服务；自建的话还要一台 VPS | 把公网一个端口映射到 `127.0.0.1:18088`。**服务端 HTTP/HTTPS 共用同一端口，正是为了让隧道只映射一个端口** |
-| **自有公网服务器** | 带公网 IPv4 的 VPS + 反向代理 | 代理通过已有的隧道/VPN 回连机器人 |
+| **同一局域网** | 无需额外准备 | 直接开 `http://<机器人IP>:18090`。非 `localhost` 场景下，浏览器使用麦克风必须走 HTTPS。 |
+| **4G / 蜂窝网络** | 机器人上的 4G 模块（或手机热点）和可达的公网地址 | 运营商是共享 NAT，无法直接拨入，需要配合隧道。 |
+| **内网穿透 / 隧道** | frp、natfrp 或同类服务；自建还需要一台 VPS | 把公网一个端口映射到 `127.0.0.1:18090`。HTTP 与 HTTPS 共用这一个端口。 |
 
-**为什么强调单端口**：服务端会在同一个端口上自动识别 TLS，所以你的隧道**只需要映射一个
-端口**而不是两个。另外，任何非 `localhost` 的页面要调用浏览器麦克风，HTTPS 是硬要求。
-
-> 本组件**没有**云账号、没有中继服务、也没有任何默认口令。
-> 请把它当作一个需要你自己架在你信任的通道后面的服务。
+> 本组件没有云账号、中继或默认凭据。
 
 ---
 
-## 功能一览
+## 安全
 
-| 模块 | 类 | 作用 |
-|---|---|---|
-| 安全停滞监控 | `StallDetector` | 在滑动窗口内净位移低于半径时告警，能区分「停止不前」「原地蠕动／受阻」「里程计断流」 |
-| 按需图像 | `OnDemandImageGate` | **只在网页请求时才订阅** `/odin1/image/compressed`，再做缩放压缩，适配弱网 |
-| 远程喊话 | `AudioIntercom` | 网页麦克风原声，或文字 TTS，经机器人在载声卡播放 |
-| 导航控制与手控 | `NavigationAndTeleopController` | 急停锁、暂停／继续／取消／跳点，手动接管带看门狗 |
-| 状态中枢 | `MonitorStateHub` | 汇总以上状态，供 HTTP 接口与网页使用 |
-| 服务端 | `DualProtocolHTTPServer` | 同一端口同时提供 HTTP 与 HTTPS |
-
-几个值得知道的设计后果：
-
-- **默认零带宽** —— 网页不请求就不订阅图像话题。控制台挂着不动，对 4G 流量基本无消耗。
-- **低频轮询** —— 网页通过 `GET /api/status` 拉状态，不开相机就没有连续视频流。
-- **单进程、单端口** —— 默认 `0.0.0.0:18088`。
+- **没有认证。** 任何能访问端口的人都能驱动机器人，包括运动和使能底盘。请只在可信网络上使用，
+  或放在 VPN / 带认证的反向代理之后。
+- HTTPS 使用首次启动时生成的自签名证书，浏览器会提示不受信任，这是预期行为。
+- 急停是软件锁存，**不能**替代机器人本体的物理急停。
+- 遥控有看门狗：页面停止发送速度指令后，机器人会自动停止。
 
 ---
 
-## 快速开始
+## 启动
+
+在仓库根目录执行，先 source ROS 环境：
 
 ```bash
-# 先进入 ROS 2 环境（脚本依赖 rclpy）
-source /opt/ros/jazzy/setup.bash
-source ros2_ws/install/setup.bash        # 或你自己的 overlay
+# ROS 2（SW01）
+source /opt/ros/jazzy/setup.bash && source ros2_ws/install/setup.bash
+python3 -m web_console.run --port 18090
 
-# 启动控制台
-python3 ros2_ws/scripts/remote_monitor.py --port 18088
+# ROS 1（Go2 / Dobot Lumo）：先 source noetic 环境，并设置 ROS_VERSION=1
+ROS_VERSION=1 /usr/bin/python3 -m web_console.run --port 18090
 ```
 
-然后在同一局域网打开 `http://<机器人IP>:18088`；或者通过你的隧道映射后，打开公网地址。
+也可以由启动脚本在机器人的 tmux 会话里拉起（默认关闭）：
 
-话题默认按 ONS2 契约，如果你的接线不同可以改：
+```bash
+ENABLE_WEB_CONSOLE=1 bash scripts/ons2_sw01.sh     # 同样支持 ons2_go2.sh / ons2_dobot_lumo.sh
+```
 
-| 参数 | 默认 | 含义 |
+| 参数 | 默认值 | 含义 |
 |---|---|---|
 | `--host` | `0.0.0.0` | 监听地址 |
-| `--port` | `18088` | 监听端口（HTTP 与 HTTPS 共用） |
-| `--odom-topic` | `/odin1/odometry` | 停滞监控用的里程计 |
+| `--port` | `18090` | HTTP 与 HTTPS 共用的端口 |
+| `--no-tls` | 关闭 | 只提供明文 HTTP |
+| `--map-topic` | `/map` | 占据栅格地图 |
+| `--map-frame` / `--base-frame` | `map` / `base_link` | 位姿取自 `map → base_link` |
+| `--pose-hz` | `10` | 位姿刷新频率 |
+| `--odom-topic` | `/odin1/odometry` | 停止检测使用的里程计 |
 | `--cmd-vel-topic` | `/cmd_vel` | 速度指令话题 |
-| `--image-topic` | `/odin1/image/compressed` | 按需相机的压缩图像话题 |
-| `--stall-window-sec` | `30` | 停滞检测的滑动窗口长度 |
-| `--stall-radius-m` | `0.20` | 判定为停滞的净位移半径阈值 |
+| `--image-topic` | `/odin1/image/compressed` | 相机话题（仅在打开相机时订阅） |
+| `--stall-window-sec` / `--stall-radius-m` | `30` / `0.20` | 停止检测的窗口与半径 |
+| `--ros-version` | `$ROS_VERSION` | `1` 或 `2` |
+
+启动脚本使用的环境变量：`WEB_CONSOLE_PORT`（默认 `18090`）。
 
 ---
 
-## 页面上能做什么
+## 使用的接口
 
-- **看状态** —— 任务状态、当前航点、速度、停滞告警。
-- **开／关相机** —— 只在开启时拉取画面，这就是那个「4G 流量开关」。
-- **对现场说话** —— 用浏览器麦克风录音，或打字让 TTS 在机器人音箱上播出来。
-- **控制任务** —— 暂停／继续／取消／跳过航点。
-- **手动接管** —— 带看门狗，页面停止下发指令时机器人会自动停下。
-- **急停** —— 带锁存，必须显式解除。
+- 话题（订阅）：`/map`、`/odin1/odometry`、`/cmd_vel`、`/odin1/image/compressed`、
+  `/waypoint_manager/status`、`/waypoint_manager/system_health`、`/sw01_cmd_vel_bridge/motion_enabled`；
+  （发布）`/cmd_vel`、`/neupan/stop`、`/emergency_stop`。
+- 服务：`/waypoint_manager/start_mission`、`pause`、`resume`、`cancel`、`skip`、`return_home`、`reset`，
+  `/waypoint/goal/skip`、`/waypoint/goal/reset`，以及 `/sw01_cmd_vel_bridge/enable`（仅 SW01）。
 
----
-
-## 依赖
-
-**必需**：ROS 2（Jazzy 或同等）+ `rclpy`、`geometry_msgs`、`nav_msgs`、`sensor_msgs`、
-`std_msgs`、`std_srvs`；Python 3 标准库；`openssl`（用于生成自签名证书，缺了只提供 HTTP）。
-
-**可选** —— 缺了会降级，不会崩溃：
-
-| 缺失 | 影响 |
-|---|---|
-| `nav_interfaces`（`MissionStatus`） | 读不到 `/waypoint_manager/status`，监控只能靠 `/cmd_vel` 是否在动 |
-| `ffmpeg` | 麦克风原声不转码；TTS 无法做音量增益 |
-| `edge-tts` | TTS 回落到 `espeak-ng`，再缺就变成提示音（**不是语音**） |
-| `Pillow` | 图像不缩放，单帧约 490 KB —— 4G 下不建议 |
-| `aplay` / `paplay` / `pw-play` / `ffplay` 任一 | 完全无法出声 |
-| `amixer` | 播放前不会自动解除静音 |
+页面只与控制台自身的 HTTP 接口通信（`/api/state`、`/api/mission/*`、`/api/nav/command`、
+`/api/teleop/*`、`/api/chassis/control`、`/api/safety/*`、`/api/camera/*`、`/api/audio/*`、`/api/map.png`）。
 
 ---
 
-## 安全提示
-
-- **没有内置鉴权。** 谁能连上这个端口，谁就能开这台机器人。请放在 VPN／隧道自身的访问控制
-  后面，或加一层带认证的反向代理。
-- **HTTPS 是自签名**（首次启动时生成）。浏览器会告警，这在 NAT 穿透场景下是正常的。
-- 急停是**软件锁存**，不能替代物理急停按钮。
-- 只在你能控制的网络里监听 `0.0.0.0`。
-
----
-
-## 故障排查
+## 常见问题
 
 | 现象 | 可能原因 |
 |---|---|
-| 页面能开但麦克风按钮不可用／录不到音 | 在非 `localhost` 的源上走了纯 HTTP —— 浏览器要求 HTTPS 才给麦克风权限，请用 HTTPS 地址 |
-| 相机画面一直空 | 门控没打开、`/odin1/image/compressed` 没发布，或驱动侧 `sendrgbcompressed` 没开 |
-| 机器人不出声 | 没装可用的播放器、`amixer` 仍是静音，或重新插拔后声卡序号变了 |
-| 机器人在动却报停滞告警 | 里程计话题不匹配（`--odom-topic`），或窗口／半径对你的速度来说太严 |
-| 外网连不上 | 没配隧道，或隧道映射的本地端口与 `--port` 不一致 |
+| 徽标显示"无定位" | `map → base_link` TF 不可用（定位未运行） |
+| 地图一直是空的 | `/map` 没有发布（map_server 未激活），或 `--map-topic` 不对 |
+| 下发任务失败，提示"服务 ... 未就绪" | 导航栈未启动，或服务名不一致 |
+| 底盘卡片提示平台无使能接口 | 不是 SW01 版本，Go2 / Dobot 上属正常 |
+| 遥控被拒绝 | 先开启人工接管；页面停止发送指令后看门狗会停止运动 |
+| 浏览器没有麦克风 | 通过非 `localhost` 的 HTTP 访问，改用 HTTPS 地址 |
+| 相机没有画面 | 相机未开启，或 `/odin1/image/compressed` 没有发布 |
+| 运动时误报停止告警 | 里程计话题不匹配（`--odom-topic`），或窗口 / 半径设置过小 |

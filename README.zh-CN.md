@@ -59,7 +59,7 @@
   参见 [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) 教程，内有网页链接与文档说明。
 - **专为工业巡检打造**  
   针对真实工业巡检场景与长距离巡逻路线进行了大量专项优化。  
-  远程 Web 监控界面见 [remote_monitoring.zh-CN.md](docs/remote_monitoring.zh-CN.md)（**仅璇玑SW01+ROS 2适配**）—— 浏览器控制台，按需开相机与语音喊话（需自备 4G 模块、内网穿透或公网服务器）。
+  Web 控制台见 [remote_monitoring.zh-CN.md](docs/remote_monitoring.zh-CN.md) —— 浏览器里查看全局地图与机器人位姿，下发航点任务、急停与遥控，按需开相机与语音喊话。已在璇玑SW01（ROS 2）验证，Go2 / Dobot Lumo（ROS 1）已适配但尚未实机验证。远程访问需自备 4G 模块、内网穿透或公网服务器。
 - **端到端，完全开源**  
   完整的巡检工作流——从仿真到实机、从算法到监控平台。真实世界到仿真世界，参见 [Real2Sim 教程](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial)。
 - **Odin RTK融合导航**
@@ -329,7 +329,7 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 |---|---|
 | **在现有机器人上跑巡检任务** | [01 · 快速开始](docs/usage/01_quick_start.md) |
 | **用浏览器驱动机器人**（Foxglove，或可选的 3DGS 控制台） | [快速开始 § 5 · Web 控制前端](docs/usage/01_quick_start.md#5-web-control-frontend) |
-| **通过 4G / 内网穿透远程操作** —— *仅 ROS 2（SW01），ROS 1 暂不支持* | [远程 Web 监控](docs/remote_monitoring.zh-CN.md) |
+| **在浏览器里操作机器人**，本地或通过 4G / 内网穿透 —— 地图、任务、急停、相机、喊话 | [Web 控制台](docs/remote_monitoring.zh-CN.md) |
 | **搞懂或重调局部规划器** —— 优化了什么、为什么 | [NeuPAN 优化说明](docs/neuPAN_optimisation.zh-CN.md) |
 | **查我这台平台的默认参数值** —— 各机器人实测取值 + 推荐调参顺序 | [02 · 参数调优](docs/usage/02_parameter_tuning.zh-CN.md) |
 | **按名字查某个参数是什么**，或按症状排障 | [高级调参与排障指南](docs/TUNING_GUIDE.zh-CN.md) —— 全参数词典（MPC/DUNE/扫描预处理/自适应安全带/全局规划）+ 症状→改哪个参数的对照表 |
@@ -360,7 +360,7 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 | 巡检导航、全局/局部规划 | ✅ | ✅ |
 | Web 控制台（Foxglove） | ✅ | ✅ |
 | 巡检感知（Florence-2，独立仓） | ✅ | ✅ |
-| 远程 Web 监控（相机 / 喊话 / 急停） | ❌ 暂不支持 | ✅ SW01 |
+| Web 控制台（地图 / 任务 / 急停 / 相机 / 喊话） | ✅（尚未实机验证） | ✅ SW01 |
 | 3DGS 导航控制台 *（可选，联系我们获取）* | ✅ | ✅ |
 
 

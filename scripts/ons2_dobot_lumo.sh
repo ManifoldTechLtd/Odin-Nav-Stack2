@@ -175,6 +175,13 @@ ons2_start_window "${SESSION}" foxglove "${ENV_PREFIX} && roslaunch foxglove_bri
 ons2_start_window "${SESSION}" health "${ENV_PREFIX} && bash ${SCRIPT_DIR}/dobot_health_check.sh --watch 2>&1 | tee ${LOG_DIR}/health.log"
 ons2_start_window "${SESSION}" control "${ENV_PREFIX} && export PYTHONPATH=/opt/ros/noetic/lib/python3/dist-packages:${PYTHONPATH:-} && /usr/bin/python3 ${REPO_ROOT}/ros_ws/scripts/test_nav_control_rospy.py --allow-motion"
 
+# Optional web console (off by default; ROS 1 build is not yet verified on hardware).
+#   ENABLE_WEB_CONSOLE=1 bash scripts/ons2_dobot.sh [WEB_CONSOLE_PORT=18090]
+if [ "${ENABLE_WEB_CONSOLE:-0}" = "1" ]; then
+  WEB_CONSOLE_PORT="${WEB_CONSOLE_PORT:-18090}"
+  ons2_start_window "${SESSION}" web_console "${ENV_PREFIX} && export ROS_VERSION=1 && export PYTHONPATH=/opt/ros/noetic/lib/python3/dist-packages:${PYTHONPATH:-} && cd ${REPO_ROOT} && /usr/bin/python3 -m web_console.run --port ${WEB_CONSOLE_PORT} 2>&1 | tee ${LOG_DIR}/web_console.log"
+fi
+
 ons2_log "=================================================="
 ons2_log "Dobot Lumo stack started"
 ons2_log "  Local planner : ${LOCAL_PLANNER}"

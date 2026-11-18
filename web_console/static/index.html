@@ -3,50 +3,231 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ONS2 Web Console</title>
+<title>ONS2 控制台</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #14171c; color: #e6e9ef;
-    font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans CJK SC", sans-serif; }
-  #bar { position: fixed; top: 0; left: 0; right: 0; height: 44px; display: flex; align-items: center;
-    gap: 16px; padding: 0 14px; background: rgba(20, 23, 28, 0.92); border-bottom: 1px solid #2a2f38; z-index: 1; }
-  #bar .title { font-weight: 600; }
-  #bar .item { font-size: 13px; color: #9aa3b2; white-space: nowrap; }
-  #bar .item b { color: #e6e9ef; font-weight: 500; }
+  :root { --bg:#0f1419; --panel:#161c24; --card:#1d2530; --line:#2a3340; --text:#e6e9ef; --muted:#8b96a5;
+    --ok:#3fb950; --warn:#e3b341; --bad:#f85149; --accent:#2f81f7; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans CJK SC", sans-serif; font-size: 13px; }
+  #app { display: grid; grid-template-columns: 1fr 360px; grid-template-rows: 44px 1fr; height: 100%; }
+  #bar { grid-column: 1 / 3; display: flex; align-items: center; gap: 14px; padding: 0 14px;
+    background: var(--panel); border-bottom: 1px solid var(--line); }
+  #bar .title { font-weight: 600; font-size: 14px; }
+  #bar .item { color: var(--muted); white-space: nowrap; }
+  #bar .item b { color: var(--text); font-weight: 500; }
   #bar .spacer { flex: 1; }
-  button { background: #262c36; color: #e6e9ef; border: 1px solid #3a414e; border-radius: 4px;
-    padding: 5px 12px; font-size: 13px; cursor: pointer; }
-  button:hover { background: #313845; }
-  #dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #e0a030; margin-right: 6px; }
-  #dot.ok { background: #3fb950; }
-  #dot.bad { background: #f85149; }
-  #map { position: fixed; top: 44px; left: 0; right: 0; bottom: 0; width: 100%; height: calc(100% - 44px);
-    display: block; cursor: grab; }
-  #map.dragging { cursor: grabbing; }
-  #hint { position: fixed; bottom: 10px; left: 14px; font-size: 12px; color: #6b7585; }
+  .chip { padding: 3px 9px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); white-space: nowrap; }
+  .chip.ok { color: var(--ok); border-color: rgba(63,185,80,.4); }
+  .chip.warn { color: var(--warn); border-color: rgba(227,179,65,.4); }
+  .chip.bad { color: var(--bad); border-color: rgba(248,81,73,.5); background: rgba(248,81,73,.12); }
+  #mapwrap { position: relative; overflow: hidden; }
+  #map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+  #map.pan { cursor: grab; }
+  #hint { position: absolute; left: 12px; bottom: 10px; color: var(--muted); font-size: 12px; pointer-events: none; }
+  #toolbar { position: absolute; right: 12px; top: 12px; display: flex; gap: 6px; }
+  #side { overflow-y: auto; background: var(--panel); border-left: 1px solid var(--line); padding: 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+  .card h3 { margin: 0 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  button { background: #262f3b; color: var(--text); border: 1px solid #3a4454; border-radius: 6px;
+    padding: 6px 10px; font-size: 12.5px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #303b49; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { background: #8b1e1e; border-color: #b03a3a; color: #fff; font-weight: 600; }
+  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.big { padding: 12px; font-size: 15px; width: 100%; }
+  input[type=text], input[type=number], select { background: #0f141b; color: var(--text); border: 1px solid #3a4454;
+    border-radius: 6px; padding: 5px 7px; font-size: 12.5px; }
+  input[type=number] { width: 72px; }
+  input.wide { flex: 1; min-width: 0; }
+  label.check { color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 3px 4px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  td input { width: 60px; padding: 3px 4px; }
+  .muted { color: var(--muted); }
+  .toast { min-height: 18px; color: var(--muted); font-size: 12px; margin-top: 4px; word-break: break-all; }
+  .alarm { border-color: rgba(248,81,73,.6); background: rgba(248,81,73,.1); }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-width: 220px; margin: 4px auto; }
+  .pad button { padding: 10px 0; font-size: 16px; }
+  .pad .blank { visibility: hidden; }
+  kbd { background: #0f141b; border: 1px solid #3a4454; border-radius: 4px; padding: 0 4px; font-size: 11px; }
+  #cam { width: 100%; border-radius: 6px; background: #0a0d12; min-height: 60px; display: none; margin-top: 6px; }
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
-<div id="bar">
-  <span class="title"><span id="dot"></span>ONS2 控制台</span>
-  <span class="item">位置 <b id="pos">--</b></span>
-  <span class="item">朝向 <b id="yaw">--</b></span>
-  <span class="item">地图 <b id="mapinfo">--</b></span>
-  <span class="item" id="status">等待数据</span>
-  <span class="spacer"></span>
-  <button id="center">居中机器人</button>
-  <button id="fit">适应地图</button>
+<div id="app">
+  <div id="bar">
+    <span class="title">ONS2 控制台</span>
+    <span class="chip" id="linkChip">连接中</span>
+    <span class="item">位置 <b id="pos">--</b></span>
+    <span class="item">朝向 <b id="yaw">--</b></span>
+    <span class="item">地图 <b id="mapinfo">--</b></span>
+    <span class="chip" id="locChip">--</span>
+    <span class="chip" id="estopChip" hidden>急停中</span>
+    <span class="chip" id="alarmChip" hidden>安全告警</span>
+    <span class="chip" id="chassisChip" hidden>底盘</span>
+    <span class="spacer"></span>
+    <span class="item" id="clock"></span>
+  </div>
+
+  <div id="mapwrap">
+    <canvas id="map"></canvas>
+    <div id="toolbar">
+      <button id="center">居中机器人</button>
+      <button id="fit">适应地图</button>
+      <button id="pickBtn" class="on">点选航点</button>
+    </div>
+    <div id="hint">左键：点选航点（按住拖动设朝向） · 右键拖动平移 · 滚轮缩放 · 键盘 W/A/S/D/Q/E 遥控（需先接管）</div>
+  </div>
+
+  <div id="side">
+    <div class="card" id="missionCard">
+      <h3>任务</h3>
+      <div class="grid2">
+        <div><span class="muted">状态</span> <b id="mState">--</b></div>
+        <div><span class="muted">进度</span> <b id="mProg">--</b></div>
+        <div><span class="muted">航点</span> <b id="mIdx">--</b></div>
+        <div><span class="muted">距目标</span> <b id="mDist">--</b></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="bPause">暂停</button>
+        <button id="bResume">恢复</button>
+        <button id="bSkip">跳过当前点</button>
+        <button id="bCancel">取消</button>
+        <button id="bHome">回起点</button>
+        <button id="bReset">重置</button>
+      </div>
+      <div class="toast" id="missionToast"></div>
+    </div>
+
+    <div class="card">
+      <h3>航点队列</h3>
+      <table>
+        <thead><tr><th>#</th><th>名称</th><th>x</th><th>y</th><th>yaw°</th><th>停留s</th><th></th></tr></thead>
+        <tbody id="wpBody"></tbody>
+      </table>
+      <div class="muted" id="wpEmpty" style="margin:6px 0">在地图上左键点击添加航点，按住拖动可设置朝向。</div>
+      <div class="row" style="margin-top:8px">
+        <label class="check"><input type="checkbox" id="loopChk"> 循环</label>
+        <label class="check"><input type="checkbox" id="tempChk"> 临时插入</label>
+      </div>
+      <div class="row">
+        <button class="primary" id="bRun">执行任务</button>
+        <button id="bClear">清空</button>
+        <button id="bExport">导出 JSON</button>
+        <button id="bImport">导入 JSON</button>
+        <input type="file" id="importFile" accept="application/json" hidden>
+      </div>
+      <div class="toast" id="wpToast"></div>
+    </div>
+
+    <div class="card" id="estopCard">
+      <h3>急停与遥控</h3>
+      <button class="danger big" id="bEstop">急停</button>
+      <div class="row" style="margin-top:8px">
+        <button id="bRelease" style="flex:1">解除急停</button>
+      </div>
+      <div class="row">
+        <button id="bTakeover" style="flex:1">开启人工接管</button>
+      </div>
+      <div class="muted" id="teleopState" style="margin-bottom:6px">接管：关闭</div>
+      <div class="row">
+        <span class="muted">线速度</span><input type="number" id="vLin" value="0.3" step="0.05" min="0" max="0.6">
+        <span class="muted">角速度</span><input type="number" id="vAng" value="0.5" step="0.05" min="0" max="0.8">
+      </div>
+      <div class="pad" id="pad">
+        <button class="blank"></button><button data-dir="fwd">▲<br><kbd>W</kbd></button><button class="blank"></button>
+        <button data-dir="left">◀<br><kbd>A</kbd></button><button data-dir="back">▼<br><kbd>S</kbd></button><button data-dir="right">▶<br><kbd>D</kbd></button>
+        <button data-dir="tlft">↺<br><kbd>Q</kbd></button><button class="blank"></button><button data-dir="trt">↻<br><kbd>E</kbd></button>
+      </div>
+      <div class="toast" id="estopToast"></div>
+    </div>
+
+    <div class="card" id="chassisCard">
+      <h3>底盘使能</h3>
+      <div class="row">
+        <span id="chassisText" class="muted">--</span>
+      </div>
+      <div class="row">
+        <button id="bChassisOn">使能底盘</button>
+        <button id="bChassisOff">断开底盘</button>
+      </div>
+      <div class="toast" id="chassisToast"></div>
+    </div>
+
+    <div class="card" id="safetyCard">
+      <h3>安全监测</h3>
+      <div id="alarmText" class="muted">--</div>
+      <div class="row" style="margin-top:6px">
+        <button id="bForce">强制监测：关</button>
+        <button id="bAck">静音 60s</button>
+        <button id="bSound">开启告警声</button>
+      </div>
+      <div class="row">
+        <span class="muted">窗口s</span><input type="number" id="winSec" value="30" min="5" step="1">
+        <span class="muted">半径m</span><input type="number" id="radM" value="0.20" min="0.02" step="0.02">
+        <button id="bSafetyCfg">应用</button>
+      </div>
+    </div>
+
+    <div class="card" id="camCard">
+      <h3>相机（按需取流，省流量）</h3>
+      <div class="row">
+        <button id="bCam">开启相机</button>
+        <span class="muted">帧率</span>
+        <select id="fps"><option>1</option><option selected>2</option><option>5</option></select>
+      </div>
+      <img id="cam" alt="">
+    </div>
+
+    <div class="card" id="intercomCard">
+      <h3>喊话（机器人扬声器）</h3>
+      <div class="row">
+        <input type="text" class="wide" id="ttsText" placeholder="输入要播报的内容">
+        <button id="bSpeak" class="primary">播报</button>
+      </div>
+      <div class="grid2" id="presets"></div>
+      <div class="row" style="margin-top:6px">
+        <button id="bMic">录音</button>
+        <button id="bFile">上传音频</button>
+        <input type="file" id="audioFile" accept="audio/*" hidden>
+      </div>
+      <div class="muted" style="font-size:12px">麦克风需要 HTTPS 或 localhost 访问。</div>
+      <div class="toast" id="intercomToast"></div>
+    </div>
+  </div>
 </div>
-<canvas id="map"></canvas>
-<div id="hint">滚轮缩放 · 拖拽平移</div>
+
 <script>
 (function () {
-  var canvas = document.getElementById('map');
-  var ctx = canvas.getContext('2d');
-  var mapImg = null, mapMeta = null, mapVersion = -1;
-  var state = null, online = false;
+  var $ = function (id) { return document.getElementById(id); };
+  var canvas = $('map'), ctx = canvas.getContext('2d');
+  var S = null, online = false, mapImg = null, mapMeta = null, mapVersion = -1;
   var view = { zoom: 1, ox: 0, oy: 0, fitted: false };
-  var drag = null;
+  var waypoints = [], pickMode = true, nextIdx = 1;
+  var pick = null, pan = null, hoverWorld = null;
+  var teleop = { held: {}, timer: null, keyDir: {} };
+  var alarm = { ctx: null, timer: null, enabled: false };
+  var camTimer = null, camLoading = false, camFps = 2;
+  var presetsReady = false;
 
+  function setToast(id, text) { $(id).textContent = text || ''; }
+  function describe(res, fallback) {
+    if (!res) return fallback;
+    if (res.message) return res.message;
+    return res.ok ? (fallback + ' 成功') : (fallback + ' 失败');
+  }
+  function post(url, body) {
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}) }).then(function (r) { return r.json(); });
+  }
+
+  // ---------- map view ----------
   function resize() {
     var dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(canvas.clientWidth * dpr);
@@ -54,17 +235,19 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     draw();
   }
-
-  // Map cell coordinates (column, row from the top of the PNG) for a world pose.
   function worldToCell(x, y) {
     return { c: (x - mapMeta.origin.x) / mapMeta.resolution,
              r: mapMeta.height - (y - mapMeta.origin.y) / mapMeta.resolution };
   }
-
-  function cellToScreen(c, r) {
-    return { x: view.ox + c * view.zoom, y: view.oy + r * view.zoom };
+  function worldToScreen(x, y) {
+    var p = worldToCell(x, y);
+    return { x: view.ox + p.c * view.zoom, y: view.oy + p.r * view.zoom };
   }
-
+  function screenToWorld(sx, sy) {
+    var c = (sx - view.ox) / view.zoom, r = (sy - view.oy) / view.zoom;
+    return { x: mapMeta.origin.x + c * mapMeta.resolution,
+             y: mapMeta.origin.y + (mapMeta.height - r) * mapMeta.resolution };
+  }
   function fitMap() {
     if (!mapMeta) return;
     var cw = canvas.clientWidth, ch = canvas.clientHeight;
@@ -73,131 +256,440 @@
     view.oy = (ch - mapMeta.height * view.zoom) / 2;
     view.fitted = true;
   }
-
   function centerRobot() {
-    if (!mapMeta || !state || !state.pose) return;
-    var p = worldToCell(state.pose.x, state.pose.y);
+    if (!mapMeta || !S || !S.pose) return;
+    var p = worldToCell(S.pose.x, S.pose.y);
     view.ox = canvas.clientWidth / 2 - p.c * view.zoom;
     view.oy = canvas.clientHeight / 2 - p.r * view.zoom;
   }
-
-  function drawRobot() {
-    if (!mapMeta || !state || !state.pose) return;
-    var p = worldToCell(state.pose.x, state.pose.y);
-    var s = cellToScreen(p.c, p.r);
-    var stale = state.pose.age_sec > 2.0;
-    ctx.save();
-    ctx.translate(s.x, s.y);
-    ctx.rotate(-state.pose.yaw);
-    var size = Math.max(8, Math.min(18, 0.45 / mapMeta.resolution * view.zoom));
-    ctx.beginPath();
-    ctx.moveTo(size, 0);
-    ctx.lineTo(-size * 0.7, size * 0.6);
-    ctx.lineTo(-size * 0.4, 0);
-    ctx.lineTo(-size * 0.7, -size * 0.6);
-    ctx.closePath();
-    ctx.fillStyle = stale ? '#8b949e' : '#3fb950';
-    ctx.strokeStyle = '#0d1117';
-    ctx.lineWidth = 2;
-    ctx.fill();
-    ctx.stroke();
+  function arrow(x, y, angle, size, fill) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(-angle);
+    ctx.beginPath(); ctx.moveTo(size, 0); ctx.lineTo(-size * 0.7, size * 0.6);
+    ctx.lineTo(-size * 0.4, 0); ctx.lineTo(-size * 0.7, -size * 0.6); ctx.closePath();
+    ctx.fillStyle = fill; ctx.strokeStyle = '#0d1117'; ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
     ctx.restore();
   }
-
+  function drawWaypoints() {
+    if (!waypoints.length) return;
+    ctx.save(); ctx.setLineDash([6, 5]); ctx.strokeStyle = 'rgba(47,129,247,.85)'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    waypoints.forEach(function (w, i) {
+      var s = worldToScreen(w.x, w.y);
+      if (i === 0) ctx.moveTo(s.x, s.y); else ctx.lineTo(s.x, s.y);
+    });
+    ctx.stroke(); ctx.restore();
+    waypoints.forEach(function (w, i) {
+      var s = worldToScreen(w.x, w.y);
+      arrow(s.x, s.y, w.yaw, 11, '#2f81f7');
+      ctx.fillStyle = '#e6e9ef'; ctx.font = 'bold 12px system-ui, sans-serif';
+      ctx.fillText(String(i + 1), s.x + 9, s.y - 9);
+    });
+  }
+  function drawTarget() {
+    var t = S && S.mission && S.mission.status && S.mission.status.target;
+    var st = S && S.mission && S.mission.status && S.mission.status.state;
+    if (!t || !st || st === 'IDLE' || st === 'COMPLETED' || st === 'CANCELLED' || st === 'FAILED') return;
+    var s = worldToScreen(t.x, t.y);
+    ctx.beginPath(); ctx.arc(s.x, s.y, 9, 0, Math.PI * 2);
+    ctx.strokeStyle = '#e3b341'; ctx.lineWidth = 2; ctx.stroke();
+  }
+  function drawRobot() {
+    if (!S || !S.pose) return;
+    var s = worldToScreen(S.pose.x, S.pose.y);
+    var size = Math.max(8, Math.min(18, 0.45 / mapMeta.resolution * view.zoom));
+    arrow(s.x, s.y, S.pose.yaw, size, S.pose.age_sec > 2 ? '#8b949e' : '#3fb950');
+  }
+  function drawPick() {
+    if (pick) {
+      var s = worldToScreen(pick.x, pick.y);
+      var end = pick.yawWorld ? worldToScreen(pick.x + Math.cos(pick.yaw) * 0.6, pick.y + Math.sin(pick.yaw) * 0.6) : s;
+      ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(end.x, end.y);
+      ctx.strokeStyle = '#e3b341'; ctx.lineWidth = 2; ctx.stroke();
+      arrow(s.x, s.y, pick.yaw, 11, '#e3b341');
+    }
+  }
   function draw() {
     var cw = canvas.clientWidth, ch = canvas.clientHeight;
-    ctx.clearRect(0, 0, cw, ch);
-    ctx.fillStyle = '#0d1117';
-    ctx.fillRect(0, 0, cw, ch);
+    ctx.fillStyle = '#0a0d12'; ctx.fillRect(0, 0, cw, ch);
     if (mapImg && mapMeta) {
       ctx.imageSmoothingEnabled = view.zoom < 1;
       ctx.drawImage(mapImg, view.ox, view.oy, mapMeta.width * view.zoom, mapMeta.height * view.zoom);
+      drawWaypoints(); drawTarget(); drawRobot(); drawPick();
     } else {
-      ctx.fillStyle = '#6b7585';
-      ctx.font = '14px system-ui, sans-serif';
+      ctx.fillStyle = '#6b7585'; ctx.font = '14px system-ui, sans-serif';
       ctx.fillText('等待地图（/map）…', 20, 40);
     }
-    drawRobot();
   }
-
-  function updateBar() {
-    var dot = document.getElementById('dot');
-    var status = document.getElementById('status');
-    dot.className = online ? 'ok' : 'bad';
-    status.textContent = !online ? '连接中断' : !state ? '连接中' : !state.map ? '未收到地图' :
-      !state.pose ? '无定位（map→base_link 不可用）' :
-      state.pose.age_sec > 2.0 ? '位姿过期' : '定位正常';
-    var pos = document.getElementById('pos');
-    var yaw = document.getElementById('yaw');
-    var info = document.getElementById('mapinfo');
-    pos.textContent = state && state.pose ? state.pose.x.toFixed(2) + ', ' + state.pose.y.toFixed(2) + ' m' : '--';
-    yaw.textContent = state && state.pose ? state.pose.yaw_deg.toFixed(1) + '°' : '--';
-    info.textContent = mapMeta ? mapMeta.width + '×' + mapMeta.height + ' @ ' + mapMeta.resolution.toFixed(3) + ' m/格' : '--';
-  }
-
   function loadMap(meta) {
-    mapMeta = meta;
-    mapVersion = meta.version;
+    mapMeta = meta; mapVersion = meta.version;
     var img = new Image();
-    img.onload = function () {
-      mapImg = img;
-      if (!view.fitted) fitMap();
-      draw();
-    };
+    img.onload = function () { mapImg = img; if (!view.fitted) fitMap(); draw(); };
     img.src = '/api/map.png?v=' + meta.version;
   }
+  function canvasPos(e) { var r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
 
-  function poll() {
-    fetch('/api/state', { cache: 'no-store' })
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        online = true;
-        state = data;
-        if (data.map && data.map.version !== mapVersion) loadMap(data.map);
-        updateBar();
-        draw();
-      })
-      .catch(function () {
-        online = false;
-        updateBar();
-      });
-  }
-
+  canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   canvas.addEventListener('wheel', function (e) {
     if (!mapMeta) return;
     e.preventDefault();
-    var rect = canvas.getBoundingClientRect();
-    var mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    var factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    var p = canvasPos(e), factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
     var next = Math.min(Math.max(view.zoom * factor, 0.05), 40);
-    view.ox = mx - (mx - view.ox) * (next / view.zoom);
-    view.oy = my - (my - view.oy) * (next / view.zoom);
-    view.zoom = next;
-    draw();
+    view.ox = p.x - (p.x - view.ox) * (next / view.zoom);
+    view.oy = p.y - (p.y - view.oy) * (next / view.zoom);
+    view.zoom = next; draw();
   }, { passive: false });
-
   canvas.addEventListener('mousedown', function (e) {
-    drag = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy };
-    canvas.classList.add('dragging');
+    if (!mapMeta) return;
+    var p = canvasPos(e);
+    if (e.button === 2 || e.button === 1) {
+      pan = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy };
+      canvas.classList.add('pan');
+    } else if (e.button === 0 && pickMode) {
+      var w = screenToWorld(p.x, p.y);
+      pick = { x: w.x, y: w.y, yaw: 0, sx: p.x, sy: p.y, yawWorld: false };
+    }
   });
   window.addEventListener('mousemove', function (e) {
-    if (!drag) return;
-    view.ox = drag.ox + (e.clientX - drag.x);
-    view.oy = drag.oy + (e.clientY - drag.y);
-    draw();
+    if (pan) {
+      view.ox = pan.ox + (e.clientX - pan.x); view.oy = pan.oy + (e.clientY - pan.y); draw(); return;
+    }
+    if (pick) {
+      var p = canvasPos(e);
+      if (Math.hypot(p.x - pick.sx, p.y - pick.sy) > 4) {
+        var w = screenToWorld(p.x, p.y);
+        pick.yaw = Math.atan2(w.y - pick.y, w.x - pick.x); pick.yawWorld = true;
+      }
+      draw();
+    }
   });
   window.addEventListener('mouseup', function () {
-    drag = null;
-    canvas.classList.remove('dragging');
+    if (pan) { pan = null; canvas.classList.remove('pan'); }
+    if (pick) {
+      addWaypoint(pick.x, pick.y, pick.yawWorld ? pick.yaw : 0);
+      pick = null; draw();
+    }
   });
 
-  document.getElementById('center').addEventListener('click', centerRobot);
-  document.getElementById('fit').addEventListener('click', function () { fitMap(); draw(); });
-  window.addEventListener('resize', resize);
+  // ---------- waypoints ----------
+  function addWaypoint(x, y, yaw) {
+    waypoints.push({ name: 'P' + nextIdx++, x: x, y: y, yaw: yaw, dwell: 0 });
+    renderWaypoints(); draw();
+  }
+  function renderWaypoints() {
+    var body = $('wpBody'); body.innerHTML = '';
+    waypoints.forEach(function (w, i) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + (i + 1) + '</td><td>' + w.name + '</td>' +
+        '<td>' + w.x.toFixed(2) + '</td><td>' + w.y.toFixed(2) + '</td>' +
+        '<td>' + (w.yaw * 180 / Math.PI).toFixed(0) + '</td>' +
+        '<td><input type="number" min="0" step="0.5" value="' + w.dwell + '"></td>' +
+        '<td><button data-del="' + i + '">删</button></td>';
+      tr.querySelector('input').addEventListener('change', function (e) {
+        w.dwell = Math.max(0, parseFloat(e.target.value) || 0);
+      });
+      tr.querySelector('button').addEventListener('click', function () {
+        waypoints.splice(i, 1); renderWaypoints(); draw();
+      });
+      body.appendChild(tr);
+    });
+    $('wpEmpty').style.display = waypoints.length ? 'none' : '';
+  }
+  $('pickBtn').addEventListener('click', function () {
+    pickMode = !pickMode;
+    this.classList.toggle('on', pickMode);
+    this.textContent = pickMode ? '点选航点' : '仅平移';
+  });
+  $('bClear').addEventListener('click', function () {
+    waypoints = []; nextIdx = 1; renderWaypoints(); draw();
+  });
+  $('bRun').addEventListener('click', function () {
+    if (!waypoints.length) return setToast('wpToast', '请先添加航点');
+    setToast('wpToast', '正在下发…');
+    post('/api/mission/start', {
+      waypoints: waypoints.map(function (w) { return { x: w.x, y: w.y, yaw: w.yaw, dwell_sec: w.dwell, name: w.name }; }),
+      loop: $('loopChk').checked, temporary: $('tempChk').checked
+    }).then(function (res) { setToast('wpToast', describe(res, '下发任务')); refresh(); })
+      .catch(function (err) { setToast('wpToast', '下发失败：' + err); });
+  });
+  $('bExport').addEventListener('click', function () {
+    var data = JSON.stringify({ waypoints: waypoints, loop: $('loopChk').checked }, null, 2);
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+    a.download = 'waypoints.json'; a.click();
+  });
+  $('bImport').addEventListener('click', function () { $('importFile').click(); });
+  $('importFile').addEventListener('change', function () {
+    var file = this.files[0]; if (!file) return;
+    file.text().then(function (txt) {
+      var data = JSON.parse(txt), list = Array.isArray(data) ? data : data.waypoints;
+      if (!Array.isArray(list)) throw new Error('缺少 waypoints');
+      waypoints = list.map(function (w, i) {
+        return { name: w.name || ('P' + (i + 1)), x: Number(w.x), y: Number(w.y),
+                 yaw: Number(w.yaw || 0), dwell: Number(w.dwell_sec || w.dwell || 0) };
+      });
+      nextIdx = waypoints.length + 1;
+      if (data.loop !== undefined) $('loopChk').checked = !!data.loop;
+      renderWaypoints(); draw(); setToast('wpToast', '已导入 ' + waypoints.length + ' 个航点');
+    }).catch(function (err) { setToast('wpToast', '导入失败：' + err.message); });
+    this.value = '';
+  });
 
+  // ---------- mission & navigation controls ----------
+  function navCmd(action, toastId) {
+    var url = ['pause', 'resume', 'skip', 'cancel', 'emergency_stop', 'release_emergency_stop'].indexOf(action) >= 0
+      ? '/api/nav/command' : '/api/mission/command';
+    return post(url, { action: action }).then(function (res) {
+      setToast(toastId, describe(res, action)); refresh(); return res;
+    });
+  }
+  $('bPause').onclick = function () { navCmd('pause', 'missionToast'); };
+  $('bResume').onclick = function () { navCmd('resume', 'missionToast'); };
+  $('bSkip').onclick = function () { navCmd('skip', 'missionToast'); };
+  $('bCancel').onclick = function () { navCmd('cancel', 'missionToast'); };
+  $('bHome').onclick = function () { navCmd('return_home', 'missionToast'); };
+  $('bReset').onclick = function () { navCmd('reset', 'missionToast'); };
+
+  $('bEstop').onclick = function () { navCmd('emergency_stop', 'estopToast'); };
+  $('bRelease').onclick = function () { navCmd('release_emergency_stop', 'estopToast'); };
+  $('bTakeover').onclick = function () {
+    var active = !(S && S.control && S.control.teleop_active);
+    post('/api/teleop/control', { active: active, resume_navigation: false }).then(function (res) {
+      setToast('estopToast', describe(res, active ? '接管' : '释放接管')); refresh();
+    });
+  };
+
+  // ---------- teleop (hold buttons and keyboard) ----------
+  var DIRS = {
+    fwd: [1, 0, 0], back: [-1, 0, 0], left: [0, 1, 0], right: [0, -1, 0], tlft: [0, 0, 1], trt: [0, 0, -1]
+  };
+  var KEYS = { w: 'fwd', s: 'back', a: 'left', d: 'right', q: 'tlft', e: 'trt' };
+  function teleopVel() {
+    var lin = Math.max(0, Math.min(0.6, parseFloat($('vLin').value) || 0));
+    var ang = Math.max(0, Math.min(0.8, parseFloat($('vAng').value) || 0));
+    var vx = 0, vy = 0, vyaw = 0;
+    Object.keys(teleop.held).forEach(function (d) {
+      var v = DIRS[d]; vx += v[0] * lin; vy += v[1] * lin; vyaw += v[2] * ang;
+    });
+    return { vx: vx, vy: vy, vyaw: vyaw };
+  }
+  function sendTeleop() {
+    var v = teleopVel();
+    post('/api/teleop/cmd_vel', v).then(function (res) {
+      if (res && res.ok === false) setToast('estopToast', res.message || '遥控被拒绝');
+    }).catch(function () {});
+  }
+  function pressDir(d) {
+    if (!(S && S.control && S.control.teleop_active)) return setToast('estopToast', '请先开启人工接管');
+    teleop.held[d] = true;
+    if (!teleop.timer) { sendTeleop(); teleop.timer = setInterval(sendTeleop, 100); }
+  }
+  function releaseDir(d) {
+    delete teleop.held[d];
+    if (!Object.keys(teleop.held).length && teleop.timer) {
+      clearInterval(teleop.timer); teleop.timer = null;
+      post('/api/teleop/cmd_vel', { vx: 0, vy: 0, vyaw: 0 });
+    }
+  }
+  document.querySelectorAll('#pad button[data-dir]').forEach(function (btn) {
+    var d = btn.getAttribute('data-dir');
+    btn.addEventListener('pointerdown', function (e) { e.preventDefault(); pressDir(d); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) {
+      btn.addEventListener(ev, function () { releaseDir(d); });
+    });
+  });
+  window.addEventListener('keydown', function (e) {
+    if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    var d = KEYS[e.key.toLowerCase()];
+    if (d && !e.repeat) { e.preventDefault(); pressDir(d); }
+  });
+  window.addEventListener('keyup', function (e) {
+    var d = KEYS[e.key.toLowerCase()];
+    if (d) releaseDir(d);
+  });
+  window.addEventListener('blur', function () { Object.keys(teleop.held).forEach(releaseDir); });
+
+  // ---------- chassis ----------
+  $('bChassisOn').onclick = function () { chassis(true); };
+  $('bChassisOff').onclick = function () { chassis(false); };
+  function chassis(enabled) {
+    post('/api/chassis/control', { enabled: enabled }).then(function (res) {
+      setToast('chassisToast', describe(res, enabled ? '使能底盘' : '断开底盘')); refresh();
+    });
+  }
+
+  // ---------- safety ----------
+  $('bForce').onclick = function () {
+    var on = !(S && S.safety && S.safety.force_monitor);
+    post('/api/safety/control', { force_monitor: on }).then(refresh);
+  };
+  $('bAck').onclick = function () { post('/api/safety/ack', { mute_sec: 60 }).then(refresh); };
+  $('bSafetyCfg').onclick = function () {
+    post('/api/safety/control', { window_sec: parseFloat($('winSec').value), stall_radius_m: parseFloat($('radM').value) })
+      .then(refresh);
+  };
+  function beepOnce() {
+    if (!alarm.ctx) alarm.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var o = alarm.ctx.createOscillator(), g = alarm.ctx.createGain();
+    o.frequency.value = 920; g.gain.value = 0.15;
+    o.connect(g); g.connect(alarm.ctx.destination); o.start(); o.stop(alarm.ctx.currentTime + 0.22);
+  }
+  $('bSound').onclick = function () {
+    alarm.enabled = !alarm.enabled;
+    this.textContent = alarm.enabled ? '关闭告警声' : '开启告警声';
+    this.classList.toggle('on', alarm.enabled);
+    if (alarm.enabled) beepOnce();
+  };
+  function updateAlarmSound(active) {
+    if (active && alarm.enabled && !alarm.timer) alarm.timer = setInterval(beepOnce, 1200);
+    if (!active && alarm.timer) { clearInterval(alarm.timer); alarm.timer = null; }
+  }
+
+  // ---------- camera ----------
+  function frameLoop() {
+    if (!(S && S.camera && S.camera.enabled)) return;
+    if (camLoading) return;
+    camLoading = true;
+    var img = $('cam');
+    img.onload = function () { camLoading = false; camTimer = setTimeout(frameLoop, 1000 / camFps); };
+    img.onerror = function () { camLoading = false; camTimer = setTimeout(frameLoop, 1000); };
+    img.src = '/api/camera/frame.jpg?t=' + Date.now();
+  }
+  $('bCam').onclick = function () {
+    var on = !(S && S.camera && S.camera.enabled);
+    post('/api/camera/control', { enabled: on, fps: parseFloat($('fps').value) }).then(function () {
+      refresh(); if (on) frameLoop(); else { $('cam').style.display = 'none'; }
+    });
+  };
+  $('fps').addEventListener('change', function () {
+    camFps = parseFloat(this.value);
+    post('/api/camera/control', { enabled: !!(S && S.camera && S.camera.enabled), fps: camFps });
+  });
+
+  // ---------- intercom ----------
+  function speak(text, volume) {
+    if (!text) return setToast('intercomToast', '请输入内容');
+    setToast('intercomToast', '播报中…');
+    post('/api/audio/speak_tts', { text: text, volume: volume || 100 }).then(function (res) {
+      setToast('intercomToast', describe(res, '播报'));
+    }).catch(function (err) { setToast('intercomToast', '播报失败：' + err); });
+  }
+  $('bSpeak').onclick = function () { speak($('ttsText').value.trim(), 100); };
+  $('ttsText').addEventListener('keydown', function (e) { if (e.key === 'Enter') speak(this.value.trim(), 100); });
+  var recorder = null, chunks = [];
+  $('bMic').onclick = function () {
+    if (recorder) { recorder.stop(); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) return setToast('intercomToast', '浏览器不支持录音（需 HTTPS）');
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      chunks = []; recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = function (e) { if (e.data.size) chunks.push(e.data); };
+      recorder.onstop = function () {
+        stream.getTracks().forEach(function (t) { t.stop(); });
+        var type = recorder.mimeType || 'audio/webm';
+        recorder = null; $('bMic').textContent = '录音';
+        var blob = new Blob(chunks, { type: type });
+        setToast('intercomToast', '上传录音…');
+        fetch('/api/audio/speak_raw?volume=100&mime=' + encodeURIComponent(type),
+          { method: 'POST', headers: { 'Content-Type': type }, body: blob })
+          .then(function (r) { return r.json(); })
+          .then(function (res) { setToast('intercomToast', describe(res, '录音播报')); });
+      };
+      recorder.start(); $('bMic').textContent = '停止录音';
+    }).catch(function (err) { setToast('intercomToast', '麦克风不可用：' + err.message); });
+  };
+  $('bFile').onclick = function () { $('audioFile').click(); };
+  $('audioFile').addEventListener('change', function () {
+    var file = this.files[0]; if (!file) return;
+    setToast('intercomToast', '上传音频…');
+    fetch('/api/audio/speak_raw?volume=100&mime=' + encodeURIComponent(file.type || 'audio/mpeg'),
+      { method: 'POST', headers: { 'Content-Type': file.type || 'audio/mpeg' }, body: file })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { setToast('intercomToast', describe(res, '音频播报')); });
+    this.value = '';
+  });
+  function renderPresets(list) {
+    if (presetsReady || !list) return;
+    presetsReady = true;
+    var grid = $('presets');
+    list.forEach(function (text) {
+      var b = document.createElement('button');
+      b.textContent = text; b.title = text;
+      b.style.whiteSpace = 'normal'; b.style.textAlign = 'left';
+      b.onclick = function () { speak(text, 100); };
+      grid.appendChild(b);
+    });
+  }
+
+  // ---------- status rendering ----------
+  var STATE_TEXT = { IDLE: '空闲', NAVIGATING: '导航中', ARRIVED: '已到达', ALIGNING: '对准中', DWELLING: '停留中',
+    PAUSED: '已暂停', RETURNING_HOME: '返航中', COMPLETED: '已完成', CANCELLED: '已取消', FAILED: '失败',
+    RECOVERING: '恢复中' };
+  function render() {
+    var now = new Date();
+    $('clock').textContent = now.toLocaleTimeString();
+    if (!S) return;
+    var pose = S.pose;
+    $('pos').textContent = pose ? pose.x.toFixed(2) + ', ' + pose.y.toFixed(2) + ' m' : '--';
+    $('yaw').textContent = pose ? pose.yaw_deg.toFixed(1) + '°' : '--';
+    if (S.map) $('mapinfo').textContent = S.map.width + '×' + S.map.height + ' @ ' + S.map.resolution.toFixed(3) + ' m/格';
+    var loc = $('locChip');
+    loc.className = 'chip ' + (!S.map ? 'warn' : !pose ? 'bad' : pose.age_sec > 2 ? 'warn' : 'ok');
+    loc.textContent = !S.map ? '未收到地图' : !pose ? '无定位' : pose.age_sec > 2 ? '位姿过期' : '定位正常';
+
+    var m = S.mission || {}, st = m.status || {};
+    $('mState').textContent = STATE_TEXT[st.state] || st.state || '--';
+    $('mProg').textContent = st.progress_percent != null ? st.progress_percent.toFixed(0) + '%' : '--';
+    $('mIdx').textContent = st.total_waypoints ? (st.current_waypoint_idx + 1) + ' / ' + st.total_waypoints : '--';
+    $('mDist').textContent = st.distance_to_target_m != null ? st.distance_to_target_m.toFixed(2) + ' m' : '--';
+
+    var ctl = S.control || {};
+    var estop = $('estopChip'); estop.hidden = !ctl.estop_locked;
+    $('bTakeover').textContent = ctl.teleop_active ? '释放人工接管' : '开启人工接管';
+    $('bTakeover').classList.toggle('on', !!ctl.teleop_active);
+    $('teleopState').textContent = '接管：' + (ctl.teleop_active ? '开启（W/A/S/D/Q/E 或按钮）' : '关闭');
+
+    var chassisOn = m.chassis_enabled, supported = m.chassis_supported;
+    $('chassisChip').hidden = !supported;
+    $('chassisChip').className = 'chip ' + (chassisOn ? 'ok' : 'warn');
+    $('chassisChip').textContent = chassisOn ? '底盘已使能' : '底盘未使能';
+    $('chassisText').textContent = supported ? (chassisOn ? '底盘：已使能' : '底盘：未使能（运动被禁止）') : '当前平台无底盘使能接口';
+    $('bChassisOn').disabled = !supported; $('bChassisOff').disabled = !supported;
+
+    var saf = S.safety || {};
+    var alarmOn = !!saf.alarm;
+    $('alarmChip').hidden = !alarmOn;
+    $('alarmText').textContent = saf.alarm_message || '--';
+    $('safetyCard').classList.toggle('alarm', alarmOn);
+    $('bForce').textContent = '强制监测：' + (saf.force_monitor ? '开' : '关');
+    $('bForce').classList.toggle('on', !!saf.force_monitor);
+    updateAlarmSound(alarmOn && !saf.buzzer_muted);
+
+    var cam = S.camera || {};
+    $('bCam').textContent = cam.enabled ? '关闭相机' : '开启相机';
+    $('bCam').classList.toggle('on', !!cam.enabled);
+    $('cam').style.display = cam.enabled ? 'block' : 'none';
+    if (cam.enabled && !camTimer && !camLoading) frameLoop();
+
+    renderPresets(S.intercom && S.intercom.presets);
+  }
+  function refresh() {
+    return fetch('/api/state', { cache: 'no-store' }).then(function (r) { return r.json(); })
+      .then(function (data) {
+        online = true; S = data;
+        $('linkChip').className = 'chip ok'; $('linkChip').textContent = '已连接';
+        if (data.map && data.map.version !== mapVersion) loadMap(data.map);
+        render(); draw();
+      }).catch(function () {
+        online = false; $('linkChip').className = 'chip bad'; $('linkChip').textContent = '连接中断';
+      });
+  }
+
+  $('center').addEventListener('click', centerRobot);
+  $('fit').addEventListener('click', function () { fitMap(); draw(); });
+  window.addEventListener('resize', resize);
+  renderWaypoints();
   resize();
-  poll();
-  setInterval(poll, 200);
+  refresh();
+  setInterval(refresh, 300);
 })();
 </script>
 </body>

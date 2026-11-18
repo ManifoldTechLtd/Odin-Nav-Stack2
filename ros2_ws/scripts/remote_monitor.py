@@ -14,6 +14,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """ONS2 Remote Web Monitor, On-Demand Camera & Audio Intercom Server.
 
+DEPRECATED: superseded by the web console in ``web_console/`` (``python3 -m web_console.run``), which
+covers this script's features plus the map, pose, waypoint missions and ROS 1 support. The launchers
+now start the web console instead; this file is kept only for reference and will be removed later.
+
 Features:
   1. Safety Monitor (StallDetector): Alerts the remote web console when the robot
      stops or creeps in place (net displacement radius < 0.20m) for > 30 seconds.

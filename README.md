@@ -60,7 +60,7 @@
   See the [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) tutorial for web links and documentation.
 - **Built for industrial inspection**  
   Extensive optimizations tuned to real industrial inspection scenarios and long patrol routes.  
-  See the [remote web monitor](docs/remote_monitoring.md) (**ASTRALL SW01 + ROS 2 only**) — browser-based control console with on-demand camera and intercom (requires your own 4G module, NAT traversal or a public server).
+  See the [web console](docs/remote_monitoring.md) — a browser-based console with the global map, robot pose, waypoint missions, e-stop and teleop, on-demand camera and intercom, for ROS 2 (SW01, verified) and ROS 1 (Go2, Dobot Lumo). Remote access needs your own 4G module, NAT traversal or a public server.
 - **End-to-end, fully open source**  
   A complete inspection workflow — simulation to real robots, algorithms to the monitoring platform, real world to simulated world. See the [Real2Sim tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial).
 - **Odin RTK fusion navigation**  
@@ -334,7 +334,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 |---|---|
 | **Run a patrol mission** on an existing robot | [01 · Quick Start](docs/usage/01_quick_start.md) |
 | **Drive it from a browser** (Foxglove, or the optional 3DGS console) | [Quick Start § 5 · Web Control Frontend](docs/usage/01_quick_start.md#5-web-control-frontend) |
-| **Operate it remotely over 4G / NAT** — *ROS 2 (SW01) only; ROS 1 not supported yet* | [Remote Web Monitor](docs/remote_monitoring.md) |
+| **Operate it from a browser, locally or over 4G / NAT** — map, missions, e-stop, camera, intercom | [Web Console](docs/remote_monitoring.md) |
 | **Understand or retune the local planner** — what was optimised and why | [NeuPAN Optimisation Notes](docs/neuPAN_optimisation.md) |
 | **Look up the default values for my platform** — measured per-robot values plus a recommended tuning order | [02 · Parameter Tuning](docs/usage/02_parameter_tuning.md) |
 | **Look up what a specific parameter does**, or debug a symptom | [Advanced Tuning & Troubleshooting](docs/TUNING_GUIDE.md) — full parameter dictionary (MPC/DUNE, scan pre-processing, adaptive safety band, global planner) plus a symptom→parameter table |
@@ -365,7 +365,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | Patrol navigation, local/global planning | ✅ | ✅ |
 | Web control console (Foxglove) | ✅ | ✅ |
 | Inspection perception (Florence-2, separate repo) | ✅ | ✅ |
-| Remote web monitor (camera / intercom / e-stop) | ❌ not yet | ✅ SW01 |
+| Web console (map / missions / e-stop / camera / intercom) | ✅ (untested on hardware) | ✅ SW01 |
 | 3DGS navigation console *(optional, contact us)* | ✅ | ✅ |
 
 ## 5.4 VLM Scene Understanding

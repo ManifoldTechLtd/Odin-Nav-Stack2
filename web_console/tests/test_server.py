@@ -1,57 +1,91 @@
 import array
 import json
+import ssl
 import threading
 import urllib.error
 import urllib.request
 
 import pytest
 
-from web_console import core
+from web_console.hub import MonitorStateHub
 from web_console.server import make_server
+
+
+def bind_fakes(hub):
+    calls = {"estop": [], "start": [], "chassis": [], "trigger": []}
+
+    def start_mission(points, loop, temporary):
+        calls["start"].append((points, loop, temporary))
+        return True, "accepted", "m-1"
+
+    hub.bind(
+        call_trigger=lambda name: (calls["trigger"].append(name) or (True, "ok")),
+        publish_cmd_vel=lambda vx, vy, vyaw: None,
+        publish_neupan_stop=lambda: None,
+        publish_estop=lambda active: calls["estop"].append(active),
+        subscribe_image=lambda: None,
+        unsubscribe_image=lambda: None,
+        start_mission=start_mission,
+        set_chassis=lambda enabled: (calls["chassis"].append(enabled) or (False, "no service")),
+    )
+    return calls
 
 
 @pytest.fixture
 def served():
-    state = core.ConsoleState()
-    server = make_server("127.0.0.1", 0, state)
+    hub = MonitorStateHub()
+    calls = bind_fakes(hub)
+    server = make_server("127.0.0.1", 0, hub, enable_tls=False)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    yield state, "http://127.0.0.1:{}".format(server.server_address[1])
+    yield hub, calls, "http://127.0.0.1:{}".format(server.server_address[1])
     server.shutdown()
     server.server_close()
 
 
-def get(url):
+def get(url, **kwargs):
     try:
-        with urllib.request.urlopen(url, timeout=5) as res:
+        with urllib.request.urlopen(url, timeout=5, **kwargs) as res:
             return res.status, res.headers, res.read()
     except urllib.error.HTTPError as exc:
         return exc.code, exc.headers, exc.read()
 
 
+def post(url, payload=None, raw=None):
+    body = raw if raw is not None else json.dumps(payload or {}).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST", headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as res:
+            return res.status, json.loads(res.read())
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read())
+
+
 def test_index_page_served(served):
-    _, base = served
+    _, _, base = served
     status, headers, body = get(base + "/")
     assert status == 200
     assert headers["Content-Type"].startswith("text/html")
     assert b"<canvas" in body
 
 
-def test_state_endpoint_returns_json(served):
-    state, base = served
-    state.set_pose(0.5, 0.25, 0.0)
+def test_state_endpoint_returns_pose_mission_and_safety(served):
+    hub, _, base = served
+    hub.console.set_pose(0.5, 0.25, 0.0)
     status, _, body = get(base + "/api/state")
     payload = json.loads(body)
     assert status == 200
     assert payload["pose"]["x"] == 0.5
     assert payload["map"] is None
+    assert payload["mission"]["chassis_supported"] is False
+    assert "alarm" in payload["safety"]
 
 
 def test_map_png_404_until_map_received(served):
-    state, base = served
+    hub, _, base = served
     status, _, _ = get(base + "/api/map.png")
     assert status == 404
-    state.set_map(1, 1, 0.1, 0.0, 0.0, array.array("b", [0]))
+    hub.console.set_map(1, 1, 0.1, 0.0, 0.0, array.array("b", [0]))
     status, headers, body = get(base + "/api/map.png")
     assert status == 200
     assert headers["Content-Type"] == "image/png"
@@ -60,15 +94,82 @@ def test_map_png_404_until_map_received(served):
 
 
 def test_map_png_conditional_request_returns_304(served):
-    state, base = served
-    state.set_map(1, 1, 0.1, 0.0, 0.0, array.array("b", [0]))
+    hub, _, base = served
+    hub.console.set_map(1, 1, 0.1, 0.0, 0.0, array.array("b", [0]))
     req = urllib.request.Request(base + "/api/map.png", headers={"If-None-Match": '"1"'})
     with pytest.raises(urllib.error.HTTPError) as err:
         urllib.request.urlopen(req, timeout=5)
     assert err.value.code == 304
 
 
+def test_camera_frame_204_without_frames(served):
+    _, _, base = served
+    status, _, _ = get(base + "/api/camera/frame.jpg")
+    assert status == 204
+
+
+def test_mission_start_forwards_waypoints(served):
+    _, calls, base = served
+    status, res = post(base + "/api/mission/start", {
+        "waypoints": [{"x": 1, "y": 2, "yaw": 0.5, "dwell_sec": 3, "name": "A"}, {"x": 4, "y": 5}],
+        "loop": True, "temporary": False})
+    assert status == 200 and res["ok"] is True and res["mission_id"] == "m-1"
+    points, loop, temporary = calls["start"][0]
+    assert [p["name"] for p in points] == ["A", "P2"]
+    assert (loop, temporary) == (True, False)
+
+
+def test_mission_start_rejects_empty_waypoints(served):
+    _, calls, base = served
+    status, res = post(base + "/api/mission/start", {"waypoints": []})
+    assert res["ok"] is False and calls["start"] == []
+
+
+def test_estop_command_reaches_publisher(served):
+    _, calls, base = served
+    status, res = post(base + "/api/nav/command", {"action": "emergency_stop"})
+    assert status == 200
+    assert calls["estop"] == [True]
+
+
+def test_chassis_control_reports_missing_service(served):
+    _, calls, base = served
+    status, res = post(base + "/api/chassis/control", {"enabled": True})
+    assert res["ok"] is False and calls["chassis"] == [True]
+
+
+def test_mission_command_return_home_uses_trigger(served):
+    _, calls, base = served
+    status, res = post(base + "/api/mission/command", {"action": "return_home"})
+    assert res["ok"] is True and calls["trigger"] == ["/waypoint_manager/return_home"]
+
+
+def test_bad_json_returns_400(served):
+    _, _, base = served
+    status, res = post(base + "/api/teleop/cmd_vel", raw=b"{not json")
+    assert status == 400 and res["ok"] is False
+
+
 def test_unknown_path_404(served):
-    _, base = served
+    _, _, base = served
     status, _, _ = get(base + "/nope")
     assert status == 404
+
+
+def test_single_port_serves_https_and_http():
+    hub = MonitorStateHub()
+    server = make_server("127.0.0.1", 0, hub, enable_tls=True)
+    if server.ssl_context is None:
+        pytest.skip("openssl unavailable")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    try:
+        ctx = ssl._create_unverified_context()
+        status, _, _ = get("https://127.0.0.1:{}/api/state".format(port), context=ctx)
+        assert status == 200
+        status, _, _ = get("http://127.0.0.1:{}/api/state".format(port))
+        assert status == 200
+    finally:
+        server.shutdown()
+        server.server_close()
