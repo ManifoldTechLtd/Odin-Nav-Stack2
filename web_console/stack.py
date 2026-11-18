@@ -9,6 +9,13 @@ from collections import deque
 from typing import Callable, Optional
 
 MODES = ("replan_periodic", "escape", "neupan_only")
+PLANNERS = ("neupan", "sru")
+# Same shorthands as ros2_ws/scripts/sru/start_sru_ros2.sh (SRU_POLICY_MODEL). Keep in sync.
+SRU_POLICIES = {
+    "main": "nav_policy_sw01.onnx",
+    "conservative": "nav_policy_sw01_conservative.onnx",
+    "roll_v2": "nav_policy_sw01_roll_v2.onnx",
+}
 SESSION = "ons2_sw01"
 EXCLUDED_MAPS = {"empty"}
 
@@ -21,10 +28,12 @@ def tmux_session_active(name: str) -> bool:
 
 
 class _Job:
-    def __init__(self, kind, map_name=None, mode=None):
+    def __init__(self, kind, map_name=None, mode=None, planner=None, sru_policy=None):
         self.kind = kind
         self.map = map_name
         self.mode = mode
+        self.planner = planner
+        self.sru_policy = sru_policy
         self.lines = deque(maxlen=500)
         self.rc = None
         self.started_at = time.time()
@@ -35,7 +44,8 @@ class _Job:
         return self.rc is None
 
     def summary(self):
-        return {"kind": self.kind, "map": self.map, "mode": self.mode, "running": self.running,
+        return {"kind": self.kind, "map": self.map, "mode": self.mode, "planner": self.planner,
+                "sru_policy": self.sru_policy, "running": self.running,
                 "returncode": self.rc, "started_at": self.started_at, "finished_at": self.finished_at}
 
 
@@ -43,8 +53,9 @@ class NavStack:
     def __init__(self, repo_root: str, maps_dir: Optional[str] = None, reloc_dir: Optional[str] = None,
                  start_script: Optional[str] = None, stop_script: Optional[str] = None,
                  session_active: Optional[Callable[[], bool]] = None,
-                 has_tmux: Optional[Callable[[], bool]] = None):
+                 has_tmux: Optional[Callable[[], bool]] = None, sru_models_dir: Optional[str] = None):
         self.repo_root = repo_root
+        self.sru_models_dir = sru_models_dir or os.path.join(repo_root, "sru", "models")
         self.maps_dir = maps_dir or os.path.join(repo_root, "ros2_ws", "src", "map_planner", "maps")
         self.reloc_dir = reloc_dir or os.path.join(repo_root, "customer_file")
         self.start_script = start_script or os.path.join(repo_root, "scripts", "ons2_sw01.sh")
@@ -67,19 +78,35 @@ class NavStack:
             maps.append({"name": name, "reloc": os.path.isfile(os.path.join(self.reloc_dir, name + ".bin"))})
         return maps
 
-    def start(self, map_name: str, navigation_mode: str) -> dict:
+    def list_sru_policies(self):
+        return [{"name": name, "file": fname, "available": os.path.isfile(os.path.join(self.sru_models_dir, fname))}
+                for name, fname in SRU_POLICIES.items()]
+
+    def start(self, map_name: str, navigation_mode: str, planner: str = "neupan", sru_policy: str = "main") -> dict:
         self._require_tmux()
         if map_name not in {m["name"] for m in self.list_maps()}:
             raise ValueError("未知地图：{}".format(map_name))
         if navigation_mode not in MODES:
             raise ValueError("未知导航模式：{}".format(navigation_mode))
+        if planner not in PLANNERS:
+            raise ValueError("未知局部规划器：{}".format(planner))
         cmd = ["bash", self.start_script, "--map={}".format(map_name), "--navigation-mode={}".format(navigation_mode)]
+        if planner == "sru":
+            policy = {p["name"]: p for p in self.list_sru_policies()}.get(sru_policy)
+            if policy is None:
+                raise ValueError("未知 SRU 策略：{}".format(sru_policy))
+            if not policy["available"]:
+                raise ValueError("SRU 策略文件缺失：{}（请放入 sru/models/）".format(policy["file"]))
+            cmd += ["--local-planner=sru", "--sru-policy={}".format(sru_policy)]
+        else:
+            sru_policy = None
         with self._lock:
             self._ensure_idle()
             if self._session_active():
                 raise ValueError("导航已在运行（tmux 会话 {} 已存在），请先停止".format(SESSION))
-            self._job = self._spawn(_Job("start", map_name, navigation_mode), cmd)
-        return {"ok": True, "message": "开始启动导航：{} / {}".format(map_name, navigation_mode)}
+            self._job = self._spawn(_Job("start", map_name, navigation_mode, planner, sru_policy), cmd)
+        label = "SRU/{}".format(sru_policy) if planner == "sru" else "NeuPAN"
+        return {"ok": True, "message": "开始启动导航：{} / {} / {}".format(map_name, navigation_mode, label)}
 
     def stop(self) -> dict:
         self._require_tmux()

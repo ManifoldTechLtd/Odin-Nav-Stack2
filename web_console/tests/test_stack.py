@@ -119,3 +119,45 @@ def test_start_and_stop_refused_without_tmux(repo):
     with pytest.raises(ValueError, match="tmux"):
         stack.stop()
     assert stack.status()["tmux"] is False
+
+
+def make_sru_stack(repo, start_body=None):
+    stack = make_stack(repo, start_body=start_body)
+    models = repo / "sru" / "models"
+    models.mkdir(parents=True, exist_ok=True)
+    for f in ("nav_policy_sw01.onnx", "nav_policy_sw01_conservative.onnx"):
+        (models / f).write_bytes(b"onnx")
+    stack.sru_models_dir = str(models)
+    return stack
+
+
+def test_sru_start_passes_planner_and_policy_flags(repo):
+    stack = make_sru_stack(repo, start_body='echo "ARGS $@"\ntouch {}\nexit 0\n'.format(repo / "session.flag"))
+    stack.start("floor2", "replan_periodic", planner="sru", sru_policy="main")
+    wait_job(stack)
+    status = stack.status()
+    assert "ARGS --map=floor2 --navigation-mode=replan_periodic --local-planner=sru --sru-policy=main" in status["log"]
+    assert status["job"]["planner"] == "sru" and status["job"]["sru_policy"] == "main"
+
+
+def test_neupan_start_keeps_original_arguments(repo):
+    stack = make_sru_stack(repo, start_body='echo "ARGS $@"\ntouch {}\nexit 0\n'.format(repo / "session.flag"))
+    stack.start("floor2", "escape")
+    wait_job(stack)
+    assert "ARGS --map=floor2 --navigation-mode=escape" in stack.status()["log"]
+
+
+def test_sru_rejects_unknown_or_missing_policy(repo):
+    stack = make_sru_stack(repo)
+    with pytest.raises(ValueError):
+        stack.start("floor2", "escape", planner="sru", sru_policy="nope")
+    with pytest.raises(ValueError):
+        stack.start("floor2", "escape", planner="sru", sru_policy="roll_v2")
+    with pytest.raises(ValueError):
+        stack.start("floor2", "escape", planner="fancy")
+
+
+def test_lists_sru_policies_with_availability(repo):
+    stack = make_sru_stack(repo)
+    policies = {p["name"]: p["available"] for p in stack.list_sru_policies()}
+    assert policies == {"main": True, "conservative": True, "roll_v2": False}

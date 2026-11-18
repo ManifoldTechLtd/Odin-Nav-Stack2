@@ -258,3 +258,36 @@ def test_record_start_and_topics_endpoints(tmp_path):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_stack_state_lists_sru_policies_and_accepts_sru_start(tmp_path):
+    from web_console.stack import NavStack
+
+    repo = tmp_path / "repo"
+    maps = repo / "ros2_ws" / "src" / "map_planner" / "maps"
+    maps.mkdir(parents=True)
+    (maps / "floor2.yaml").write_text("image: x\n")
+    (maps / "floor2.pgm").write_bytes(b"P5")
+    models = repo / "sru" / "models"
+    models.mkdir(parents=True)
+    (models / "nav_policy_sw01.onnx").write_bytes(b"x")
+    hub = MonitorStateHub(intercom=None)
+    hub.stack = NavStack(repo_root=str(repo), session_active=lambda: False, has_tmux=lambda: True,
+                         start_script=str(tmp_path / "missing.sh"))
+    server = make_server("127.0.0.1", 0, hub, enable_tls=False)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        base = "http://127.0.0.1:{}".format(server.server_address[1])
+        status, _, body = get(base + "/api/stack/state")
+        payload = json.loads(body)
+        policies = {p["name"]: p["available"] for p in payload["sru_policies"]}
+        assert policies == {"main": True, "conservative": False, "roll_v2": False}
+        status, res = post(base + "/api/stack/start", {"map": "floor2", "navigation_mode": "escape",
+                                                       "planner": "sru", "sru_policy": "conservative"})
+        assert status == 400 and "缺失" in res["error"]
+        status, res = post(base + "/api/stack/start", {"map": "floor2", "navigation_mode": "escape",
+                                                       "planner": "fancy"})
+        assert status == 400
+    finally:
+        server.shutdown()
+        server.server_close()

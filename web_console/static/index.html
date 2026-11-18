@@ -99,6 +99,15 @@
     <div class="card" id="navCard">
       <h3>导航（SW01）<span class="chip" id="navChip" style="margin-left:8px">--</span></h3>
       <div class="row"><span class="muted">地图</span><select id="mapSel" class="wide"></select></div>
+      <div class="row"><span class="muted">规划器</span>
+        <select id="plannerSel" class="wide">
+          <option value="neupan">NeuPAN（默认）</option>
+          <option value="sru">SRU 策略</option>
+        </select>
+      </div>
+      <div class="row hidden" id="sruRow"><span class="muted">策略</span>
+        <select id="sruSel" class="wide"></select>
+      </div>
       <div class="row"><span class="muted">模式</span>
         <select id="modeSel" class="wide">
           <option value="replan_periodic">replan_periodic（默认）</option>
@@ -775,6 +784,23 @@
       });
       if (prev) sel.value = prev;
     }
+    if ((sn.sru_policies || []).length) {
+      var skey = sn.sru_policies.map(function (p) { return p.name + (p.available ? '' : '!'); }).join('|');
+      if (skey !== $('sruSel').dataset.key) {
+        $('sruSel').dataset.key = skey;
+        var prevS = $('sruSel').value;
+        $('sruSel').innerHTML = '';
+        sn.sru_policies.forEach(function (p) {
+          var o = document.createElement('option');
+          o.value = p.name;
+          o.textContent = p.name + (p.available ? '' : '（模型文件缺失）');
+          o.disabled = !p.available;
+          $('sruSel').appendChild(o);
+        });
+        if (prevS) $('sruSel').value = prevS;
+      }
+    }
+    $('sruRow').classList.toggle('hidden', $('plannerSel').value !== 'sru');
     var busy = sn.state === 'starting' || sn.state === 'stopping';
     if (sn.tmux === false) { $('navChip').textContent = '未安装 tmux'; $('navChip').className = 'chip bad'; }
     $('bNavStart').disabled = busy || sn.state === 'running' || sn.tmux === false;
@@ -789,12 +815,18 @@
       logEl.scrollTop = logEl.scrollHeight;
     }
   }
+  $('plannerSel').addEventListener('change', function () {
+    $('sruRow').classList.toggle('hidden', this.value !== 'sru');
+  });
   $('bNavStart').onclick = function () {
-    var map = $('mapSel').value, mode = $('modeSel').value;
+    var map = $('mapSel').value, mode = $('modeSel').value, planner = $('plannerSel').value;
+    var sru = $('sruSel').value;
     if (!map) return setToast('navToast', '请先选择地图');
-    if (!confirm('启动导航？\n地图：' + map + '\n模式：' + mode +
+    if (planner === 'sru' && !sru) return setToast('navToast', '请选择 SRU 策略');
+    var planText = planner === 'sru' ? 'SRU 策略 ' + sru : 'NeuPAN';
+    if (!confirm('启动导航？\n地图：' + map + '\n规划器：' + planText + '\n模式：' + mode +
         '\n将依次启动 odin、map_server 和导航栈。底盘运动仍需单独使能。')) return;
-    post('/api/stack/start', { map: map, navigation_mode: mode }).then(function (res) {
+    post('/api/stack/start', { map: map, navigation_mode: mode, planner: planner, sru_policy: sru }).then(function (res) {
       setToast('navToast', describe(res, '启动导航')); pollOps();
     });
   };
