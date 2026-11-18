@@ -1,0 +1,18 @@
+[Unit]
+Description=ONS2 web console (map, missions, e-stop, teleop, camera, intercom)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mt
+Group=audio
+WorkingDirectory=/home/mt/base_inspection
+Environment="ROS_DOMAIN_ID=98"
+Environment="HOME=/home/mt"
+ExecStart=/bin/bash -c "source /opt/ros/jazzy/setup.bash && source /home/mt/base_inspection/ros2_ws/install/setup.bash && exec python3 -m web_console.run --port 18090"
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
