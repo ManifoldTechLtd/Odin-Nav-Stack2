@@ -168,12 +168,18 @@ ros2 topic echo /waypoint_manager/status --once
 
 ## 5. Web Control Frontend
 
-Beyond the terminal console, ONS2 exposes the robot over a WebSocket bridge, so you can
-drive and watch it from a browser.
+Beyond the terminal console, ONS2 ships with a built-in browser control console as the primary web frontend, alongside optional 3D visualization tools.
 
-### 5.1 Open-source frontend (Foxglove) — included
+### 5.1 Built-in ONS2 Web Console (`:18090`) — recommended
 
-The launcher already starts `foxglove_bridge`; nothing extra to install.
+`web_console/` provides single-page browser control over the entire navigation workflow: start/stop the navigation stack (with map, NeuPAN/SRU planner, and mode selection), view the live map and robot pose, pick and edit waypoint missions, enable the chassis, trigger latched e-stop or `W/A/S/D/Q/E` teleop, record ROS 2 bags with presets, and use the on-demand camera and speaker intercom.
+
+- Open `http://<robot-ip>:18090` (or `https://<robot-ip>:18090` for microphone access; autostarted on SW01 via `scripts/systemd/web-console.service`, or run `python3 -m web_console.run --port 18090`).
+- Full walkthrough: **[ONS2 Web Console User Guide](../web_console.md)**.
+
+### 5.2 3D Debugging Visualization (Foxglove) — included
+
+The launcher also starts `foxglove_bridge` on port `8765` when you need 3D point-cloud and TF inspection:
 
 1. Open [Foxglove Studio](https://foxglove.dev/) in a browser (or the desktop app).
 2. Connect to **Foxglove WebSocket** → `ws://<robot-ip>:8765`
@@ -184,20 +190,9 @@ The launcher already starts `foxglove_bridge`; nothing extra to install.
    (the dedicated capture channel) — **not** `/move_base_simple/goal`, or the robot starts
    moving on every drag.
 
-### 5.2 3DGS navigation console — optional, contact us
+### 5.3 3DGS navigation console — optional, contact us
 
-For production inspection we provide a **separate, actively maintained control terminal**
-with a 3D Gaussian Splatting scene view: much richer visualisation, mission editing, and
-fleet-ready dashboards. **It supports both ROS 1 and ROS 2**, so it also covers the platforms
-where the open-source monitor above is not available yet (Go2, Dobot Lumo). It is not part of
-this open-source release — **please contact us to obtain it**.
-
-> 📹 **Video demos of both frontends** are on the
-> [ONS2 project page](https://manifoldtechltd.github.io/Odin-Nav-Stack2-Webpage/), in the
-> **"Navigation in 3DGS Reconstructed Scenes"** section.
->
-> If you are evaluating which frontend to start with: begin with Foxglove (free, zero setup),
-> and move to the 3DGS console when you need production-grade mission management.
+For 3D Gaussian Splatting scene views and multi-robot fleet dashboards, we also offer a separate **3DGS navigation console** supporting both ROS 1 and ROS 2. It is not part of this open-source release — **please contact us to obtain it** (video demos on the [ONS2 project page](https://manifoldtechltd.github.io/Odin-Nav-Stack2-Webpage/)).
 
 ## 6. Check Before Trusting the Robot
 

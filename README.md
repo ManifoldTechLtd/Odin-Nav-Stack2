@@ -60,7 +60,7 @@
   See the [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) tutorial for web links and documentation.
 - **Built for industrial inspection**  
   Extensive optimizations tuned to real industrial inspection scenarios and long patrol routes.  
-  See the [web console](docs/remote_monitoring.md) — a browser-based console with the global map, robot pose, waypoint missions, e-stop and teleop, on-demand camera and intercom, for ROS 2 (SW01, verified) and ROS 1 (Go2, Dobot Lumo). Remote access needs your own 4G module, NAT traversal or a public server.
+  See the [ONS2 Web Console](docs/web_console.md) — an all-in-one browser control terminal (`:18090`) that starts/stops the navigation stack, switches between NeuPAN and SRU policies, displays the global map and robot pose, edits and dispatches waypoint missions, enables the chassis, handles latched e-stop and teleop, records diagnostic bags with presets, and provides on-demand camera and intercom. Verified on ROS 2 (SW01) and supported on ROS 1 (Go2, Dobot Lumo). Remote access needs your own 4G module, NAT traversal or a public server.
 - **End-to-end, fully open source**  
   A complete inspection workflow — simulation to real robots, algorithms to the monitoring platform, real world to simulated world. See the [Real2Sim tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial).
 - **Odin RTK fusion navigation**  
@@ -333,8 +333,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | I want to… | Read |
 |---|---|
 | **Run a patrol mission** on an existing robot | [01 · Quick Start](docs/usage/01_quick_start.md) |
-| **Drive it from a browser** (Foxglove, or the optional 3DGS console) | [Quick Start § 5 · Web Control Frontend](docs/usage/01_quick_start.md#5-web-control-frontend) |
-| **Operate it from a browser, locally or over 4G / NAT** — map, missions, e-stop, camera, intercom | [Web Console](docs/remote_monitoring.md) |
+| **Control the entire navigation workflow from a browser** — start/stop stack, map, waypoint missions, e-stop, teleop, bag recording, camera, intercom | [ONS2 Web Console Guide](docs/web_console.md) · [Quick Start § 5 · Web Control Frontend](docs/usage/01_quick_start.md#5-web-control-frontend) |
 | **Understand or retune the local planner** — what was optimised and why | [NeuPAN Optimisation Notes](docs/neuPAN_optimisation.md) |
 | **Look up the default values for my platform** — measured per-robot values plus a recommended tuning order | [02 · Parameter Tuning](docs/usage/02_parameter_tuning.md) |
 | **Look up what a specific parameter does**, or debug a symptom | [Advanced Tuning & Troubleshooting](docs/TUNING_GUIDE.md) — full parameter dictionary (MPC/DUNE, scan pre-processing, adaptive safety band, global planner) plus a symptom→parameter table |
@@ -363,9 +362,9 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | Capability | ROS 1 (Noetic) | ROS 2 (Jazzy) |
 |---|---|---|
 | Patrol navigation, local/global planning | ✅ | ✅ |
-| Web control console (Foxglove) | ✅ | ✅ |
+| ONS2 Web Console (stack start/stop, map, missions, bag recording, e-stop, teleop, camera, intercom) | ✅ (mission/map/teleop; untested on hardware) | ✅ SW01 |
+| 3D visualization bridge (Foxglove WebSocket) | ✅ | ✅ |
 | Inspection perception (Florence-2, separate repo) | ✅ | ✅ |
-| Web console (map / missions / e-stop / camera / intercom) | ✅ (untested on hardware) | ✅ SW01 |
 | 3DGS navigation console *(optional, contact us)* | ✅ | ✅ |
 
 ## 5.4 VLM Scene Understanding
@@ -472,9 +471,11 @@ Odin-Nav-Stack2/
 │       ├── sw01_ros_control/      # ASTRALL SW01 SDK velocity bridge
 │       └── odin_vlm_terminal/     # ROS 2 VLM scene question-answering node
 ├── NeuPAN/                        # Shared MPC + analytic DUNE local planner core (Python)
+├── web_console/                   # Built-in browser control console (stack, map, missions, teleop, bags, camera, intercom)
 ├── perception/                    # Guide & clone instructions for ManifoldTechLtd/Odin-perception
 ├── docker/                        # Docker setup for Jetson (ROS 1)
 └── docs/                          # Documentation
+    ├── web_console.md             # ONS2 Web Console end-to-end user guide (+ web_console.zh-CN.md)
     ├── usage/                     # 01_quick_start, 02_parameter_tuning, 03_integrate_your_robot
     ├── architecture/              # ROBOT_PROFILE.md, ONS2_ARCHITECTURE.md, MODULE_DATAFLOW.md
     └── TUNING_GUIDE.md            # Detailed parameter dictionary & troubleshooting reference

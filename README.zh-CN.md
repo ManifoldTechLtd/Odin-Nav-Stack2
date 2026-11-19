@@ -59,7 +59,7 @@
   参见 [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) 教程，内有网页链接与文档说明。
 - **专为工业巡检打造**  
   针对真实工业巡检场景与长距离巡逻路线进行了大量专项优化。  
-  Web 控制台见 [remote_monitoring.zh-CN.md](docs/remote_monitoring.zh-CN.md) —— 浏览器里查看全局地图与机器人位姿，下发航点任务、急停与遥控，按需开相机与语音喊话。已在璇玑SW01（ROS 2）验证，Go2 / Dobot Lumo（ROS 1）已适配但尚未实机验证。远程访问需自备 4G 模块、内网穿透或公网服务器。
+  内置 **[ONS2 Web 控制端](docs/web_console.zh-CN.md)**（端口 `:18090`）—— 在浏览器中直接一键启停整套导航栈、切换 NeuPAN / SRU 策略、查看全局地图与实时位姿、点选编排航点任务、使能底盘、锁存急停与键盘遥控、按预设在线录包，以及按需开相机与语音喊话。已在璇玑 SW01（ROS 2）实机验证，并适配 Go2 / Dobot Lumo（ROS 1）。远程访问需自备 4G 模块、内网穿透或公网服务器。
 - **端到端，完全开源**  
   完整的巡检工作流——从仿真到实机、从算法到监控平台。真实世界到仿真世界，参见 [Real2Sim 教程](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial)。
 - **Odin RTK融合导航**
@@ -327,9 +327,8 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 
 | 我想… | 看这篇 |
 |---|---|
-| **在现有机器人上跑巡检任务** | [01 · 快速开始](docs/usage/01_quick_start.md) |
-| **用浏览器驱动机器人**（Foxglove，或可选的 3DGS 控制台） | [快速开始 § 5 · Web 控制前端](docs/usage/01_quick_start.md#5-web-control-frontend) |
-| **在浏览器里操作机器人**，本地或通过 4G / 内网穿透 —— 地图、任务、急停、相机、喊话 | [Web 控制台](docs/remote_monitoring.zh-CN.md) |
+| **在现有机器人上跑巡检任务** | [01 · 快速开始](docs/usage/01_quick_start.zh-CN.md) |
+| **用浏览器控制整个导航流程** —— 一键启停导航、地图选点、任务管理、急停遥控、在线录包、相机与喊话 | [ONS2 Web 控制端使用指南](docs/web_console.zh-CN.md) · [快速开始 § 5 · Web 控制前端](docs/usage/01_quick_start.zh-CN.md#5-web-控制前端) |
 | **搞懂或重调局部规划器** —— 优化了什么、为什么 | [NeuPAN 优化说明](docs/neuPAN_optimisation.zh-CN.md) |
 | **查我这台平台的默认参数值** —— 各机器人实测取值 + 推荐调参顺序 | [02 · 参数调优](docs/usage/02_parameter_tuning.zh-CN.md) |
 | **按名字查某个参数是什么**，或按症状排障 | [高级调参与排障指南](docs/TUNING_GUIDE.zh-CN.md) —— 全参数词典（MPC/DUNE/扫描预处理/自适应安全带/全局规划）+ 症状→改哪个参数的对照表 |
@@ -358,9 +357,9 @@ bash scripts/ons2_sw01.sh --map=NAME  # ASTRALL SW01 (ROS2，或你自己的机�
 | 能力 | ROS 1（Noetic） | ROS 2（Jazzy） |
 |---|---|---|
 | 巡检导航、全局/局部规划 | ✅ | ✅ |
-| Web 控制台（Foxglove） | ✅ | ✅ |
+| ONS2 Web 控制端（启停导航 / 地图 / 任务 / 录包 / 急停 / 遥控 / 相机 / 喊话） | ✅（地图/任务/遥控，尚未实机验证） | ✅ SW01 |
+| 3D 可视化桥接（Foxglove WebSocket） | ✅ | ✅ |
 | 巡检感知（Florence-2，独立仓） | ✅ | ✅ |
-| Web 控制台（地图 / 任务 / 急停 / 相机 / 喊话） | ✅（尚未实机验证） | ✅ SW01 |
 | 3DGS 导航控制台 *（可选，联系我们获取）* | ✅ | ✅ |
 
 
@@ -457,9 +456,11 @@ Odin-Nav-Stack2/
 │       ├── sw01_ros_control/      # ASTRALL SW01 SDK 底盘速度桥
 │       └── odin_vlm_terminal/     # ROS 2 VLM 场景问答节点
 ├── NeuPAN/                        # 共享 MPC + 解析式 DUNE 局部规划器核心库 (Python)
+├── web_console/                   # 内置浏览器控制端 (导航启停、地图、航点任务、遥控、录包、相机、喊话)
 ├── perception/                    # ManifoldTechLtd/Odin-perception 巡检感知仓库说明与拉取指南
 ├── docker/                        # Jetson (ROS 1) Docker 部署配置
 └── docs/                          # 文档体系
+    ├── web_console.zh-CN.md       # ONS2 Web 控制端全流程使用指南 (含英文版 web_console.md)
     ├── usage/                     # 01_quick_start, 02_parameter_tuning, 03_integrate_your_robot
     ├── architecture/              # ROBOT_PROFILE.md, ONS2_ARCHITECTURE.md, MODULE_DATAFLOW.md
     └── TUNING_GUIDE.md            # 完整参数字典与症状排障手册
