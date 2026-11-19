@@ -36,26 +36,26 @@ topic:
 
 
 odom_feedback:
-  enable: false
-  stale_threshold_sec: 0.2
+  enable: true
+  stale_threshold_sec: 0.30
   # false: rotate world-frame twist.linear into body frame using pose yaw;
   # true: twist.linear is already in body frame.
   linear_is_body_frame: false
 
 
 smith_predictor:
-  enable: false
-  fixed_lag_sec: 0.10
+  enable: true
+  fixed_lag_sec: 0.12
   use_solve_time: true
-  max_tau_sec: 0.25
+  max_tau_sec: 0.28
   velocity_source: "odom"
 
 
 output_gain:
-  enable: false
-  w_gain: 1.16
-  v_fwd_gain: 0.87
-  v_bwd_gain: 1.16
+  enable: true
+  w_gain: 1.12
+  v_fwd_gain: 1.0
+  v_bwd_gain: 1.0
 scan_range: [0.2, 4.5]
 scan_angle: [-3.14, 3.14]
 scan_downsample: 1
@@ -70,9 +70,9 @@ cmd_w_lpf_alpha: 0.0
 # Gated hysteresis deadband on angular velocity during clean straight-line tracking.
 w_deadband:
   enable: true
-  enter_rad: 0.03
-  exit_rad: 0.067
-  straight_heading_err_max_deg: 8.0
+  enter_rad: 0.015
+  exit_rad: 0.030
+  straight_heading_err_max_deg: 2.5
   straight_curvature_max: 0.15
   straight_obstacle_min_dist_m: 0.9
   straight_lookahead_m: 1.0
@@ -157,17 +157,17 @@ stuck_escape:
   early_replan_trigger_frames: 5
   early_replan_cooldown_sec: 2.0
 
-  post_escape_grace_q_theta_scale: 0.25
-  post_escape_grace_q_s_scale: 0.5
+  post_escape_grace_q_theta_scale: 0.45
+  post_escape_grace_q_s_scale: 0.65
   post_escape_grace_min_distance_m: 0.5
   post_escape_grace_clear_threshold_m: 1.0
   post_escape_grace_clear_dwell_sec: 0.5
   post_escape_grace_max_sec: 1.0
 
   path_block_grace_enable: true
-  path_block_dist_m: 0.80
+  path_block_dist_m: 0.35
   path_block_frames: 5
-  path_block_clear_frames: 10
+  path_block_clear_frames: 4
 
 # Dynamic follow target obstacle masking (disabled by default)
 follow_target:

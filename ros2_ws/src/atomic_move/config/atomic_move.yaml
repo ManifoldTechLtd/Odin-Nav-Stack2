@@ -34,13 +34,13 @@
     linear_stuck_tolerance: 0.01
 
     # In-place rotation (/atomic_move/turn)
-    angular_kp: 1.0
+    angular_kp: 1.4
     angular_ki: 0.01
     angular_kd: 0.03
     angular_max_vel: 1.0
-    angular_min_vel: 0.45
-    angular_tolerance: 0.3491        # 20 deg: lower bound for clean in-place turns
-    angular_fine_window: 0.35
+    angular_min_vel: 0.18
+    angular_tolerance: 0.0873        # 5 deg: SW01 cleanly tracks wz down to 0.18 rad/s
+    angular_fine_window: 0.18
     angular_pulse_duration: 0.08
     angular_settle_duration: 0.15
     angular_max_duration: 30.0
@@ -48,5 +48,5 @@
     angular_stuck_tolerance: 0.03    # Above stationary SLAM yaw jitter floor (~0.018 rad)
 
     # Final waypoint alignment (/atomic_move/align)
-    alignment_heading_tolerance: 0.35
+    alignment_heading_tolerance: 0.12
     alignment_max_duration: 20.0

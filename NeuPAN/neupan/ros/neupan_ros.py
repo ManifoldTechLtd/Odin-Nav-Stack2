@@ -1404,13 +1404,22 @@ class neupan_core:
         )
 
     def _compute_path_block(self) -> bool:
-        """Return True when the first 5 nominal reference states lie within `escape.pb_dist` of an obstacle point."""
+        """Return True when the first 5 nominal reference states lie within `escape.pb_dist` of a forward obstacle point."""
         pts = self.obstacle_points
         ref = (getattr(self.neupan_planner, "info", None) or {}).get(
             "ref_state_list"
         )
         if pts is None or not ref or np.size(pts) == 0:
             return False
+        if self.robot_state is not None:
+            rx = float(self.robot_state[0, 0])
+            ry = float(self.robot_state[1, 0])
+            ryaw = float(self.robot_state[2, 0])
+            proj = (pts[0] - rx) * cos(ryaw) + (pts[1] - ry) * sin(ryaw)
+            fwd = proj >= -0.10
+            if not np.any(fwd):
+                return False
+            pts = pts[:, fwd]
         dmin_sq = float("inf")
         for st in ref[:5]:
             if st is None:

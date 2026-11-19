@@ -341,7 +341,9 @@ void SlidingMapNode::updateMap(const sensor_msgs::msg::LaserScan& scan,
                   map_.data[cidx] == -1) {
                 is_dyn = false;
               }
-            } else if (cidx >= 0 && cell_seen_free_[cidx] && map_.data[cidx] != 100) {
+            } else if (cidx >= 0 &&
+                       ((cell_seen_free_[cidx] && map_.data[cidx] != 100) ||
+                        cell_state_[cidx] != kCellStatic)) {
               is_dyn = true;
             }
             if (is_dyn) {

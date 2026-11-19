@@ -151,6 +151,9 @@ private:
 
   double obstacle_cost_weight_{3.0};
   double obstacle_cost_safe_distance_m_{0.5};
+  double dynamic_obstacle_cost_weight_{-1.0};
+  double dynamic_obstacle_cost_safe_distance_m_{-1.0};
+  double sliding_map_start_exempt_radius_m_{0.0};
   double line_of_sight_safe_distance_m_{0.25};
   std::vector<float> distance_to_blocked_;
 

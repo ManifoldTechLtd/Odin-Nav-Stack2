@@ -29,17 +29,17 @@
     height: 400
 
     # ---- Time decay ----
-    cell_decay_sec: 8.0              # Blind-spot retention time (s); visible free rays clear cells immediately.
+    cell_decay_sec: 6.0              # Blind-spot retention time (s); visible free rays clear cells immediately.
                                      # Do not set to 0: infinite retention accumulates ghost obstacles from moving objects.
-    decay_check_period_sec: 0.5
+    decay_check_period_sec: 0.25
 
     # Short-term memory for confirmed vacated dynamic footprints
     dynamic_memory_enable: true
-    dynamic_decay_sec: 2.0
-    dynamic_min_hold_sec: 2.0
+    dynamic_decay_sec: 1.8
+    dynamic_min_hold_sec: 1.0
     dynamic_input_topic: "/scan_dynamic"
     dynamic_require_vacated: true    # Apply short decay only after the dynamic target has vacated the cell
-    footprint_clear_enable: false    # Optional zero-margin robot footprint clearing (default false)
+    footprint_clear_enable: true     # Clear zero-margin robot footprint cells physically occupied by chassis
     no_return_keep_near_m: 0.30      # No-return (+inf) beams keep cells closer than this to the sensor
                                      # (obstacles inside the 0.2 m pc_to_scan blind zone also return +inf)
 

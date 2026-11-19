@@ -58,9 +58,15 @@ bridge:
 
 navigation:
   inflation_radius: 0.35
-  obstacle_cost_safe_distance: 0.80
-  obstacle_cost_weight: 8.0
-  line_of_sight_safe_distance: 0.35
+  obstacle_cost_safe_distance: 0.50
+  obstacle_cost_weight: 3.5
+  dynamic_obstacle_cost_safe_distance: 0.35
+  dynamic_obstacle_cost_weight: 3.2
+  sliding_map_start_exempt_radius_m: 0.48
+  start_heading_penalty_weight: 4.0
+  start_heading_penalty_radius_m: 1.5
+  path_protect_initial_m: 0.25
+  line_of_sight_safe_distance: 0.20
   smoothing_iterations: 40
   smoothing_max_deviation_m: 0.35
   min_height: -0.3
@@ -71,7 +77,7 @@ navigation:
 
 mission:
   enable_alignment: true
-  angular_tolerance: 0.3491
+  angular_tolerance: 0.0873
   route_segment_enable: true
   route_segment_length_m: 10.0
   route_segment_overlap_m: 3.0

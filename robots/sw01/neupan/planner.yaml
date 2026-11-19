@@ -23,7 +23,7 @@ collision_threshold: 0.02
 robot:
   kinematics: 'diff'
   max_speed: [1.0, 1.0]
-  max_acce: [0.5, 0.5]
+  max_acce: [0.8, 1.8]
   length: 0.96
   width: 0.55
 
@@ -51,13 +51,14 @@ pan:
 # adjust parameters
 adjust:
   solver: 'SCS'
-  q_s: 1.0
-  q_theta: 1.0
+  q_s: 0.72
+  q_theta: 0.78
   p_u: 1.0
-  p_w: 0.8
-  eta: 12.0
+  p_w: 0.65
+  p_dw: 0.45
+  eta: 7.5
   ro_obs: 400
-  d_max: 0.4
+  d_max: 0.22
   d_min: 0.05
   bk: 0.4
   nrmp_inference_only: true

@@ -64,6 +64,12 @@ MapPlanner::MapPlanner(const rclcpp::Node::SharedPtr& node) : node_(node) {
       node_->declare_parameter("obstacle_cost_weight", obstacle_cost_weight_);
   obstacle_cost_safe_distance_m_ = node_->declare_parameter(
       "obstacle_cost_safe_distance", obstacle_cost_safe_distance_m_);
+  dynamic_obstacle_cost_weight_ = node_->declare_parameter(
+      "dynamic_obstacle_cost_weight", dynamic_obstacle_cost_weight_);
+  dynamic_obstacle_cost_safe_distance_m_ = node_->declare_parameter(
+      "dynamic_obstacle_cost_safe_distance", dynamic_obstacle_cost_safe_distance_m_);
+  sliding_map_start_exempt_radius_m_ = node_->declare_parameter(
+      "sliding_map_start_exempt_radius_m", sliding_map_start_exempt_radius_m_);
   line_of_sight_safe_distance_m_ = node_->declare_parameter(
       "line_of_sight_safe_distance", line_of_sight_safe_distance_m_);
   start_heading_penalty_weight_ = node_->declare_parameter(
@@ -246,6 +252,23 @@ void MapPlanner::buildPlanData() {
     const int mw = static_cast<int>(map_.info.width);
     const int mh = static_cast<int>(map_.info.height);
 
+    bool have_robot_pose = false;
+    double robot_wx = 0.0;
+    double robot_wy = 0.0;
+    const double start_exempt_sq =
+        sliding_map_start_exempt_radius_m_ * sliding_map_start_exempt_radius_m_;
+    if (sliding_map_start_exempt_radius_m_ > 0.0) {
+      try {
+        geometry_msgs::msg::TransformStamped rtf = tf_buffer_->lookupTransform(
+            map_.header.frame_id, "base_link", tf2::TimePointZero);
+        robot_wx = rtf.transform.translation.x;
+        robot_wy = rtf.transform.translation.y;
+        have_robot_pose = true;
+      } catch (const tf2::TransformException&) {
+        have_robot_pose = false;
+      }
+    }
+
     for (int fy = 0; fy < fh; ++fy) {
       for (int fx = 0; fx < fw; ++fx) {
         const int fidx = fy * fw + fx;
@@ -254,6 +277,11 @@ void MapPlanner::buildPlanData() {
         const double wy_odom = foy + (fy + 0.5) * fres;
         const double wx_map = cos_y * wx_odom - sin_y * wy_odom + cx;
         const double wy_map = sin_y * wx_odom + cos_y * wy_odom + cy;
+        if (have_robot_pose) {
+          const double drx = wx_map - robot_wx;
+          const double dry = wy_map - robot_wy;
+          if (drx * drx + dry * dry < start_exempt_sq) continue;
+        }
         const int mx = static_cast<int>(
             std::floor((wx_map - map_.info.origin.position.x) / map_.info.resolution));
         const int my = static_cast<int>(
@@ -906,10 +934,23 @@ void MapPlanner::smoothPath(std::vector<geometry_msgs::msg::PoseStamped>& poses)
   };
 
   std::vector<double> min_clearance(n, 0.0);
-  if (obstacle_cost_safe_distance_m_ > 0.0) {
+  if (obstacle_cost_safe_distance_m_ > 0.0 ||
+      dynamic_obstacle_cost_safe_distance_m_ > 0.0) {
+    const double dyn_cap = dynamic_obstacle_cost_safe_distance_m_ >= 0.0
+        ? dynamic_obstacle_cost_safe_distance_m_
+        : obstacle_cost_safe_distance_m_;
     for (int i = 0; i < n; ++i) {
-      min_clearance[i] = std::min(clearanceWorld(original[i].x, original[i].y),
-                                   obstacle_cost_safe_distance_m_);
+      double cap = obstacle_cost_safe_distance_m_;
+      int mx = 0, my = 0;
+      if (static_distance_ready_ && worldToMap(original[i], mx, my)) {
+        const int idx = toIndex(mx, my);
+        if (idx >= 0 && idx < static_cast<int>(distance_to_blocked_.size()) &&
+            idx < static_cast<int>(distance_static_cache_.size()) &&
+            distance_to_blocked_[idx] + 1e-5f < distance_static_cache_[idx]) {
+          cap = dyn_cap;
+        }
+      }
+      min_clearance[i] = std::min(clearanceWorld(original[i].x, original[i].y), cap);
     }
   }
 
@@ -1115,16 +1156,47 @@ void MapPlanner::computeDistanceTransform() {
 }
 
 double MapPlanner::cellCostMultiplier(int index) const {
-  // Disabled (weight == 0) or distance map not built: legacy step cost.
-  if (obstacle_cost_weight_ <= 0.0 || obstacle_cost_safe_distance_m_ <= 0.0) return 1.0;
   if (distance_to_blocked_.empty()) return 1.0;
   if (index < 0 || index >= static_cast<int>(distance_to_blocked_.size())) return 1.0;
-  const float d = distance_to_blocked_[index];
-  if (d >= static_cast<float>(obstacle_cost_safe_distance_m_)) return 1.0;
-  // Linear from 1+weight at d==0 down to 1.0 at d==safe_distance.
-  const double frac = (obstacle_cost_safe_distance_m_ - static_cast<double>(d))
-                      / obstacle_cost_safe_distance_m_;
-  return 1.0 + obstacle_cost_weight_ * frac;
+
+  const bool split_dynamic =
+      static_distance_ready_ &&
+      index < static_cast<int>(distance_static_cache_.size()) &&
+      (dynamic_obstacle_cost_safe_distance_m_ >= 0.0 ||
+       dynamic_obstacle_cost_weight_ >= 0.0);
+  if (!split_dynamic) {
+    if (obstacle_cost_weight_ <= 0.0 || obstacle_cost_safe_distance_m_ <= 0.0) return 1.0;
+    const float d = distance_to_blocked_[index];
+    if (d >= static_cast<float>(obstacle_cost_safe_distance_m_)) return 1.0;
+    const double frac = (obstacle_cost_safe_distance_m_ - static_cast<double>(d))
+                        / obstacle_cost_safe_distance_m_;
+    return 1.0 + obstacle_cost_weight_ * frac;
+  }
+
+  double static_mult = 1.0;
+  if (obstacle_cost_weight_ > 0.0 && obstacle_cost_safe_distance_m_ > 0.0) {
+    const float ds = distance_static_cache_[index];
+    if (ds < static_cast<float>(obstacle_cost_safe_distance_m_)) {
+      static_mult = 1.0 + obstacle_cost_weight_ *
+          ((obstacle_cost_safe_distance_m_ - static_cast<double>(ds)) /
+           obstacle_cost_safe_distance_m_);
+    }
+  }
+
+  double dyn_mult = 1.0;
+  const float db = distance_to_blocked_[index];
+  if (db + 1e-5f < distance_static_cache_[index]) {
+    const double dyn_safe = dynamic_obstacle_cost_safe_distance_m_ >= 0.0
+        ? dynamic_obstacle_cost_safe_distance_m_
+        : obstacle_cost_safe_distance_m_;
+    const double dyn_weight = dynamic_obstacle_cost_weight_ >= 0.0
+        ? dynamic_obstacle_cost_weight_
+        : obstacle_cost_weight_;
+    if (dyn_weight > 0.0 && dyn_safe > 0.0 && db < static_cast<float>(dyn_safe)) {
+      dyn_mult = 1.0 + dyn_weight * ((dyn_safe - static_cast<double>(db)) / dyn_safe);
+    }
+  }
+  return std::max(static_mult, dyn_mult);
 }
 
 double MapPlanner::headingAlignFactor(int n_index, int start_index, double start_yaw) const {
@@ -1157,7 +1229,8 @@ void MapPlanner::computeLocalDistanceTransform(const std::vector<int>& dynamic_c
   const int width = static_cast<int>(map_.info.width);
   const int height = static_cast<int>(map_.info.height);
   const double res = map_.info.resolution;
-  const double max_range = obstacle_cost_safe_distance_m_ +
+  const double max_range = std::max(obstacle_cost_safe_distance_m_,
+                                    dynamic_obstacle_cost_safe_distance_m_) +
                            inflation_radius_ + 1.0;
 
   const int dx[8] = {1, -1, 0, 0, 1, 1, -1, -1};

@@ -312,6 +312,33 @@ int main() {
     CHECK(!d.install);
     CHECK(d.reason == "REJECT_REQUIRES_ALIGNMENT");
   }
+  {
+    // 11) No active path (e.g. PATH_SAFETY_WAIT cleared active_path_) + REQUIRES_ALIGNMENT ->
+    //     must install even when blocked_gated is false (Bag 202611191512 t=62..111s deadlock).
+    std::vector<Pt> cand = {{0.0, 0.0}, {0.0, 1.0}, {1.0, 1.5}, {6.8, 1.5}};
+    GateInput in;
+    in.candidate = computePathMetrics(cand, robot, deg2rad(-102.0), cfg);
+    in.candidate_requires_alignment = true;
+    in.blocked_gated = false;
+    const GateDecision d = evaluateInstallGate(in, cfg);
+    CHECK(d.install);
+    CHECK(d.reason == "OK_INSTALL");
+  }
+  {
+    // 12) No active path + moderate initial turn (>25 deg) -> must not fail REJECT_HEADING_WORSEN
+    //     against placeholder active.start_heading_deg=0 (Bag 202611191503 t=14.07s).
+    std::vector<Pt> rotated;
+    for (double s = 0.0; s <= 5.0 + 1e-9; s += 0.25) {
+      const double a = deg2rad(-35.1);
+      rotated.push_back(Pt{s * std::cos(a), s * std::sin(a)});
+    }
+    GateInput in;
+    in.candidate = computePathMetrics(rotated, robot, yaw, cfg);
+    in.blocked_gated = false;
+    const GateDecision d = evaluateInstallGate(in, cfg);
+    CHECK(d.install);
+    CHECK(d.reason == "OK_INSTALL");
+  }
 
   std::printf("replan_install_gate_test: %d passed, %d failed\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;

@@ -13,7 +13,39 @@ from typing import Callable, Dict, List, Optional
 SESSION = "ons2_bag"
 TOPIC_RE = re.compile(r"^/[A-Za-z0-9_/]+$")
 HEAVY_TYPES = {"sensor_msgs/msg/PointCloud2", "sensor_msgs/msg/Image", "sensor_msgs/msg/CompressedImage"}
+LIGHT_TOPICS = [
+    "/rosout_agg", "/rosout",
+    "/cmd_vel", "/odin1/odometry", "/tf", "/tf_static",
+    "/scan_raw", "/scan", "/scan_360", "/scan_temporal_filter/trace", "/initial_path", "/inflated_map",
+    "/move_base_simple/goal", "/neupan/goal", "/neupan/arrive", "/neupan/replan",
+    "/neupan_plan", "/neupan_initial_path",
+    "/neupan/control_trace", "/neupan/escape_trace",
+    "/neupan/recovery_request", "/neupan/recovery_command",
+    "/neupan/replan_gate_shadow",
+    "/sw01_cmd_vel_bridge/cmd_sent", "/sw01_cmd_vel_bridge/control_trace",
+    "/sw01_cmd_vel_bridge/sdk_linked", "/sw01_cmd_vel_bridge/control_authority",
+    "/waypoint_manager/status", "/waypoint_manager/mission_feedback",
+]
+TOTAL_TOPICS = [
+    "/waypoint_manager/status", "/waypoint_manager/mission_feedback",
+    "/move_base_simple/goal", "/cmd_vel", "/cmd_vel/throttle",
+    "/odin1/odometry", "/tf", "/tf_static", "/scan_raw", "/scan", "/scan_360", "/scan_temporal_filter/trace",
+    "/odin1/cloud_slam", "/odin1/image/compressed", "/odin1/cloud_raw", "/imu", "/odin1/imu",
+    "/initial_path", "/neupan_initial_path", "/neupan_plan", "/robot_marker",
+    "/neupan/replan", "/neupan/arrive", "/neupan/stop",
+    "/neupan/nav_path/goal", "/neupan/nav_path/status", "/neupan/nav_path/feedback",
+    "/neupan/nav_path/result", "/neupan/nav_path/cancel",
+    "/map", "/inflated_map", "/fake_map", "/sliding_map", "/map_planner/result",
+    "/sw01_cmd_vel_bridge/sdk_linked", "/sw01_cmd_vel_bridge/control_authority",
+    "/neupan/control_trace", "/neupan/escape_trace",
+    "/neupan/recovery_request", "/neupan/recovery_command",
+    "/neupan/replan_gate_shadow",
+    "/sw01_cmd_vel_bridge/cmd_sent", "/sw01_cmd_vel_bridge/control_trace",
+    "/rosout_agg", "/rosout",
+]
 PRESETS = {
+    "light": {"label": "轻量 (LIGHT)", "topics": LIGHT_TOPICS},
+    "total": {"label": "全量 (TOTAL)", "topics": TOTAL_TOPICS},
     "nav": {"label": "导航核心", "topics": [
         "/tf", "/tf_static", "/odin1/odometry", "/cmd_vel", "/map", "/scan",
         "/waypoint_manager/status", "/waypoint_manager/system_health", "/waypoint_manager/mission_feedback",

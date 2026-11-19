@@ -811,3 +811,48 @@ def test_atomic_move_stop_wins_race_against_simultaneous_new_request(rig):
     ok_fut = align_cli.call_async(AlignTo.Request(x=0.0, y=0.0, yaw=0.0))
     wait_until(ok_fut.done, timeout=2.0)
     assert ok_fut.result().success
+
+
+@pytest.mark.parametrize("rig", [
+    ("-p", "path_min_clear_m:=0.10",
+     "-p", "sliding_map_start_exempt_radius_m:=0.48"),
+], indirect=True)
+def test_parallel_passerby_in_blindspot_does_not_trap_start_occupied(rig):
+    # Parallel walker / large avoidance turn leaves a blind-spot /sliding_map cell at y=0.20m
+    # alongside base_link (inside 0.20 + 0.10 = 0.30m dynamic inflation). Must not trap start!
+    rig.obstacle = (-0.1, 0.1, 0.18, 0.25)
+    time.sleep(0.25)
+    result = rig.plan(4.0)
+    assert result.success, f"Parallel passerby trapped robot in dynamic inflation: {result.message}"
+    checked = validate(rig, path_xy(result.path))
+    assert checked.success, checked.message
+
+
+@pytest.mark.parametrize("rig", [
+    ("-p", "inflation_radius:=0.35", "-p", "path_min_clear_m:=0.10",
+     "-p", "obstacle_cost_safe_distance:=0.80", "-p", "obstacle_cost_weight:=8.0",
+     "-p", "dynamic_obstacle_cost_safe_distance:=0.35",
+     "-p", "dynamic_obstacle_cost_weight:=3.5",
+     "-p", "start_heading_penalty_weight:=4.0",
+     "-p", "start_heading_penalty_radius_m:=1.5",
+     "-p", "path_protect_initial_m:=0.25"),
+], indirect=True)
+def test_close_dynamic_obstacle_detour_is_smooth_and_recovers_from_safety_wait(rig):
+    # 1) Sudden close obstacle ~1.35m ahead: initial 1m detour heading must stay smooth (<45 deg).
+    rig.obstacle = (1.30, 1.50, -0.15, 0.15)
+    time.sleep(0.25)
+    detour = rig.plan(6.0)
+    assert detour.success, detour.message
+    assert "REQUIRES_ALIGNMENT" not in detour.message, f"Steep sideways plunge: {detour.message}"
+
+    # 2) Even if robot stopped at -100 deg yaw during PATH_SAFETY_WAIT, install_gate must not deadlock.
+    rig.obstacle = None
+    time.sleep(0.25)
+    rig.start_mission(goal=6.0, extra_args=["-p", "install_gate_enable:=true"])
+    stops_before = len(rig.stops)
+    paths_before = len(rig.paths)
+    rig.robot = [0.0, 0.0, math.radians(-100.0)]
+    rig.obstacle = (1.30, 1.50, -0.15, 0.15)
+    wait_until(lambda: len(rig.stops) > stops_before, timeout=4.0)
+    wait_until(lambda: len(rig.paths) > paths_before, timeout=4.0)
+

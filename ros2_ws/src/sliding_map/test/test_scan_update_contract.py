@@ -259,3 +259,22 @@ def test_vacated_hold_counts_from_vacate_time(rig_factory):
     assert cell(grid, 1.0, 0.0) == 100, 'vacated cell dropped before dynamic_min_hold_sec elapsed'
     grid, _ = rig.send_frame(2.0, [0.5, 1.0], dynamic=[0.0, 1.0])
     assert cell(grid, 1.0, 0.0) == -1
+
+
+def test_fallback_multiframe_walking_pedestrian_vacates_and_decays_quickly(rig_factory):
+    # Reproduces Bag 202611191512: without /scan_dynamic, a pedestrian observed for >=2 frames
+    # on a previously free cell must stay kCellDynamic (not get overwritten to kCellStatic on
+    # frame 2) so that stepping forward into an adjacent cell marks the old blind-spot cell
+    # vacated and decays it at dynamic_decay_sec instead of cell_decay_sec (15s).
+    rig = rig_factory(dynamic_memory_enable=True, dynamic_input_topic='/scan_dynamic_unused',
+                      cell_decay_sec=15.0, dynamic_decay_sec=0.4, dynamic_min_hold_sec=0.4,
+                      dynamic_require_vacated=True)
+    rig.send_frame(0.0, [math.inf, math.inf])
+    rig.send_frame(0.1, [1.0, math.inf])
+    rig.send_frame(0.2, [1.0, math.inf])
+    # Pedestrian steps to beam 1 (angle=0.25 rad, ~0.25m away) while beam 0 is outside the scan FOV.
+    rig.send_frame(0.4, [1.0], angle_min=0.25, angle_increment=0.25)
+    grid, _ = rig.send_frame(1.1, [1.0], angle_min=0.25, angle_increment=0.25)
+    assert cell(grid, 1.0, 0.0) == -1, 'multi-frame dynamic cell was demoted to static and lingered in blind spot'
+    assert cell(grid, 1.0 * math.cos(0.25), 1.0 * math.sin(0.25)) == 100
+

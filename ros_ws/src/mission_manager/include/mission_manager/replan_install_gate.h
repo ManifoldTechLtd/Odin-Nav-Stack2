@@ -412,8 +412,9 @@ inline GateDecision evaluateInstallGate(const GateInput &in,
   GateDecision d;
   char buf[320];
 
-  // Layer 1a: Reject candidate requiring pre-alignment (unless exempted while blocked)
+  // Layer 1a: Reject candidate requiring pre-alignment (unless exempted while blocked or no active path)
   if (cfg.reject_requires_alignment && in.candidate_requires_alignment &&
+      in.active.valid &&
       !(cfg.alignment_reject_skip_when_blocked && in.blocked_gated)) {
     d.install = false;
     d.reason = "REJECT_REQUIRES_ALIGNMENT";
@@ -423,8 +424,9 @@ inline GateDecision evaluateInstallGate(const GateInput &in,
 
   // Layer 1b: Reject candidate with significantly worse initial heading demand
   const bool heading_worse =
-      std::fabs(in.candidate.start_heading_deg) >
-      std::fabs(in.active.start_heading_deg) + cfg.heading_worsen_deg;
+      in.active.valid &&
+      (std::fabs(in.candidate.start_heading_deg) >
+       std::fabs(in.active.start_heading_deg) + cfg.heading_worsen_deg);
   if (heading_worse &&
       !(cfg.heading_reject_skip_when_blocked && in.blocked_gated)) {
     d.install = false;

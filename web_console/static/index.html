@@ -10,7 +10,8 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
     font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans CJK SC", sans-serif; font-size: 13px; }
-  #app { display: grid; grid-template-columns: 1fr 360px; grid-template-rows: 44px 1fr; height: 100%; }
+  #app { display: grid; grid-template-columns: 1fr minmax(460px, 34vw); grid-template-rows: 44px 1fr; height: 100%; }
+  @media (max-width: 980px) { #app { grid-template-columns: 1fr 380px; } }
   #bar { grid-column: 1 / 3; display: flex; align-items: center; gap: 14px; padding: 0 14px;
     background: var(--panel); border-bottom: 1px solid var(--line); }
   #bar .title { font-weight: 600; font-size: 14px; }
@@ -60,12 +61,14 @@
   pre.log { background: #0a0d12; border: 1px solid var(--line); border-radius: 6px; padding: 6px; margin: 6px 0;
     max-height: 190px; overflow: auto; font: 11px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; color: #aab3c0; }
   pre.log .ok { color: var(--ok); } pre.log .bad { color: var(--bad); } pre.log .warn { color: var(--warn); }
-  #topicList { max-height: 200px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px; font-size: 12px; }
-  #topicList label { display: flex; gap: 6px; align-items: center; padding: 1px 2px; min-width: 0; }
-  #topicList label > span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #topicList { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px; font-size: 12px; }
+  #topicList label { display: flex; gap: 6px; align-items: flex-start; padding: 2px 3px; min-width: 0; }
+  #topicList label input { margin-top: 2px; flex: 0 0 auto; }
+  #topicList .tname { flex: 1 1 auto; min-width: 0; font-family: ui-monospace, Menlo, Consolas, monospace;
+    word-break: break-all; white-space: normal; line-height: 1.35; }
   #topicList .type { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis;
-    white-space: nowrap; min-width: 0; flex: 0 1 auto; max-width: 150px; }
-  .tag { font-size: 10px; border: 1px solid rgba(227,179,65,.5); color: var(--warn); border-radius: 4px; padding: 0 3px; }
+    white-space: nowrap; flex: 0 0 auto; max-width: 115px; margin-left: auto; }
+  .tag { font-size: 10px; border: 1px solid rgba(227,179,65,.5); color: var(--warn); border-radius: 4px; padding: 0 3px; flex: 0 0 auto; }
 </style>
 </head>
 <body>
@@ -129,6 +132,7 @@
       <div class="row" id="recPresets"></div>
       <div class="row">
         <input type="text" class="wide" id="topicFilter" placeholder="筛选话题">
+        <span class="muted" id="recSelCount" style="font-size:11.5px;white-space:nowrap">已选 0</span>
         <button id="bTopicsRefresh">刷新</button>
       </div>
       <div id="topicList"></div>
@@ -836,6 +840,63 @@
   };
 
   // ---------- bag recording ----------
+  var activePreset = '';
+  var DEFAULT_REC_PRESETS = {
+    light: { label: '轻量 (LIGHT)', topics: [
+      '/rosout_agg', '/rosout', '/cmd_vel', '/odin1/odometry', '/tf', '/tf_static',
+      '/scan_raw', '/scan', '/scan_360', '/scan_temporal_filter/trace', '/initial_path', '/inflated_map',
+      '/move_base_simple/goal', '/neupan/goal', '/neupan/arrive', '/neupan/replan',
+      '/neupan_plan', '/neupan_initial_path', '/neupan/control_trace', '/neupan/escape_trace',
+      '/neupan/recovery_request', '/neupan/recovery_command', '/neupan/replan_gate_shadow',
+      '/sw01_cmd_vel_bridge/cmd_sent', '/sw01_cmd_vel_bridge/control_trace',
+      '/sw01_cmd_vel_bridge/sdk_linked', '/sw01_cmd_vel_bridge/control_authority',
+      '/waypoint_manager/status', '/waypoint_manager/mission_feedback'
+    ]},
+    total: { label: '全量 (TOTAL)', topics: [
+      '/waypoint_manager/status', '/waypoint_manager/mission_feedback',
+      '/move_base_simple/goal', '/cmd_vel', '/cmd_vel/throttle',
+      '/odin1/odometry', '/tf', '/tf_static', '/scan_raw', '/scan', '/scan_360', '/scan_temporal_filter/trace',
+      '/odin1/cloud_slam', '/odin1/image/compressed', '/odin1/cloud_raw', '/imu', '/odin1/imu',
+      '/initial_path', '/neupan_initial_path', '/neupan_plan', '/robot_marker',
+      '/neupan/replan', '/neupan/arrive', '/neupan/stop',
+      '/neupan/nav_path/goal', '/neupan/nav_path/status', '/neupan/nav_path/feedback',
+      '/neupan/nav_path/result', '/neupan/nav_path/cancel',
+      '/map', '/inflated_map', '/fake_map', '/sliding_map', '/map_planner/result',
+      '/sw01_cmd_vel_bridge/sdk_linked', '/sw01_cmd_vel_bridge/control_authority',
+      '/neupan/control_trace', '/neupan/escape_trace',
+      '/neupan/recovery_request', '/neupan/recovery_command', '/neupan/replan_gate_shadow',
+      '/sw01_cmd_vel_bridge/cmd_sent', '/sw01_cmd_vel_bridge/control_trace',
+      '/rosout_agg', '/rosout'
+    ]}
+  };
+  function shortType(tp) {
+    return String(tp || '').replace(/^[^/]+\/(?:msg|srv|action)\//, '').replace(/^[^/]+\//, '');
+  }
+  function selectedTopicNames() {
+    return Object.keys(recSel).filter(function (n) { return !!recSel[n]; }).sort();
+  }
+  function updatePresetButtons() {
+    var btns = $('recPresets').querySelectorAll('button[data-preset]');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('on', btns[i].dataset.preset === activePreset);
+    }
+    $('recSelCount').textContent = '已选 ' + selectedTopicNames().length + (topics.length ? ' / ' + topics.length : '');
+  }
+  function applyPreset(key, preset) {
+    var finish = function () {
+      var names = {}; topics.forEach(function (t) { names[t.name] = true; });
+      recSel = {};
+      (preset.topics || []).forEach(function (n) {
+        if (!topics.length || names[n]) recSel[n] = true;
+      });
+      activePreset = key;
+      updatePresetButtons();
+      renderTopics(true);
+      setToast('recToast', '已切换预设「' + preset.label + '」，勾选 ' + selectedTopicNames().length + ' 个话题');
+    };
+    if (!topics.length) loadTopics().then(finish);
+    else finish();
+  }
   function renderRecord(rs) {
     if (rs.active) {
       $('recChip').textContent = '录制中'; $('recChip').className = 'chip bad';
@@ -849,33 +910,51 @@
     $('bRecStart').disabled = !!rs.active || rs.tmux === false;
     $('bRecStop').disabled = !rs.active || rs.tmux === false;
     var presets = $('recPresets');
-    if (!presets.childElementCount && rs.presets) {
-      Object.keys(rs.presets).forEach(function (key) {
+    var mergedPresets = Object.assign({}, DEFAULT_REC_PRESETS, rs.presets || {});
+    var pKey = Object.keys(mergedPresets).join('|');
+    if (presets.dataset.key !== pKey) {
+      presets.dataset.key = pKey;
+      presets.innerHTML = '';
+      Object.keys(mergedPresets).forEach(function (key) {
         var b = document.createElement('button');
-        b.textContent = rs.presets[key].label;
-        b.onclick = function () {
-          var names = {}; topics.forEach(function (t) { names[t.name] = true; });
-          rs.presets[key].topics.forEach(function (n) { if (names[n]) recSel[n] = true; });
-          renderTopics(true);
-        };
+        b.dataset.preset = key;
+        b.textContent = mergedPresets[key].label;
+        b.onclick = function () { applyPreset(key, mergedPresets[key]); };
         presets.appendChild(b);
       });
+      var clr = document.createElement('button');
+      clr.textContent = '清空已选';
+      clr.onclick = function () {
+        recSel = {}; activePreset = '';
+        updatePresetButtons(); renderTopics(true);
+        setToast('recToast', '已清空所选话题');
+      };
+      presets.appendChild(clr);
+      updatePresetButtons();
     }
   }
   function renderTopics(force) {
     var filter = $('topicFilter').value.trim().toLowerCase();
-    var key = topics.map(function (t) { return t.name; }).join('|') + '#' + filter + '#' + Object.keys(recSel).join('|');
+    var selList = selectedTopicNames();
+    var key = topics.map(function (t) { return t.name; }).join('|') + '#' + filter + '#' + selList.join('|');
+    updatePresetButtons();
     if (!force && key === recKey) return;
     recKey = key;
     var list = $('topicList'); list.innerHTML = '';
     topics.filter(function (t) { return !filter || t.name.toLowerCase().indexOf(filter) >= 0; })
       .forEach(function (t) {
         var row = document.createElement('label');
+        row.title = t.name + (t.types && t.types.length ? ' (' + t.types.join(', ') + ')' : '');
         var box = document.createElement('input'); box.type = 'checkbox'; box.checked = !!recSel[t.name];
-        box.onchange = function () { recSel[t.name] = box.checked; renderTopics(true); };
+        box.onchange = function () {
+          if (box.checked) recSel[t.name] = true;
+          else delete recSel[t.name];
+          activePreset = '';
+          renderTopics(true);
+        };
         row.appendChild(box);
-        var name = document.createElement('span'); name.textContent = t.name; row.appendChild(name);
-        var typ = document.createElement('span'); typ.className = 'type'; typ.textContent = t.types.join(', ');
+        var name = document.createElement('span'); name.className = 'tname'; name.textContent = t.name; row.appendChild(name);
+        var typ = document.createElement('span'); typ.className = 'type'; typ.textContent = (t.types || []).map(shortType).join(', ');
         row.appendChild(typ);
         if (t.heavy) { var tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = '大'; row.appendChild(tag); }
         list.appendChild(row);

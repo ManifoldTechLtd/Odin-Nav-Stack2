@@ -70,6 +70,33 @@ def test_presets_cover_nav_core():
     assert "/cmd_vel" in PRESETS["nav"]["topics"] and "/map" in PRESETS["nav"]["topics"]
 
 
+def test_presets_include_light_and_total_topic_sets():
+    assert "light" in PRESETS and "total" in PRESETS
+    light = set(PRESETS["light"]["topics"])
+    total = set(PRESETS["total"]["topics"])
+    for required_light in (
+        "/rosout_agg", "/cmd_vel", "/odin1/odometry", "/tf", "/tf_static",
+        "/scan_raw", "/scan", "/scan_360", "/scan_temporal_filter/trace",
+        "/initial_path", "/inflated_map", "/neupan_plan", "/neupan_initial_path",
+        "/neupan/control_trace", "/neupan/escape_trace", "/neupan/replan_gate_shadow",
+        "/sw01_cmd_vel_bridge/cmd_sent", "/sw01_cmd_vel_bridge/control_trace",
+        "/sw01_cmd_vel_bridge/sdk_linked", "/sw01_cmd_vel_bridge/control_authority",
+        "/waypoint_manager/status", "/waypoint_manager/mission_feedback",
+    ):
+        assert required_light in light
+        assert normalize_topics([required_light]) == [required_light]
+    for required_total in (
+        "/odin1/cloud_slam", "/odin1/image/compressed", "/odin1/cloud_raw", "/imu",
+        "/cmd_vel/throttle", "/robot_marker", "/neupan/stop",
+        "/neupan/nav_path/goal", "/neupan/nav_path/status", "/neupan/nav_path/feedback",
+        "/neupan/nav_path/result", "/neupan/nav_path/cancel",
+        "/map", "/fake_map", "/map_planner/result",
+    ):
+        assert required_total in total
+        assert normalize_topics([required_total]) == [required_total]
+    assert "/odin1/cloud_raw" not in light and "/odin1/cloud_slam" not in light
+
+
 def test_start_creates_session_and_meta(tmp_path):
     tmux = FakeTmux()
     rec = BagRecorder(bag_root=str(tmp_path), run=tmux, has_tmux=lambda: True)
