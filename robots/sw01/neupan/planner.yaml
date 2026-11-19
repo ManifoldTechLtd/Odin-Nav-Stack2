@@ -14,7 +14,7 @@
 # mpc
 receding: 10
 step_time: 0.2
-ref_speed: 0.4
+ref_speed: 0.6
 device: 'cpu'
 time_print: False
 collision_threshold: 0.02
@@ -23,13 +23,13 @@ collision_threshold: 0.02
 robot:
   kinematics: 'diff'
   max_speed: [1.0, 1.0]
-  max_acce: [0.8, 1.8]
+  max_acce: [1.0, 1.8]
   length: 0.96
   width: 0.55
 
 # initial path
 ipath:
-  interval: 0.1
+  interval: 0.20
   waypoints: []
   curve_style: 'line'   # 'dubins' or reeds or line
   min_radius: 0.2
