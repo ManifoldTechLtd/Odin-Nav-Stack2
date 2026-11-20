@@ -27,7 +27,7 @@ class MonitorStateHub:
                  intercom: Optional[AudioIntercom] = None):
         self.console = ConsoleState()
         self.stall = stall_detector or StallDetector()
-        self.camera = OnDemandImageGate(subscribe_fn=lambda: None, unsubscribe_fn=lambda: None, default_fps=2.0)
+        self.camera = OnDemandImageGate(subscribe_fn=lambda: None, unsubscribe_fn=lambda: None, default_fps=8.0)
         self.intercom = intercom or AudioIntercom()
         self.nav = NavigationAndTeleopController()
         self.mission = MissionController()

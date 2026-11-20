@@ -108,6 +108,43 @@ def test_camera_frame_204_without_frames(served):
     assert status == 204
 
 
+def test_camera_supports_high_fps_aggressive_compression_and_mjpeg_stream(served):
+    import io
+    from PIL import Image
+
+    hub, _, base = served
+    # Default FPS should be >= 8.0 and allow setting 10 FPS (previously clamped at 3.0)
+    assert hub.camera.fps >= 8.0
+    status, res = post(base + "/api/camera/control", {"enabled": True, "fps": 10})
+    assert status == 200 and res["camera"]["fps"] == pytest.approx(10.0)
+
+    # Generate a 1600x1296 detailed test image (~150+ KB at high quality)
+    im = Image.effect_mandelbrot((1600, 1296), (-2.0, -1.2, 0.8, 1.2), 32).convert("RGB")
+    raw_buf = io.BytesIO()
+    im.save(raw_buf, format="JPEG", quality=92)
+    raw_jpeg = raw_buf.getvalue()
+    assert len(raw_jpeg) > 80 * 1024
+
+    assert hub.camera.on_compressed_frame(raw_jpeg, now=100.0) is True
+    # At 10 FPS (0.10s interval), a frame 0.11s later must be accepted (previously dropped < 0.33s)
+    assert hub.camera.on_compressed_frame(raw_jpeg, now=100.11) is True
+
+    jpeg, seq, _ = hub.camera.get_latest_frame(now=100.12)
+    assert seq == 2 and jpeg is not None
+    assert len(jpeg) < len(raw_jpeg) * 0.25
+    with Image.open(io.BytesIO(jpeg)) as out_im:
+        assert out_im.size[0] <= 420
+
+    # Verify /api/camera/stream.mjpg streams multipart/x-mixed-replace frames
+    with urllib.request.urlopen(base + "/api/camera/stream.mjpg", timeout=3) as resp:
+        assert resp.status == 200
+        assert "multipart/x-mixed-replace" in resp.headers["Content-Type"]
+        chunk = resp.read(len(jpeg) + 40)
+        assert b"--frame\r\nContent-Type: image/jpeg" in chunk
+        assert b"\xff\xd8" in chunk
+    post(base + "/api/camera/control", {"enabled": False})
+
+
 def test_mission_start_forwards_waypoints(served):
     _, calls, base = served
     status, res = post(base + "/api/mission/start", {

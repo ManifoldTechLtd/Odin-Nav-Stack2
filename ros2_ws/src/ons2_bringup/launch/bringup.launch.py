@@ -90,7 +90,7 @@ def _include_profile_nodes(context, *args, **kwargs):
         'angle_max': 0.7853,
         'angle_increment': 0.017,
         'scan_time': 0.1,
-        'range_min': 0.2,
+        'range_min': 0.01,
         'range_max': 5.0,
     }
     pc_params.update(pc_to_scan_parameters(profile))

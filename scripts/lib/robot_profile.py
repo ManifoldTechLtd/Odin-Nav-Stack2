@@ -82,7 +82,7 @@ def footprint_parameters(profile: dict) -> dict:
 
 def pc_to_scan_parameters(profile: dict) -> dict:
     nav = profile.get('navigation', {})
-    return {k: float(nav[k]) for k in ('min_height', 'max_height') if k in nav}
+    return {k: float(nav[k]) for k in ('min_height', 'max_height', 'range_min', 'range_max') if k in nav}
 
 
 def map_planner_parameters(profile: dict) -> dict:

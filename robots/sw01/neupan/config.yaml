@@ -56,7 +56,7 @@ output_gain:
   w_gain: 1.12
   v_fwd_gain: 1.0
   v_bwd_gain: 1.0
-scan_range: [0.2, 4.5]
+scan_range: [0.01, 4.5]
 scan_angle: [-3.14, 3.14]
 scan_downsample: 1
 scan_timeout_sec: 0.5   # Zero velocity when no scan was processed for this long (0 disables)

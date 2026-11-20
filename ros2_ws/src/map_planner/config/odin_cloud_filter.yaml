@@ -26,6 +26,6 @@ odin_cloud_temporal_filter:
     res: 0.02
     window: 5
     persist: 2
-    near_radius: 0.5
+    near_radius: 0.0
     active_radius: 2.0
     log_period_sec: 2.0

@@ -119,7 +119,7 @@ Bag recording runs `ros2 bag record` in a dedicated `ons2_bag` tmux session and 
 ### Step 6: Safety Alarm, Camera & Intercom
 
 - **Safety Monitor:** Triggers a visual/audible alarm if robot displacement stays within `--stall-radius-m` over `--stall-window-sec` during an active mission; supports forced monitoring, 60 s mute, and live threshold updates.
-- **On-Demand Camera:** Subscribes to `/odin1/image/compressed` only while enabled (1 / 2 / 5 fps) to save cellular bandwidth.
+- **On-Demand Camera:** Subscribes to `/odin1/image/compressed` only while enabled, downscales frames to `420px / JPEG Q=35` (`~6–11 KB/frame`), and pushes a persistent MJPEG stream (`/api/camera/stream.mjpg`) at 2 / 5 / 8 (default) / 10 / 15 fps; zero cellular bandwidth when closed.
 - **Intercom:** Supports custom TTS speech, preset phrases, live browser microphone recording (requires HTTPS or `localhost`), and audio file upload played through the robot's speaker.
 
 ---

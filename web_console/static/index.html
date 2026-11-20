@@ -235,11 +235,11 @@
     </div>
 
     <div class="card" id="camCard">
-      <h3>相机（按需取流，省流量）</h3>
+      <h3>相机（按需低画质高帧率取流）</h3>
       <div class="row">
         <button id="bCam">开启相机</button>
         <span class="muted">帧率</span>
-        <select id="fps"><option>1</option><option selected>2</option><option>5</option></select>
+        <select id="fps"><option>2</option><option>5</option><option selected>8</option><option>10</option><option>15</option></select>
       </div>
       <div class="muted" id="camStatus" style="font-size:12px;margin-top:6px">相机关闭</div>
       <img id="cam" alt="">
@@ -273,7 +273,7 @@
   var pick = null, pan = null, hoverWorld = null;
   var teleop = { held: {}, timer: null, keyDir: {} };
   var alarm = { ctx: null, timer: null, enabled: false };
-  var camTimer = null, camLoading = false, camFps = 2;
+  var camStreaming = false, camFallback = false, camLoading = false, camRetryTimer = null, camFps = 8;
   var presetsReady = false, lastIcErr = null, API_VERSION = 2;
 
   function setToast(id, text) { $(id).textContent = text || ''; }
@@ -614,23 +614,54 @@
   }
 
   // ---------- camera ----------
-  function frameLoop() {
-    if (!(S && S.camera && S.camera.enabled)) return;
+  function pollCamFrame() {
+    clearTimeout(camRetryTimer); camRetryTimer = null;
+    if (!(S && S.camera && S.camera.enabled)) { stopCamStream(); return; }
     if (camLoading) return;
     camLoading = true;
+    var img = $('cam'), t0 = Date.now();
+    img.onload = function () {
+      camLoading = false;
+      var wait = Math.max(15, Math.round(1000 / camFps) - (Date.now() - t0));
+      camRetryTimer = setTimeout(pollCamFrame, wait);
+    };
+    img.onerror = function () { camLoading = false; camRetryTimer = setTimeout(pollCamFrame, 500); };
+    img.src = '/api/camera/frame.jpg?t=' + t0;
+  }
+  function startCamStream() {
+    clearTimeout(camRetryTimer); camRetryTimer = null;
+    if (!(S && S.camera && S.camera.enabled)) { stopCamStream(); return; }
+    if (camFallback) { pollCamFrame(); return; }
     var img = $('cam');
-    img.onload = function () { camLoading = false; camTimer = setTimeout(frameLoop, 1000 / camFps); };
-    img.onerror = function () { camLoading = false; camTimer = setTimeout(frameLoop, 1000); };
-    img.src = '/api/camera/frame.jpg?t=' + Date.now();
+    if (camStreaming && img.getAttribute('src')) return;
+    camStreaming = true;
+    img.onload = null;
+    img.onerror = function () {
+      camStreaming = false;
+      if (!(S && S.camera && S.camera.enabled)) return;
+      fetch('/api/camera/stream.mjpg', { method: 'HEAD', cache: 'no-store' }).then(function (r) {
+        if (r.status === 404) { camFallback = true; pollCamFrame(); }
+        else { camRetryTimer = setTimeout(startCamStream, 600); }
+      }).catch(function () { camRetryTimer = setTimeout(startCamStream, 800); });
+    };
+    img.src = '/api/camera/stream.mjpg?t=' + Date.now();
+  }
+  function stopCamStream() {
+    clearTimeout(camRetryTimer); camRetryTimer = null; camStreaming = false; camLoading = false;
+    var img = $('cam'); img.onload = null; img.onerror = null; img.removeAttribute('src'); img.style.display = 'none';
   }
   $('bCam').onclick = function () {
     var on = !(S && S.camera && S.camera.enabled);
-    post('/api/camera/control', { enabled: on, fps: parseFloat($('fps').value) }).then(function () {
-      refresh(); if (on) frameLoop(); else { $('cam').style.display = 'none'; }
+    camFps = parseFloat($('fps').value) || 8;
+    if (!on) stopCamStream();
+    post('/api/camera/control', { enabled: on, fps: camFps }).then(function (res) {
+      if (S && res && res.camera) S.camera = res.camera;
+      if (on) startCamStream();
+      refresh();
     });
   };
   $('fps').addEventListener('change', function () {
-    camFps = parseFloat(this.value);
+    camFps = parseFloat(this.value) || 8;
     post('/api/camera/control', { enabled: !!(S && S.camera && S.camera.enabled), fps: camFps });
   });
 
@@ -739,11 +770,12 @@
     if (!cam.enabled) $('camStatus').textContent = '相机关闭';
     else if (!cam.frame_seq) $('camStatus').textContent = '已开启，等待图像：' + (cam.topic || '') +
       ' 暂无数据（请检查驱动的 sendrgbcompressed 是否开启）';
-    else $('camStatus').textContent = '帧 ' + cam.frame_seq + ' · 最近一帧 ' +
+    else $('camStatus').textContent = '帧 ' + cam.frame_seq + ' · ' + (cam.fps || camFps) + ' FPS · 最近一帧 ' +
       (cam.frame_age_sec != null ? cam.frame_age_sec.toFixed(1) + ' s 前' : '--') + ' · ' +
       Math.round((cam.frame_size_bytes || 0) / 1024) + ' KB';
     $('cam').style.display = cam.enabled && cam.frame_seq ? 'block' : 'none';
-    if (cam.enabled && !camTimer && !camLoading) frameLoop();
+    if (cam.enabled && !camStreaming) startCamStream();
+    else if (!cam.enabled && camStreaming) stopCamStream();
 
     var ic = S.intercom || {};
     if (ic.last_error && ic.last_error !== lastIcErr) {

@@ -176,6 +176,33 @@ def make_handler(hub):
                 if not jpeg:
                     return self._send(204, b"", "image/jpeg")
                 return self._send(200, jpeg, "image/jpeg", [("Cache-Control", "no-store, no-cache, must-revalidate")])
+            if path == "/api/camera/stream.mjpg":
+                if not hub.camera.enabled:
+                    return self._send(204, b"", "image/jpeg")
+                self.send_response(200)
+                self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+                self.send_header("Connection", "close")
+                self.end_headers()
+                last_seq = 0
+                while hub.camera.enabled:
+                    jpeg, seq, _ = hub.camera.wait_for_next_frame(last_seq, timeout=1.0)
+                    if not hub.camera.enabled:
+                        break
+                    if not jpeg or seq <= last_seq:
+                        continue
+                    last_seq = seq
+                    part = (
+                        b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                        + str(len(jpeg)).encode("ascii")
+                        + b"\r\n\r\n"
+                        + jpeg
+                        + b"\r\n"
+                    )
+                    self.wfile.write(part)
+                    self.wfile.flush()
+                self.close_connection = True
+                return
             return self._send_json({"ok": False, "error": "Not Found"}, status=404)
 
         def do_POST(self):

@@ -317,9 +317,12 @@ void SlidingMapNode::updateMap(const sensor_msgs::msg::LaserScan& scan,
         bool in_footprint;
         if (use_footprint_polygon_ && have_tf_map_base) {
           const tf2::Vector3 hb = tf_map_base.inverse() * hit_point;
+          const bool ahead_of_sensor = (direction.x() * raw_range) > 0.02;
+          const double front_half_len =
+              footprint_length_m_ * 0.5 + (ahead_of_sensor ? 0.0 : footprint_margin_m_);
+          const double rear_half_len = footprint_length_m_ * 0.5 + footprint_margin_m_;
           in_footprint =
-              (std::fabs(hb.x()) <=
-               footprint_length_m_ * 0.5 + footprint_margin_m_) &&
+              (hb.x() <= front_half_len && hb.x() >= -rear_half_len) &&
               (std::fabs(hb.y()) <=
                footprint_width_m_ * 0.5 + footprint_margin_m_);
         } else {

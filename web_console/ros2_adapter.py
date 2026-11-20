@@ -1,5 +1,6 @@
 """ROS 2 adapter: wires the map, pose, mission, safety and camera topics/services to MonitorStateHub."""
 
+import signal
 import subprocess
 import threading
 import time
@@ -226,6 +227,15 @@ def run(args, hub):
             return bool(res.success), str(res.message)
 
     stop_all = False
+
+    def _on_sigterm(_signum, _frame):
+        nonlocal stop_all
+        stop_all = True
+
+    try:
+        signal.signal(signal.SIGTERM, _on_sigterm)
+    except ValueError:
+        pass
     while not stop_all:
         ctx = Context()
         rclpy.init(context=ctx)
@@ -264,7 +274,7 @@ def run(args, hub):
         spin_thread = threading.Thread(target=executor.spin, daemon=True)
         spin_thread.start()
         try:
-            while ctx.ok() and not rebind.is_set():
+            while ctx.ok() and not rebind.is_set() and not stop_all:
                 time.sleep(0.2)
             if not rebind.is_set():
                 stop_all = True

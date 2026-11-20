@@ -70,7 +70,7 @@ def test_navigation_yaml_uses_persist_filter_parameters():
     assert params['res'] == pytest.approx(0.02)
     assert params['window'] == 5
     assert params['persist'] == 2
-    assert params['near_radius'] == pytest.approx(0.5)
+    assert params['near_radius'] == pytest.approx(0.0)
     assert params['active_radius'] == pytest.approx(2.0)
 
 
@@ -297,8 +297,8 @@ def test_navigation_yaml_is_parsed_by_actual_ros_node(context):
         assert node.output_topic == '/odin1/cloud_filtered'
         assert node.core.res == pytest.approx(0.02)
         assert node.core.window == 5
-        assert node.core.persist == 2
-        assert node.core.near_radius == pytest.approx(0.5)
+        assert node.core.persist == pytest.approx(2)
+        assert node.core.near_radius == pytest.approx(0.0)
         assert node.core.active_radius == pytest.approx(2.0)
     finally:
         node.destroy_node()

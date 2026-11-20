@@ -21,7 +21,7 @@
     map_topic: /sliding_map
 
     # Range and grid dimensions
-    range_min: 0.05
+    range_min: 0.01
     max_fake_range: 4.5              # Aligned with NeuPAN scan_range[1]
     output_points: 360
     resolution: 0.05
@@ -40,8 +40,7 @@
     dynamic_input_topic: "/scan_dynamic"
     dynamic_require_vacated: true    # Apply short decay only after the dynamic target has vacated the cell
     footprint_clear_enable: true     # Clear zero-margin robot footprint cells physically occupied by chassis
-    no_return_keep_near_m: 0.30      # No-return (+inf) beams keep cells closer than this to the sensor
-                                     # (obstacles inside the 0.2 m pc_to_scan blind zone also return +inf)
+    no_return_keep_near_m: 0.10      # No-return (+inf) beams keep cells closer than optical min distance
 
     # Robot footprint self-filter (overridden from robots/<robot>/robot.yaml by ons2_bringup)
     use_footprint_polygon: true      # true = base_link rectangle; false = radial filter

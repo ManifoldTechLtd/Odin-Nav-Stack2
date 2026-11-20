@@ -71,6 +71,7 @@ navigation:
   smoothing_max_deviation_m: 0.35
   min_height: -0.3
   max_height: 0.3
+  range_min: 0.01
   local_planner: neupan
   navigation_mode: replan_periodic
   periodic_replan_sec: 2.0

@@ -5,16 +5,19 @@ import time
 from typing import Callable, Optional, Tuple
 
 
+MAX_FPS = 15.0
+
+
 class OnDemandImageGate:
-    """Controls dynamic ROS 2 subscription to /odin1/image/compressed with 4G JPEG downscaling."""
+    """Controls dynamic ROS 2 subscription to /odin1/image/compressed with fast JPEG downscaling."""
 
     def __init__(
         self,
         subscribe_fn: Callable[[], None],
         unsubscribe_fn: Callable[[], None],
-        default_fps: float = 2.0,
-        max_width: int = 640,
-        jpeg_quality: int = 55,
+        default_fps: float = 8.0,
+        max_width: int = 420,
+        jpeg_quality: int = 35,
         idle_timeout_sec: float = 300.0,
     ):
         self._subscribe_fn = subscribe_fn
@@ -22,7 +25,7 @@ class OnDemandImageGate:
         self._lock = threading.Lock()
         self._cond = threading.Condition(self._lock)
         self.enabled = False
-        self.fps = max(1.0, min(float(default_fps), 3.0))
+        self.fps = max(1.0, min(float(default_fps), MAX_FPS))
         self.max_width = int(max_width)
         self.jpeg_quality = int(jpeg_quality)
         self.idle_timeout_sec = float(idle_timeout_sec)
@@ -34,9 +37,24 @@ class OnDemandImageGate:
         self.total_bytes: int = 0
 
     def _compress_for_4g(self, raw_jpeg: bytes) -> bytes:
-        # Only recompress if frame is larger than 35 KB
-        if len(raw_jpeg) <= 35 * 1024 or self.max_width <= 0:
+        if len(raw_jpeg) <= 8 * 1024 or self.max_width <= 0:
             return raw_jpeg
+        try:
+            import cv2
+            import numpy as np
+
+            buf = np.frombuffer(raw_jpeg, dtype=np.uint8)
+            img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+            if img is not None:
+                h, w = img.shape[:2]
+                if w > self.max_width:
+                    new_h = max(1, int(round(h * (self.max_width / float(w)))))
+                    img = cv2.resize(img, (self.max_width, new_h), interpolation=cv2.INTER_AREA)
+                ok, enc = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality])
+                if ok:
+                    return enc.tobytes()
+        except Exception:
+            pass
         try:
             import io
             from PIL import Image
@@ -48,7 +66,7 @@ class OnDemandImageGate:
                     new_h = max(1, int(round(h * (self.max_width / float(w)))))
                     im = im.resize((self.max_width, new_h), Image.Resampling.BILINEAR)
                 out = io.BytesIO()
-                im.save(out, format="JPEG", quality=self.jpeg_quality, optimize=True)
+                im.save(out, format="JPEG", quality=self.jpeg_quality)
                 return out.getvalue()
         except Exception:
             return raw_jpeg
@@ -64,7 +82,7 @@ class OnDemandImageGate:
         call_unsub = False
         with self._lock:
             if fps is not None:
-                self.fps = max(1.0, min(float(fps), 3.0))
+                self.fps = max(1.0, min(float(fps), MAX_FPS))
             target = bool(enabled)
             if target and not self.enabled:
                 self.enabled = True
@@ -135,6 +153,7 @@ class OnDemandImageGate:
                 self._cond.wait(timeout=timeout)
             if not self.enabled:
                 return None, self.latest_seq, 0.0
+            self.last_client_pull_at = time.time()
             return self.latest_jpeg, self.latest_seq, self.latest_stamp
 
     def get_status(self) -> dict:
