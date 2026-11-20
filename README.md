@@ -53,9 +53,9 @@
 ## 1.2 What's New
 
 - **[2026-11-20] Built-in ONS2 Web Control Console (`:18090`)**  
-  Manage the entire navigation workflow from any browser — start/stop the stack with live readiness-gate logs, switch between `NeuPAN` and `SRU` policies, inspect the global PGM map and real-time pose (backed by a 32 MB SHM profile and automatic post-boot DDS rebind), pick and edit multi-waypoint routes with JSON import/export, engage latched E-Stop or `W/A/S/D/Q/E` teleop, record diagnostic bags with one-click `LIGHT` / `TOTAL` presets, stream compressed high-FPS MJPEG live video (`8–15 FPS`), and broadcast TTS/microphone intercom. See the [ONS2 Web Console Guide](docs/web_console.md). Verified on ROS 2 (SW01) and supported on ROS 1 (Go2, Dobot Lumo). Remote access needs your own 4G module, NAT traversal or a public server.
-- **[2026-11-20] Adaptive Blocked-Goal Approach-Side Arrival & Smooth Dynamic Avoidance**  
-  When a target waypoint is occupied by an obstacle or sits inside its repulsion halo, `map_planner` and `mission_manager` automatically flood-fill that obstacle's connected inflation region, relocate the goal onto the nearest reachable comfort spot on the approaching side (`goal_relocate_clearance_m: 0.55` outside inflation, clear of NeuPAN DUNE pushback), align the target heading in place, and count the waypoint as reached. Combined with decoupled dynamic/static memory decay in `sliding_map`, blind-spot start exemption, zero near-field blind zone in front of Odin1, and remote-controller-gated always-on chassis motion (`require_enable: false`), close-range dynamic obstacles are bypassed smoothly without yaw oscillation or inflation deadlocks.
+  Start/stop the stack, switch `NeuPAN` / `SRU` policies, pick waypoints on the live PGM map, teleop, stream compressed video, and record preset bags directly in the browser. See the [ONS2 Web Console Guide](docs/web_console.md).
+- **[2026-11-20] Blocked-Goal Adaptive Arrival & Smooth Dynamic Avoidance**  
+  Occupied waypoints automatically relocate to the nearest reachable spot outside the obstacle's inflation shell and count as arrived, paired with smoother close-range dynamic obstacle bypassing.
 - **[2026-11-10] Dramatically faster planning**  
   Plans substantially faster even on low-compute platforms, with smoother execution and nimbler obstacle avoidance.  
   See the [NeuPAN optimisation notes](docs/neuPAN_optimisation.md) for what was changed and the measured gains.
