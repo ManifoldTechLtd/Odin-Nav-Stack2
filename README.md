@@ -52,21 +52,21 @@
 
 ## 1.2 What's New
 
-- **Built-in ONS2 Web Control Console (`:18090`)**  
+- **[2026-11-20] Built-in ONS2 Web Control Console (`:18090`)**  
   Manage the entire navigation workflow from any browser — start/stop the stack with live readiness-gate logs, switch between `NeuPAN` and `SRU` policies, inspect the global PGM map and real-time pose (backed by a 32 MB SHM profile and automatic post-boot DDS rebind), pick and edit multi-waypoint routes with JSON import/export, engage latched E-Stop or `W/A/S/D/Q/E` teleop, record diagnostic bags with one-click `LIGHT` / `TOTAL` presets, stream compressed high-FPS MJPEG live video (`8–15 FPS`), and broadcast TTS/microphone intercom. See the [ONS2 Web Console Guide](docs/web_console.md). Verified on ROS 2 (SW01) and supported on ROS 1 (Go2, Dobot Lumo). Remote access needs your own 4G module, NAT traversal or a public server.
-- **Adaptive Blocked-Goal Approach-Side Arrival & Smooth Dynamic Avoidance**  
+- **[2026-11-20] Adaptive Blocked-Goal Approach-Side Arrival & Smooth Dynamic Avoidance**  
   When a target waypoint is occupied by an obstacle or sits inside its repulsion halo, `map_planner` and `mission_manager` automatically flood-fill that obstacle's connected inflation region, relocate the goal onto the nearest reachable comfort spot on the approaching side (`goal_relocate_clearance_m: 0.55` outside inflation, clear of NeuPAN DUNE pushback), align the target heading in place, and count the waypoint as reached. Combined with decoupled dynamic/static memory decay in `sliding_map`, blind-spot start exemption, zero near-field blind zone in front of Odin1, and remote-controller-gated always-on chassis motion (`require_enable: false`), close-range dynamic obstacles are bypassed smoothly without yaw oscillation or inflation deadlocks.
-- **Dramatically faster planning**  
+- **[2026-11-10] Dramatically faster planning**  
   Plans substantially faster even on low-compute platforms, with smoother execution and nimbler obstacle avoidance.  
   See the [NeuPAN optimisation notes](docs/neuPAN_optimisation.md) for what was changed and the measured gains.
-- **Upgraded VLM, bring your own model**  
+- **[2026-11-09] Upgraded VLM, bring your own model**  
   Connect a more capable vision-language model to your own workstation for richer scene understanding.  
   See the [Odin-perception](https://github.com/ManifoldTechLtd/Odin-perception) tutorial for web links and documentation.
-- **End-to-end, fully open source**  
+- **[2026-11-09] End-to-end, fully open source**  
   A complete inspection workflow — simulation to real robots, algorithms to the monitoring platform, real world to simulated world. See the [Real2Sim tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial).
-- **Odin RTK fusion navigation**  
+- **[2026-11-09] Odin RTK fusion navigation**  
   Configure Odin with RTK in minutes to get full latitude/longitude-based navigation and open up further use cases.
-- **Plugin architecture**  
+- **[2026-11-09] Plugin architecture**  
   The stack is built around a plugin-based design, making it straightforward to integrate custom planners.
 - **More on the way**  
   Further capabilities will land in upcoming releases.
