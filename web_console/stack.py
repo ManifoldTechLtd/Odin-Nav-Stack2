@@ -1,6 +1,7 @@
 """Start and stop the SW01 navigation stack by running the existing launcher scripts."""
 
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -121,6 +122,24 @@ class NavStack:
         return {"state": self._state(job, active), "session_active": active, "tmux": self._has_tmux(),
                 "job": job.summary() if job else None,
                 "log": list(job.lines)[-200:] if job else []}
+
+    def active_map_yaml(self) -> Optional[str]:
+        job = self._job
+        if job is not None and job.kind == "start" and job.map:
+            cand = os.path.join(self.maps_dir, job.map + ".yaml")
+            if os.path.isfile(cand):
+                return cand
+        if not self._session_active():
+            return None
+        try:
+            res = subprocess.run(["pgrep", "-af", "map_server"], capture_output=True, text=True, timeout=2)
+            for line in (res.stdout or "").splitlines():
+                m = re.search(r"yaml_filename:=([^\s]+)", line)
+                if m and os.path.isfile(m.group(1)):
+                    return m.group(1)
+        except Exception:
+            pass
+        return None
 
     def _require_tmux(self):
         if not self._has_tmux():

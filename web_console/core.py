@@ -1,11 +1,15 @@
 """ROS-agnostic state and map rendering for the web console."""
 
+import array
 import hashlib
 import math
+import os
 import struct
 import threading
 import time
 import zlib
+
+import yaml
 
 UNKNOWN_GRAY = 205
 OCCUPIED_THRESHOLD = 65
@@ -36,6 +40,88 @@ def occupancy_to_png(cells, width, height):
     raw = bytes(memoryview(cells).cast("B")).translate(OCCUPANCY_LUT)
     rows = [raw[r * width:(r + 1) * width] for r in reversed(range(height))]
     return encode_png_gray(b"".join(rows), width, height)
+
+
+def _read_pgm(path):
+    with open(path, "rb") as fh:
+        data = fh.read()
+    idx = 0
+    n = len(data)
+    tokens = []
+    while len(tokens) < 4 and idx < n:
+        while idx < n and data[idx] in b" \t\r\n":
+            idx += 1
+        if idx >= n:
+            break
+        if data[idx] == ord("#"):
+            while idx < n and data[idx] not in b"\r\n":
+                idx += 1
+            continue
+        start = idx
+        while idx < n and data[idx] not in b" \t\r\n#":
+            idx += 1
+        tokens.append(data[start:idx].decode("ascii"))
+    if len(tokens) < 4 or tokens[0] not in ("P5", "P2"):
+        raise ValueError("Unsupported PGM header in {}".format(path))
+    magic, width, height, maxval = tokens[0], int(tokens[1]), int(tokens[2]), int(tokens[3])
+    if width <= 0 or height <= 0 or maxval <= 0 or maxval > 255:
+        raise ValueError("Invalid PGM dimensions in {}".format(path))
+    if magic == "P5":
+        if idx < n and data[idx] in b" \t\r\n":
+            idx += 1
+        pixels = data[idx:idx + width * height]
+        if len(pixels) < width * height:
+            raise ValueError("Truncated PGM payload in {}".format(path))
+    else:
+        body_lines = [ln.split(b"#", 1)[0] for ln in data[idx:].splitlines()]
+        vals = [int(tok) for ln in body_lines for tok in ln.split()]
+        if len(vals) < width * height:
+            raise ValueError("Truncated ASCII PGM payload in {}".format(path))
+        pixels = bytes(vals[:width * height])
+    return width, height, maxval, pixels
+
+
+def load_pgm_yaml(yaml_path):
+    """Load a ROS map_server .yaml + .pgm pair into (width, height, resolution, origin_x, origin_y, cells)."""
+    try:
+        with open(yaml_path, "r", encoding="utf-8") as fh:
+            meta = yaml.safe_load(fh) or {}
+        img_rel = str(meta["image"])
+        pgm_path = img_rel if os.path.isabs(img_rel) else os.path.join(os.path.dirname(yaml_path), img_rel)
+        width, height, maxval, pixels = _read_pgm(pgm_path)
+        res = float(meta["resolution"])
+        origin = meta.get("origin") or [0.0, 0.0, 0.0]
+        ox, oy = float(origin[0]), float(origin[1])
+        negate = bool(int(meta.get("negate", 0)))
+        occ_th = float(meta.get("occupied_thresh", 0.65))
+        free_th = float(meta.get("free_thresh", 0.196))
+        mode = str(meta.get("mode", "trinary")).strip().lower()
+    except Exception:
+        return None
+
+    lut = bytearray(256)
+    for p in range(256):
+        shade = min(1.0, p / float(maxval))
+        occ = shade if negate else (1.0 - shade)
+        if mode == "raw":
+            val = int(round(shade * 100.0))
+            cell = val if 0 <= val <= 100 else -1
+        elif occ > occ_th:
+            cell = 100
+        elif occ < free_th:
+            cell = 0
+        elif mode == "scale":
+            cell = int(round(99.0 * (occ - free_th) / max(1e-6, occ_th - free_th)))
+        else:
+            cell = -1
+        lut[p] = cell & 0xFF
+
+    mapped = pixels.translate(bytes(lut))
+    # PGM row 0 is top (y_max); OccupancyGrid row 0 is bottom (origin_y).
+    flipped = b"".join(mapped[r * width:(r + 1) * width] for r in reversed(range(height)))
+    cells = array.array("b")
+    cells.frombytes(flipped)
+    return width, height, res, ox, oy, cells
 
 
 def encode_png_gray(raw, width, height):

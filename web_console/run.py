@@ -28,12 +28,22 @@ def parse_args():
     return parser.parse_args()
 
 
+def _ensure_fastdds_large_shm():
+    if os.environ.get("FASTRTPS_DEFAULT_PROFILES_FILE"):
+        return
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    candidate = os.path.join(repo_root, "ros2_ws", "src", "map_planner", "config", "odin_cloud_filter_fastdds.xml")
+    if os.path.isfile(candidate):
+        os.environ["FASTRTPS_DEFAULT_PROFILES_FILE"] = candidate
+
+
 def main():
     args = parse_args()
     ros_version = args.ros_version or "2"
     if ros_version == "1":
         from web_console import ros1_adapter as adapter
     else:
+        _ensure_fastdds_large_shm()
         from web_console import ros2_adapter as adapter
     hub = MonitorStateHub(stall_detector=StallDetector(window_sec=args.stall_window_sec,
                                                        stall_radius_m=args.stall_radius_m))

@@ -89,3 +89,26 @@ def test_state_map_version_and_png():
     assert state.map_png()[0] == 1
     state.set_map(2, 2, 0.05, -1.0, -3.0, array.array("b", [100, 0, 0, 0]))
     assert state.map_png()[0] == 2
+
+
+def test_load_pgm_yaml_matches_map_server_orientation_and_thresholds(tmp_path):
+    # PGM row 0 is top: [254 (free), 205 (unknown)]; row 1 is bottom: [0 (occupied), 254 (free)]
+    pgm = tmp_path / "office.pgm"
+    pgm.write_bytes(b"P5\n# comment\n2 2\n255\n" + bytes([254, 205, 0, 254]))
+    yml = tmp_path / "office.yaml"
+    yml.write_text(
+        "image: office.pgm\nresolution: 0.05\norigin: [-10.5, -20.25, 0.0]\n"
+        "negate: 0\noccupied_thresh: 0.65\nfree_thresh: 0.196\n"
+    )
+    loaded = core.load_pgm_yaml(str(yml))
+    assert loaded is not None
+    w, h, res, ox, oy, cells = loaded
+    assert (w, h, res, ox, oy) == (2, 2, pytest.approx(0.05), pytest.approx(-10.5), pytest.approx(-20.25))
+    state = core.ConsoleState()
+    state.set_map(w, h, res, ox, oy, cells)
+    _, png = state.map_png()
+    pw, ph, rows = decode_png_gray(png)
+    assert (pw, ph) == (2, 2)
+    assert rows[0] == [255, core.UNKNOWN_GRAY]
+    assert rows[1] == [0, 255]
+

@@ -10,7 +10,9 @@ Group=audio
 WorkingDirectory=/home/mt/base_inspection
 Environment="ROS_DOMAIN_ID=98"
 Environment="HOME=/home/mt"
+Environment="FASTRTPS_DEFAULT_PROFILES_FILE=/home/mt/base_inspection/ros2_ws/src/map_planner/config/odin_cloud_filter_fastdds.xml"
 ExecStart=/bin/bash -c "source /opt/ros/jazzy/setup.bash && source /home/mt/base_inspection/ros2_ws/install/setup.bash && exec python3 -m web_console.run --port 18090"
+KillMode=process
 Restart=always
 RestartSec=3
 

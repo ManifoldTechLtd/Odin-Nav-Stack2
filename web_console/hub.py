@@ -7,7 +7,7 @@ import time
 from typing import Callable, Optional
 
 from web_console.camera import OnDemandImageGate
-from web_console.core import ConsoleState
+from web_console.core import ConsoleState, load_pgm_yaml
 from web_console.intercom import AudioIntercom
 from web_console.mission import MissionController
 from web_console.recorder import HEAVY_TYPES, BagRecorder
@@ -37,12 +37,16 @@ class MonitorStateHub:
         self._lock = threading.Lock()
         self.system_health: Optional[dict] = None
         self.started_at = time.time()
+        self._ros_bound = False
+        self._last_disk_map_check = 0.0
+        self._loaded_disk_yaml: Optional[str] = None
 
     def bind(self, call_trigger: Callable, publish_cmd_vel: Callable, publish_neupan_stop: Callable,
              publish_estop: Callable, subscribe_image: Callable, unsubscribe_image: Callable,
              start_mission: Callable, set_chassis: Callable, list_topics: Optional[Callable] = None) -> None:
         if list_topics is not None:
             self._list_topics = list_topics
+            self._ros_bound = True
         self.camera._subscribe_fn = subscribe_image
         self.camera._unsubscribe_fn = unsubscribe_image
         self.nav._call_service_fn = call_trigger
@@ -82,10 +86,26 @@ class MonitorStateHub:
         except Exception:
             pass
 
+    def _maybe_load_disk_map(self, now: float) -> None:
+        if now - self._last_disk_map_check < 2.0:
+            return
+        self._last_disk_map_check = now
+        yml = self.stack.active_map_yaml()
+        if not yml:
+            return
+        if self.console.snapshot()["map"] is not None and yml == self._loaded_disk_yaml:
+            return
+        loaded = load_pgm_yaml(yml)
+        if loaded is not None:
+            self._loaded_disk_yaml = yml
+            self.console.set_map(*loaded)
+
     def get_snapshot(self) -> dict:
         with self._lock:
             health = self.system_health
         now = time.time()
+        if self._ros_bound:
+            self._maybe_load_disk_map(now)
         console = self.console.snapshot()
         return {
             "ok": True,
