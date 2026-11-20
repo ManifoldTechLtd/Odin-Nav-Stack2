@@ -41,6 +41,9 @@ path_initial_heading_tol_deg: 45.0    # [deg] Heading tolerance for initial path
 path_protect_initial_m: 0.25          # [m] Length of initial path segment protected during smoothing
 path_validate_enable: true            # Enable continuous path obstacle validation
 path_min_clear_m: 0.10                # [m] Minimum clearance required by path validation
+goal_relocate_enable: true            # Relocate blocked waypoint goals outside their connected inflation shell
+goal_relocate_clearance_m: 0.55       # [m] Extra clearance outside inflation_radius (>= half_len - inflation + d_max so NeuPAN DUNE does not push back)
+goal_relocate_max_radius_m: 3.5       # [m] Safety cap on connected-inflation flood-fill radius
 
 # --- PointCloud-to-LaserScan height slice defaults (overridden per robot in robot.yaml) ---
 min_height: -0.3                      # [m] Lower Z bound in sensor frame

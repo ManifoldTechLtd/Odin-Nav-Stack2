@@ -59,7 +59,7 @@ def test_sw01_profile_sets_every_declared_bridge_argument():
     spec.loader.exec_module(launch_module)
     assert set(args) == set(launch_module.BRIDGE_PARAMETERS)
     assert args['auto_enter_move_mode'] == 'false'
-    assert args['require_enable'] == 'true'
+    assert args['require_enable'] == 'false'
     assert args['auth_timeout'] == '200'
 
 

@@ -5,8 +5,6 @@ from array import array
 
 from web_console.core import yaw_from_quaternion
 
-CHASSIS_ENABLE_SERVICE = "/sw01_cmd_vel_bridge/enable"
-CHASSIS_MOTION_TOPIC = "/sw01_cmd_vel_bridge/motion_enabled"
 START_MISSION_SERVICE = "/waypoint_manager/start_mission"
 
 
@@ -17,7 +15,7 @@ def run(args, hub):
     from nav_msgs.msg import Odometry, OccupancyGrid
     from sensor_msgs.msg import CompressedImage
     from std_msgs.msg import Bool, Empty, String
-    from std_srvs.srv import SetBool, Trigger
+    from std_srvs.srv import Trigger
 
     try:
         from nav_interfaces.msg import MissionStatus, Waypoint
@@ -74,7 +72,6 @@ def run(args, hub):
                      queue_size=10)
     rospy.Subscriber("/waypoint_manager/system_health", String,
                      lambda m: hub.update_system_health_json(m.data), queue_size=1)
-    rospy.Subscriber(CHASSIS_MOTION_TOPIC, Bool, lambda m: hub.mission.update_chassis(m.data), queue_size=1)
     if MissionStatus is not None:
         rospy.Subscriber("/waypoint_manager/status", MissionStatus, on_status, queue_size=10)
     rospy.Timer(rospy.Duration(1.0 / args.pose_hz), on_pose_tick)
@@ -108,14 +105,6 @@ def run(args, hub):
         except (rospy.ROSException, rospy.ServiceException) as exc:
             return False, str(exc), ""
 
-    def set_chassis(enabled):
-        try:
-            rospy.wait_for_service(CHASSIS_ENABLE_SERVICE, timeout=2.0)
-            res = rospy.ServiceProxy(CHASSIS_ENABLE_SERVICE, SetBool)(data=bool(enabled))
-            return bool(res.success), str(res.message)
-        except (rospy.ROSException, rospy.ServiceException) as exc:
-            return False, "底盘使能服务不可用：{}".format(exc)
-
     def subscribe_image():
         with img_lock:
             if img_sub["handle"] is None:
@@ -141,6 +130,5 @@ def run(args, hub):
         subscribe_image=subscribe_image,
         unsubscribe_image=unsubscribe_image,
         start_mission=start_mission,
-        set_chassis=set_chassis,
     )
     rospy.spin()

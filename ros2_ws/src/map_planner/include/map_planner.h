@@ -50,6 +50,8 @@ private:
   bool plan(const geometry_msgs::msg::PoseStamped& start,
             const geometry_msgs::msg::PoseStamped& goal,
             nav_msgs::msg::Path& path, std::string& fail_reason);
+  bool relocateBlockedGoal(int start_x, int start_y, int& goal_x, int& goal_y,
+                           double shell_clear_m) const;
   void planService(const std::shared_ptr<nav_interfaces::srv::PlanPath::Request> req,
                    std::shared_ptr<nav_interfaces::srv::PlanPath::Response> res);
   void planSequenceService(
@@ -185,6 +187,9 @@ private:
   double path_protect_initial_m_{1.0};
   bool path_validate_enable_{true};
   double path_min_clear_m_{0.10};
+  bool goal_relocate_enable_{true};
+  double goal_relocate_clearance_m_{0.55};
+  double goal_relocate_max_radius_m_{3.5};
   std::string last_path_quality_message_{"OK"};
 
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;

@@ -53,7 +53,7 @@ bridge:
     request_control_authority: true
     require_move_mode: true
     publish_status: true
-    require_enable: true            # Motion needs /sw01_cmd_vel_bridge/enable (std_srvs/SetBool)
+    require_enable: false           # Always enabled; remote-controller authority switch gates motion directly
     blocking_error_mask: 0          # errorCode bits that also block motion; sysStatus ERROR always does
 
 navigation:
@@ -69,6 +69,9 @@ navigation:
   line_of_sight_safe_distance: 0.20
   smoothing_iterations: 40
   smoothing_max_deviation_m: 0.35
+  goal_relocate_enable: true
+  goal_relocate_clearance_m: 0.55
+  goal_relocate_max_radius_m: 3.5
   min_height: -0.3
   max_height: 0.3
   range_min: 0.01

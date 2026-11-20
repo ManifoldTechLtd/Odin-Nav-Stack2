@@ -87,12 +87,11 @@ Below is the complete workflow for operating **ASTRALL SW01 (ROS 2)** from the b
    - `neupan_only`: Single initial plan tracked purely by NeuPAN.
 4. Click **Start Navigation** (`启动导航`) and confirm. The console runs `scripts/ons2_sw01.sh` and streams live output with green `[OK]` readiness gates and red error highlights. Once ready, the global map and live robot pose appear on the canvas.
 
-### Step 2: Enable Chassis Motion (`底盘使能` Card)
+### Step 2: Switch Remote Controller to Navigation Mode
 
-Starting the navigation stack leaves chassis motion **disabled** by default:
-1. Stand the robot up with the handheld remote controller, switch to `MOVE` gait mode, and release joystick authority.
-2. Verify surrounding clearance, then click **Enable Chassis** (`使能底盘`, calls `/sw01_cmd_vel_bridge/enable`).
-3. Motion automatically disables again on authority loss, SDK link drop, or chassis fault; re-enable from this card once cleared.
+Chassis motion is enabled by default (`require_enable: false`) while strictly honoring gait-mode and remote-controller authority gating (`auto_enter_move_mode: false`):
+1. Stand the robot up with the handheld remote controller and switch to `MOVE` gait mode.
+2. Verify surrounding clearance, then flip the remote-controller authority switch to release/navigation mode — navigation velocity commands take effect immediately, and taking over then releasing the remote controller automatically resumes navigation without extra service calls.
 
 ### Step 3: Build Waypoint Routes & Run Missions (`航点队列` & `任务` Cards)
 
@@ -130,7 +129,7 @@ Bag recording runs `ros2 bag record` in a dedicated `ons2_bag` tmux session and 
 |---|---|
 | Top badge shows `无定位` or map is blank | Stack is not started yet, or Odin relocalization has not converged (verify `.bin` map availability and `map → odom → base_link` TF) |
 | Start Navigation says `ons2_sw01` already exists | Click **Stop Navigation** (or run `bash scripts/ons2_sw01_stop.sh`) to clean up the existing session first |
-| Robot stays still after dispatching a mission | Ensure **Enable Chassis** (`使能底盘`) is active, the remote controller switched the robot to `MOVE` and released authority, and E-Stop is not latched |
+| Robot stays still after dispatching a mission | Ensure the remote controller switched the robot to `MOVE` gait mode and released authority to navigation, and verify E-Stop is not latched |
 | An SRU policy option is disabled | Place the corresponding `.onnx` model into `sru/models/` (see `sru/README.md`) |
 | Control lag during bag recording | Recording raw uncompressed images (`/odin1/image`) or multiple dense clouds saturated disk I/O; use the **`轻量 (LIGHT)`** preset for control debugging |
 | Microphone button unavailable | Browsers require HTTPS on non-`localhost` origins; open `https://<robot-ip>:18090` |

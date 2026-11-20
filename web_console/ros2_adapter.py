@@ -8,8 +8,6 @@ from array import array
 
 from web_console.core import yaw_from_quaternion
 
-CHASSIS_ENABLE_SERVICE = "/sw01_cmd_vel_bridge/enable"
-CHASSIS_MOTION_TOPIC = "/sw01_cmd_vel_bridge/motion_enabled"
 MAP_SERVER_GET_MAP = "/map_server/map"
 TRIGGER_SERVICES = (
     "/waypoint_manager/pause", "/waypoint_manager/resume", "/waypoint_manager/cancel",
@@ -48,7 +46,7 @@ def run(args, hub):
     from rclpy.time import Time
     from sensor_msgs.msg import CompressedImage
     from std_msgs.msg import Bool, Empty, String
-    from std_srvs.srv import SetBool, Trigger
+    from std_srvs.srv import Trigger
 
     try:
         from nav_interfaces.msg import MissionStatus, Waypoint
@@ -73,7 +71,6 @@ def run(args, hub):
             self.create_subscription(Twist, args.cmd_vel_topic, self._on_cmd, qos_profile_sensor_data)
             self.create_subscription(String, "/waypoint_manager/system_health", self._on_health,
                                      qos_profile_sensor_data)
-            self.create_subscription(Bool, CHASSIS_MOTION_TOPIC, self._on_chassis, latched)
             if MissionStatus is not None:
                 self.create_subscription(MissionStatus, "/waypoint_manager/status", self._on_status,
                                          qos_profile_sensor_data)
@@ -83,7 +80,6 @@ def run(args, hub):
             self._estop_pub = self.create_publisher(Bool, "/emergency_stop", 10)
 
             self._triggers = {n: self.create_client(Trigger, n, callback_group=self._cb) for n in TRIGGER_SERVICES}
-            self._chassis_client = self.create_client(SetBool, CHASSIS_ENABLE_SERVICE, callback_group=self._cb)
             self._map_client = self.create_client(GetMap, MAP_SERVER_GET_MAP, callback_group=self._cb)
             self._start_client = (self.create_client(StartMission, START_MISSION_SERVICE, callback_group=self._cb)
                                   if StartMission is not None else None)
@@ -134,9 +130,6 @@ def run(args, hub):
 
         def _on_health(self, msg):
             hub.update_system_health_json(msg.data)
-
-        def _on_chassis(self, msg):
-            hub.mission.update_chassis(msg.data)
 
         def _on_status(self, msg):
             tgt = msg.current_target
@@ -218,14 +211,6 @@ def run(args, hub):
                 return False, err, ""
             return bool(res.success), str(res.message), str(res.mission_id)
 
-        def set_chassis(self, enabled):
-            req = SetBool.Request()
-            req.data = bool(enabled)
-            res, err = self._call(CHASSIS_ENABLE_SERVICE, self._chassis_client, req, timeout=5.0)
-            if err:
-                return False, "底盘使能服务不可用：{}".format(err)
-            return bool(res.success), str(res.message)
-
     stop_all = False
 
     def _on_sigterm(_signum, _frame):
@@ -244,7 +229,7 @@ def run(args, hub):
         hub.bind(call_trigger=node.call_trigger, publish_cmd_vel=node.publish_cmd_vel,
                  publish_neupan_stop=node.publish_neupan_stop, publish_estop=node.publish_estop,
                  subscribe_image=node.subscribe_image, unsubscribe_image=node.unsubscribe_image,
-                 start_mission=node.start_mission, set_chassis=node.set_chassis, list_topics=node.list_topics)
+                 start_mission=node.start_mission, list_topics=node.list_topics)
         if hub.camera.enabled:
             node.subscribe_image()
         executor = MultiThreadedExecutor(num_threads=4, context=ctx)

@@ -46,7 +46,7 @@ def test_defaults_are_safe_and_typed():
     module = _load()
     params = module.typed_parameters(_context(module))
     assert params['auto_enter_move_mode'] is False
-    assert params['require_enable'] is True
+    assert params['require_enable'] is False
     assert params['auth_timeout'] == 200 and isinstance(params['auth_timeout'], int)
     assert params['control_rate'] == 50.0 and isinstance(params['control_rate'], float)
     assert params['blocking_error_mask'] == 0

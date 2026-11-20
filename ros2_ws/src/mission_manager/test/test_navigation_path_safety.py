@@ -552,7 +552,8 @@ def test_planner_uses_the_same_required_clearance_as_install_validation(rig):
 
 
 @pytest.mark.parametrize("rig", [
-    ("-p", "path_min_clear_m:=0.2", "-p", "obstacle_cost_weight:=0.0"),
+    ("-p", "path_min_clear_m:=0.2", "-p", "obstacle_cost_weight:=0.0",
+     "-p", "goal_relocate_enable:=false"),
 ], indirect=True)
 def test_goal_below_required_clearance_is_not_reported_as_a_successful_plan(rig):
     rig.obstacle = (3.21, 3.4, -0.1, 0.1)
@@ -855,4 +856,116 @@ def test_close_dynamic_obstacle_detour_is_smooth_and_recovers_from_safety_wait(r
     rig.obstacle = (1.30, 1.50, -0.15, 0.15)
     wait_until(lambda: len(rig.stops) > stops_before, timeout=4.0)
     wait_until(lambda: len(rig.paths) > paths_before, timeout=4.0)
+
+
+@pytest.mark.parametrize("rig", [
+    ("-p", "inflation_radius:=0.30", "-p", "path_min_clear_m:=0.10",
+     "-p", "goal_relocate_clearance_m:=0.55",
+     "-p", "goal_relocate_max_radius_m:=3.5"),
+], indirect=True)
+def test_blocked_goal_relocates_to_approach_side_scaled_by_obstacle_inflation_size(rig):
+    # 1) Small obstacle covering goal=(4.0, 0.0): relocates outside inflation + 0.55m DUNE margin (~0.85m before 3.85).
+    rig.obstacle = (3.85, 4.15, -0.15, 0.15)
+    time.sleep(0.25)
+    res_small = rig.plan(4.0, 0.0)
+    assert res_small.success, f"Small blocked goal failed to relocate: {res_small.message}"
+    assert "GOAL_RELOCATED" in res_small.message
+    checked_small = validate(rig, path_xy(res_small.path))
+    assert checked_small.success, checked_small.message
+    end_small = res_small.path.poses[-1].pose.position
+    assert 2.75 < end_small.x < 3.16, f"Expected approach-side relocation with 0.55m DUNE margin, got x={end_small.x}"
+    assert abs(end_small.y) < 0.25
+
+    # 2) Goal placed JUST outside inflation (x=3.45, 0.40m from obstacle 3.85) but inside DUNE repulsion zone:
+    # must ALSO push out to comfortable >=0.85m clearance so robot doesn't step in place!
+    res_near = rig.plan(3.45, 0.0)
+    assert res_near.success and "GOAL_RELOCATED" in res_near.message
+    assert res_near.path.poses[-1].pose.position.x < 3.16
+
+    # 3) Large 1.6m x 1.6m obstacle centered on goal=(4.0, 0.0):
+    # connected-inflation shell expands automatically and picks the approach-side front face with 0.55m extra margin.
+    rig.obstacle = (3.20, 4.80, -0.80, 0.80)
+    time.sleep(0.25)
+    res_large = rig.plan(4.0, 0.0)
+    assert res_large.success, f"Large blocked goal failed to relocate: {res_large.message}"
+    assert "GOAL_RELOCATED" in res_large.message
+    checked_large = validate(rig, path_xy(res_large.path))
+    assert checked_large.success, checked_large.message
+    end_large = res_large.path.poses[-1].pose.position
+    assert 2.10 < end_large.x < 2.50, f"Expected approach-side front of large obstacle, got x={end_large.x}"
+    assert abs(end_large.y) < 0.25
+
+    # 4) Long obstacle (2.60..4.50 x -0.60..0.60): still relocates cleanly to approach side (x < 2.0) with full margin.
+    rig.obstacle = (2.60, 4.50, -0.60, 0.60)
+    time.sleep(0.25)
+    res_table = rig.plan(4.0, 0.0)
+    assert res_table.success and "GOAL_RELOCATED" in res_table.message
+    assert validate(rig, path_xy(res_table.path)).success
+    end_table = res_table.path.poses[-1].pose.position
+    assert 1.50 < end_table.x < 1.95 and abs(end_table.y) < 0.30
+
+
+@pytest.mark.parametrize("rig", [
+    ("-p", "inflation_radius:=0.25", "-p", "path_min_clear_m:=0.10"),
+], indirect=True)
+def test_mission_arrives_and_aligns_yaw_in_place_at_relocated_blocked_waypoint(rig):
+    from atomic_move.srv import AlignTo
+    from nav_interfaces.msg import MissionStatus
+
+    align_calls = []
+    statuses = []
+
+    def on_align(req, resp):
+        align_calls.append((req.x, req.y, req.yaw))
+        resp.success = True
+        resp.message = "OK"
+        return resp
+
+    rig.node.create_service(AlignTo, "/atomic_move/align", on_align,
+                            callback_group=ReentrantCallbackGroup())
+    rig.node.create_subscription(MissionStatus, "/waypoint_manager/status",
+                                 lambda m: statuses.append(m.state), 10)
+
+    # Park obstacle right on Waypoint 0 (4.0, 0.0); Waypoint 1 (6.5, 0.0) is clear.
+    rig.obstacle = (3.80, 4.20, -0.20, 0.20)
+    time.sleep(0.25)
+
+    rig.start_node("mission_manager", "mission_manager_node", [
+        "-p", "navigation_mode:=replan_periodic",
+        "-p", "periodic_replan_sec:=0.8",
+        "-p", "enable_alignment:=true",
+        "-p", "handover_settle_sec:=0.05",
+        "-p", "nav_stall_timeout_sec:=30.0",
+        "-p", "plan_max_retries:=0",
+    ])
+    start_cli = rig.node.create_client(StartMission, "/waypoint_manager/start_mission")
+    assert start_cli.wait_for_service(timeout_sec=10.0)
+    req = StartMission.Request()
+    wp0 = Waypoint(x=4.0, y=0.0, yaw=math.pi / 2, dwell_sec=0.1, name="blocked_wp")
+    wp1 = Waypoint(x=6.5, y=0.0, yaw=0.0, dwell_sec=0.0, name="clear_wp")
+    req.waypoints = [wp0, wp1]
+    assert rig.call(start_cli, req).success
+
+    wait_until(lambda: len(rig.paths) >= 1, timeout=5.0)
+    p0_end = rig.paths[-1].poses[-1].pose.position
+    assert p0_end.x < 3.60, f"Path 0 did not relocate outside obstacle: end.x={p0_end.x}"
+
+    # Simulate robot arriving at the relocated goal of Waypoint 0
+    rig.robot = [p0_end.x, p0_end.y, 0.0]
+    rig.complete_current = True
+    wait_until(lambda: len(align_calls) >= 1, timeout=5.0)
+
+    # Alignment MUST target the relocated (x, y) in place — NOT (4.0, 0.0) inside the obstacle!
+    ax0, ay0, ayaw0 = align_calls[0]
+    assert ax0 == pytest.approx(p0_end.x, abs=0.05), f"Aligned into obstacle x={ax0} instead of relocated {p0_end.x}"
+    assert ay0 == pytest.approx(p0_end.y, abs=0.05)
+    assert ayaw0 == pytest.approx(math.pi / 2, abs=0.02)
+    assert not any(e.event == "WAYPOINT_SKIPPED" for e in rig.events)
+
+    # Mission must advance to Waypoint 1 (6.5, 0.0) and complete!
+    wait_until(lambda: any(abs(p.poses[-1].pose.position.x - 6.5) < 0.15 for p in rig.paths), timeout=5.0)
+    rig.robot = [6.5, 0.0, 0.0]
+    rig.complete_current = True
+    wait_until(lambda: "COMPLETED" in statuses, timeout=5.0)
+
 

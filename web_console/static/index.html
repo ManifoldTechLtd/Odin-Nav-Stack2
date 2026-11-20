@@ -83,7 +83,6 @@
     <span class="chip bad" id="verChip" hidden>控制台版本过旧，请重启 web_console</span>
     <span class="chip" id="estopChip" hidden>急停中</span>
     <span class="chip" id="alarmChip" hidden>安全告警</span>
-    <span class="chip" id="chassisChip" hidden>底盘</span>
     <span class="spacer"></span>
     <span class="item" id="clock"></span>
   </div>
@@ -205,18 +204,6 @@
         <button data-dir="tlft">↺<br><kbd>Q</kbd></button><button class="blank"></button><button data-dir="trt">↻<br><kbd>E</kbd></button>
       </div>
       <div class="toast" id="estopToast"></div>
-    </div>
-
-    <div class="card" id="chassisCard">
-      <h3>底盘使能</h3>
-      <div class="row">
-        <span id="chassisText" class="muted">--</span>
-      </div>
-      <div class="row">
-        <button id="bChassisOn">使能底盘</button>
-        <button id="bChassisOff">断开底盘</button>
-      </div>
-      <div class="toast" id="chassisToast"></div>
     </div>
 
     <div class="card" id="safetyCard">
@@ -577,15 +564,6 @@
   });
   window.addEventListener('blur', function () { Object.keys(teleop.held).forEach(releaseDir); });
 
-  // ---------- chassis ----------
-  $('bChassisOn').onclick = function () { chassis(true); };
-  $('bChassisOff').onclick = function () { chassis(false); };
-  function chassis(enabled) {
-    post('/api/chassis/control', { enabled: enabled }).then(function (res) {
-      setToast('chassisToast', describe(res, enabled ? '使能底盘' : '断开底盘')); refresh();
-    });
-  }
-
   // ---------- safety ----------
   $('bForce').onclick = function () {
     var on = !(S && S.safety && S.safety.force_monitor);
@@ -748,13 +726,6 @@
     $('bTakeover').classList.toggle('on', !!ctl.teleop_active);
     $('teleopState').textContent = '接管：' + (ctl.teleop_active ? '开启（W/A/S/D/Q/E 或按钮）' : '关闭');
 
-    var chassisOn = m.chassis_enabled, supported = m.chassis_supported;
-    $('chassisChip').hidden = !supported;
-    $('chassisChip').className = 'chip ' + (chassisOn ? 'ok' : 'warn');
-    $('chassisChip').textContent = chassisOn ? '底盘已使能' : '底盘未使能';
-    $('chassisText').textContent = supported ? (chassisOn ? '底盘：已使能' : '底盘：未使能（运动被禁止）') : '未检测到底盘使能接口（需要 SW01 底盘桥运行并发布 motion_enabled）';
-    $('bChassisOn').disabled = !supported; $('bChassisOff').disabled = !supported;
-
     var saf = S.safety || {};
     var alarmOn = !!saf.alarm;
     $('alarmChip').hidden = !alarmOn;
@@ -861,7 +832,7 @@
     if (planner === 'sru' && !sru) return setToast('navToast', '请选择 SRU 策略');
     var planText = planner === 'sru' ? 'SRU 策略 ' + sru : 'NeuPAN';
     if (!confirm('启动导航？\n地图：' + map + '\n规划器：' + planText + '\n模式：' + mode +
-        '\n将依次启动 odin、map_server 和导航栈。底盘运动仍需单独使能。')) return;
+        '\n将依次启动 odin、map_server 和导航栈。遥控器切入行走模式并拨至导航/释放控制权后即可直接运动。')) return;
     post('/api/stack/start', { map: map, navigation_mode: mode, planner: planner, sru_policy: sru }).then(function (res) {
       setToast('navToast', describe(res, '启动导航')); pollOps();
     });

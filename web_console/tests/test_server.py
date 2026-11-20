@@ -12,7 +12,7 @@ from web_console.server import make_server
 
 
 def bind_fakes(hub):
-    calls = {"estop": [], "start": [], "chassis": [], "trigger": []}
+    calls = {"estop": [], "start": [], "trigger": []}
 
     def start_mission(points, loop, temporary):
         calls["start"].append((points, loop, temporary))
@@ -26,7 +26,6 @@ def bind_fakes(hub):
         subscribe_image=lambda: None,
         unsubscribe_image=lambda: None,
         start_mission=start_mission,
-        set_chassis=lambda enabled: (calls["chassis"].append(enabled) or (False, "no service")),
     )
     return calls
 
@@ -77,7 +76,7 @@ def test_state_endpoint_returns_pose_mission_and_safety(served):
     assert status == 200
     assert payload["pose"]["x"] == 0.5
     assert payload["map"] is None
-    assert payload["mission"]["chassis_supported"] is False
+    assert payload["mission"] == {"status": None}
     assert "alarm" in payload["safety"]
 
 
@@ -167,12 +166,6 @@ def test_estop_command_reaches_publisher(served):
     status, res = post(base + "/api/nav/command", {"action": "emergency_stop"})
     assert status == 200
     assert calls["estop"] == [True]
-
-
-def test_chassis_control_reports_missing_service(served):
-    _, calls, base = served
-    status, res = post(base + "/api/chassis/control", {"enabled": True})
-    assert res["ok"] is False and calls["chassis"] == [True]
 
 
 def test_mission_command_return_home_uses_trigger(served):

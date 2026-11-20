@@ -1,4 +1,4 @@
-"""Waypoint mission state and commands (start, return home, reset, chassis enable)."""
+"""Waypoint mission state and commands (start, return home, reset)."""
 
 import threading
 from typing import Callable, Optional
@@ -34,23 +34,16 @@ class MissionController:
     def __init__(self):
         self._lock = threading.Lock()
         self._status = None
-        self._chassis = None
         self._start_fn: Optional[Callable] = None
         self._trigger_fn: Optional[Callable[[str], tuple]] = None
-        self._chassis_fn: Optional[Callable[[bool], tuple]] = None
 
-    def bind(self, start_fn, trigger_fn, chassis_fn):
+    def bind(self, start_fn, trigger_fn):
         self._start_fn = start_fn
         self._trigger_fn = trigger_fn
-        self._chassis_fn = chassis_fn
 
     def update_status(self, status):
         with self._lock:
             self._status = status
-
-    def update_chassis(self, enabled):
-        with self._lock:
-            self._chassis = bool(enabled)
 
     def start(self, raw_waypoints, loop=False, temporary=False):
         try:
@@ -68,13 +61,6 @@ class MissionController:
             return {"ok": ok, "message": msg}
         return {"ok": False, "message": "未知任务指令: {}".format(action)}
 
-    def set_chassis(self, enabled):
-        if self._chassis_fn is None:
-            return {"ok": False, "message": "当前平台没有底盘使能接口"}
-        ok, msg = self._chassis_fn(bool(enabled))
-        return {"ok": ok, "message": msg}
-
     def get_status(self):
         with self._lock:
-            return {"status": self._status, "chassis_enabled": self._chassis,
-                    "chassis_supported": self._chassis is not None}
+            return {"status": self._status}

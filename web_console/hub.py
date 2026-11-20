@@ -43,7 +43,7 @@ class MonitorStateHub:
 
     def bind(self, call_trigger: Callable, publish_cmd_vel: Callable, publish_neupan_stop: Callable,
              publish_estop: Callable, subscribe_image: Callable, unsubscribe_image: Callable,
-             start_mission: Callable, set_chassis: Callable, list_topics: Optional[Callable] = None) -> None:
+             start_mission: Callable, list_topics: Optional[Callable] = None) -> None:
         if list_topics is not None:
             self._list_topics = list_topics
             self._ros_bound = True
@@ -53,7 +53,7 @@ class MonitorStateHub:
         self.nav._publish_cmd_vel_fn = publish_cmd_vel
         self.nav._publish_neupan_stop_fn = publish_neupan_stop
         self.nav._publish_estop_fn = publish_estop
-        self.mission.bind(start_mission, call_trigger, set_chassis)
+        self.mission.bind(start_mission, call_trigger)
 
     def topic_types(self) -> dict:
         return {name: list(types) for name, types in self._list_topics().items()}

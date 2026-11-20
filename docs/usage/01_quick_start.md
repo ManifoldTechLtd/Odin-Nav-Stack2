@@ -51,13 +51,7 @@ bash scripts/ons2_sw01.sh --map=NAME
 - Attach with `tmux attach -t ons2_sw01`.
 - `ROS_DOMAIN_ID=98` is set by the script. Set it yourself in any terminal you open by hand.
 - Robot-specific geometry, global planner parameters, chassis bridge parameters, and NeuPAN configs are loaded from `robots/sw01/robot.yaml` and `robots/sw01/neupan/`.
-- **Chassis motion starts disabled.** Stand the robot up and switch it to MOVE with the remote controller, release the remote controller, make sure the area is clear, then enable motion from the `control` window (`[c]`, requires `--allow-motion`) or with:
-
-  ```bash
-  ros2 service call /sw01_cmd_vel_bridge/enable std_srvs/srv/SetBool "{data: true}"
-  ```
-
-  The bridge disables motion again on start-up/respawn, control-authority loss (e.g. remote-controller takeover), SDK link loss, or a robot fault, and only executes velocity commands received after the last enable. The bridge never stands the robot up on its own (`auto_enter_move_mode: false`). `/sw01_cmd_vel_bridge/motion_enabled` reports the current state.
+- **Chassis motion is enabled by default (gated directly by remote-controller authority).** Stand the robot up and switch it to MOVE with the remote controller, then flip the remote-controller authority switch to release/navigation mode for velocity commands to take effect immediately. Taking over with the remote controller seizes authority at any time, and releasing it again automatically resumes navigation. The bridge never stands the robot up on its own (`auto_enter_move_mode: false`).
 
 Stop:
 

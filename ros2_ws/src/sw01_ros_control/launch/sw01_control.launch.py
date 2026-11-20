@@ -16,8 +16,8 @@ Prerequisites:
   2) SW01 in DAMPING or FIXEDDOWN state so the SDK link can be established
 
 Every bridge parameter is a launch argument; ons2_bringup fills them from
-robots/sw01/robot.yaml. Motion stays disabled until
-  ros2 service call /sw01_cmd_vel_bridge/enable std_srvs/srv/SetBool "{data: true}"
+robots/sw01/robot.yaml. Motion is enabled by default and takes effect whenever
+the remote controller switches to MOVE mode and releases control authority.
 """
 
 import os
@@ -45,7 +45,7 @@ BRIDGE_PARAMETERS = {
     'require_move_mode': (bool, True),
     'auto_enter_move_mode': (bool, False),
     'publish_status': (bool, True),
-    'require_enable': (bool, True),
+    'require_enable': (bool, False),
     'blocking_error_mask': (int, 0),
 }
 
@@ -103,7 +103,6 @@ def _launch_bridge(context, *args, **kwargs):
         executable='sw01_cmd_vel_bridge',
         name='sw01_cmd_vel_bridge',
         output='screen',
-        # A respawned bridge starts with motion disabled (require_enable)
         respawn=True,
         respawn_delay=3.0,
         parameters=[typed_parameters(context)],

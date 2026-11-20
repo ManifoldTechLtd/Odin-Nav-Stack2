@@ -222,6 +222,7 @@ private:
       const geometry_msgs::msg::PoseStamped &pose, bool advance) const;
   void commitRouteTarget();
   bool validateForInstall(nav_msgs::msg::Path &path, std::string &reason);
+  void updateEffectiveGoalFromPath(const nav_msgs::msg::Path &path, bool is_final_segment);
   void processPathSafety();
   void holdForPathSafety(const std::string &reason);
   bool pathScanFresh() const;
@@ -347,6 +348,9 @@ private:
   double linear_velocity_{0.0};
   double angular_velocity_{0.0};
   bool enable_alignment_{false};
+  bool effective_goal_valid_{false};
+  double effective_goal_x_{0.0};
+  double effective_goal_y_{0.0};
   double plan_timeout_sec_{2.0};
   int plan_max_retries_{2};
   double plan_retry_backoff_sec_{3.0};

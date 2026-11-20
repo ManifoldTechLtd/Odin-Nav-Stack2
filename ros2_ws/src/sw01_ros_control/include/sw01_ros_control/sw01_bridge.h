@@ -61,9 +61,8 @@ struct BridgeParams
   bool require_move_mode = true;                    // Only send velocity commands when in MOVE mode
   bool auto_enter_move_mode = false;                // Automatically transition to MOVE mode (default false for safety)
   bool publish_status = true;                        // Publish SDK link and authority status topics
-  // Require an explicit ~/enable before motion. Start-up, authority loss, link loss and
-  // faults disable motion until it is enabled again.
-  bool require_enable = true;
+  // Optional manual ~/enable gate (default false: always enabled, controlled directly by RC authority).
+  bool require_enable = false;
   int64_t blocking_error_mask = 0;                  // errorCode bits that block motion (sysStatus ERROR always blocks)
 };
 

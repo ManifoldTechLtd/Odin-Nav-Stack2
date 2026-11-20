@@ -642,7 +642,14 @@ void Sw01Bridge::pollSystemStatus(std::chrono::steady_clock::time_point now, boo
     }
     else
     {
-      RCLCPP_INFO(node_->get_logger(), "机器人故障已清除，需重新使能 / robot fault cleared");
+      if (params_.require_enable)
+      {
+        RCLCPP_INFO(node_->get_logger(), "机器人故障已清除，需重新使能 / robot fault cleared");
+      }
+      else
+      {
+        RCLCPP_INFO(node_->get_logger(), "机器人故障已清除，已恢复允许运动 / robot fault cleared");
+      }
     }
   }
 }

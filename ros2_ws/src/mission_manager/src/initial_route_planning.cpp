@@ -121,6 +121,7 @@ void MissionManager::processInitialRoutePlan() {
 
 void MissionManager::installInitialRoute(nav_msgs::msg::Path path) {
   global_route_ = path;
+  updateEffectiveGoalFromPath(global_route_, true);
   RouteTarget target;
   geometry_msgs::msg::PoseStamped pose;
   std::string reason = "ROBOT_POSE_UNAVAILABLE";

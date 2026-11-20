@@ -1454,12 +1454,24 @@ void MissionManager::followSearchLoop(double direction, double step_deg,
 
 void MissionManager::clearRouteSegment() {
   global_route_.poses.clear();
+  effective_goal_valid_ = false;
   route_progress_index_ = 0;
   route_segment_anchor_index_ = 0;
   ++route_segment_generation_;
   route_segment_final_ = true;
   route_advance_requested_ = false;
   pending_route_goal_generation_ = 0;
+}
+
+void MissionManager::updateEffectiveGoalFromPath(const nav_msgs::msg::Path &path,
+                                                 bool is_final_segment) {
+  if (!is_final_segment || path.poses.empty()) {
+    return;
+  }
+  const auto &end = path.poses.back().pose.position;
+  effective_goal_x_ = end.x;
+  effective_goal_y_ = end.y;
+  effective_goal_valid_ = true;
 }
 
 std::vector<MissionManager::RouteTarget> MissionManager::routeTargets(
@@ -1503,7 +1515,14 @@ std::vector<MissionManager::RouteTarget> MissionManager::routeTargets(
   if (anchor <= route_segment_anchor_index_ && !route_segment_final_) {
     if (advance) return targets;
   }
-  targets.push_back({global_route_.poses[anchor], nearest, anchor, true, anchor == last});
+  auto anchor_goal = [&](std::size_t idx) {
+    if (idx == last && current_index_ >= 0 &&
+        current_index_ < static_cast<int>(waypoints_.size())) {
+      return waypointPose(waypoints_[current_index_]);
+    }
+    return global_route_.poses[idx];
+  };
+  targets.push_back({anchor_goal(anchor), nearest, anchor, true, anchor == last});
   // Only intermediate targets may move, and only forward by at most half a
   // segment. Each alternative still has to pass real A* and final validation.
   const double limit = route_segment_length_m_ * 0.5;
@@ -1517,7 +1536,7 @@ std::vector<MissionManager::RouteTarget> MissionManager::routeTargets(
     extra += step;
     ++anchor;
     if (extra >= next_sample || anchor == last) {
-      targets.push_back({global_route_.poses[anchor], nearest, anchor, true, anchor == last});
+      targets.push_back({anchor_goal(anchor), nearest, anchor, true, anchor == last});
       next_sample = extra + 1.0;
     }
   }
@@ -1692,6 +1711,7 @@ void MissionManager::processPeriodicReplan() {
       if (!gate_block_install && prepared.poses.size() >= 2 && path_client_ &&
           path_client_->action_server_is_ready()) {
         active_path_ = prepared;
+        updateEffectiveGoalFromPath(prepared, !result.target.route || result.target.final);
         path_safety_waiting_ = false;
         path_done_.store(false);
         path_succeeded_.store(false);
@@ -1783,7 +1803,8 @@ void MissionManager::processPeriodicReplan() {
         request->shadow_only = true;
         // Retry only bounded forward intermediate anchors; never change the
         // final waypoint or fall back to an unchecked cached-route slice.
-        for (const auto& target : targets) {
+        for (std::size_t ti = 0; ti < targets.size(); ++ti) {
+          const auto& target = targets[ti];
           result.target = target;
           request->goal = target.goal;
           auto response = callSync<rclcpp::Client<nav_interfaces::srv::PlanPath>,
@@ -1792,6 +1813,11 @@ void MissionManager::processPeriodicReplan() {
             return result;
           }
           result.flags = response->message;
+          const bool relocated =
+              result.flags.find("GOAL_RELOCATED") != std::string::npos;
+          if (relocated && target.route && !target.final && ti + 1 < targets.size()) {
+            continue;
+          }
           result.planned = response->success && !response->path.poses.empty();
           if (result.planned) {
             result.path = response->path;
@@ -2415,6 +2441,8 @@ bool MissionManager::startCurrentWaypoint() {
     last_feedback_progress_at_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
     last_feedback_distance_ = -1.0;
     active_path_ = path;
+    updateEffectiveGoalFromPath(
+        global_route_.poses.empty() ? path : global_route_, true);
     path_safety_waiting_ = false;
     if (navigation_mode_ == "replan_periodic") {
       last_periodic_replan_at_ = node_->now();
@@ -2699,7 +2727,11 @@ void MissionManager::startAlignment() {
   alignment_result_.store(false);
   alignment_running_.store(true);
   const uint64_t generation = alignment_generation_.fetch_add(1) + 1;
-  const nav_interfaces::msg::Waypoint target = waypoints_[current_index_];
+  nav_interfaces::msg::Waypoint target = waypoints_[current_index_];
+  if (effective_goal_valid_) {
+    target.x = effective_goal_x_;
+    target.y = effective_goal_y_;
+  }
   alignment_thread_ = std::thread([this, target, generation]() {
     const bool result = performAlignment(target);
     if (generation != alignment_generation_.load()) {
@@ -2957,8 +2989,10 @@ double MissionManager::distanceToTarget() const {
     geometry_msgs::msg::PoseStamped current;
     if (getRobotPose(current)) {
       const nav_interfaces::msg::Waypoint &target = waypoints_[current_index_];
-      return std::hypot(target.x - current.pose.position.x,
-                        target.y - current.pose.position.y);
+      const double tx = effective_goal_valid_ ? effective_goal_x_ : target.x;
+      const double ty = effective_goal_valid_ ? effective_goal_y_ : target.y;
+      return std::hypot(tx - current.pose.position.x,
+                        ty - current.pose.position.y);
     }
   }
   const double feedback = distance_remaining_.load();

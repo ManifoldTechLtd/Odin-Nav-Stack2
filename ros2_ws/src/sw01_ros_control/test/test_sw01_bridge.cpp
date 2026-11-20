@@ -150,18 +150,51 @@ protected:
   std::unique_ptr<Sw01Bridge> bridge_;
 };
 
-TEST_F(BridgeTest, DefaultsAreSafe)
+TEST_F(BridgeTest, DefaultsAreAlwaysEnabledWithMoveModeGuard)
 {
   start();
-  EXPECT_TRUE(bridge_->params().require_enable);
+  EXPECT_FALSE(bridge_->params().require_enable);
   EXPECT_FALSE(bridge_->params().auto_enter_move_mode);
   EXPECT_EQ(bridge_->params().auth_timeout, 200);
-  EXPECT_FALSE(bridge_->motionEnabled());
+  EXPECT_TRUE(bridge_->motionEnabled());
+
+  publishCmd(0.3, 0.1, 0.2);
+  bridge_->step();
+  const MoveCall m = lastMove();
+  EXPECT_FLOAT_EQ(m.vx, 0.3f);
+  EXPECT_FLOAT_EQ(m.vy, 0.1f);
+  EXPECT_FLOAT_EQ(m.vyaw, 0.2f);
 }
 
-TEST_F(BridgeTest, StartsDisabledAndSendsZero)
+TEST_F(BridgeTest, AuthorityLossAndRegainAutoResumesByDefault)
 {
   start();
+  publishCmd(0.3, 0.0, 0.0);
+  bridge_->step();
+  EXPECT_FLOAT_EQ(lastMove().vx, 0.3f);
+
+  // Remote controller takes over authority.
+  sdk_->setAuthResult(ASTRALL_RES_RC_NORELEASE);
+  sdk_->emitStatus(true, false);
+  publishCmd(0.3, 0.0, 0.0);
+  const size_t moves_before = sdk_->moves().size();
+  bridge_->step();
+  EXPECT_TRUE(bridge_->motionEnabled());
+  EXPECT_EQ(sdk_->moves().size(), moves_before);
+
+  // Remote controller switches back to navigation (releases authority) -> auto-resumes!
+  sdk_->setAuthResult(ASTRALL_RES_SUCCESSED);
+  clock_.advance(2.1);
+  publishCmd(0.25, 0.0, 0.1);
+  bridge_->step();
+  EXPECT_TRUE(bridge_->motionEnabled());
+  EXPECT_FLOAT_EQ(lastMove().vx, 0.25f);
+  EXPECT_FLOAT_EQ(lastMove().vyaw, 0.1f);
+}
+
+TEST_F(BridgeTest, StartsDisabledAndSendsZeroWhenRequireEnableTrue)
+{
+  start({rclcpp::Parameter("require_enable", true)});
   publishCmd(0.3, 0.0, 0.2);
   bridge_->step();
   EXPECT_FALSE(bridge_->motionEnabled());
@@ -173,7 +206,7 @@ TEST_F(BridgeTest, StartsDisabledAndSendsZero)
 
 TEST_F(BridgeTest, EnabledBridgeSendsFreshCommand)
 {
-  start();
+  start({rclcpp::Parameter("require_enable", true)});
   ASSERT_TRUE(callEnable(true));
   EXPECT_TRUE(bridge_->motionEnabled());
   publishCmd(0.3, 0.1, 0.2);
@@ -186,7 +219,7 @@ TEST_F(BridgeTest, EnabledBridgeSendsFreshCommand)
 
 TEST_F(BridgeTest, CommandsBeforeEnableAreDiscarded)
 {
-  start();
+  start({rclcpp::Parameter("require_enable", true)});
   publishCmd(0.3, 0.0, 0.0);
   ASSERT_TRUE(callEnable(true));
   bridge_->step();
@@ -199,7 +232,7 @@ TEST_F(BridgeTest, CommandsBeforeEnableAreDiscarded)
 TEST_F(BridgeTest, EnableRejectedWithoutAuthority)
 {
   sdk_->setAuthResult(ASTRALL_RES_RC_NORELEASE);
-  start();
+  start({rclcpp::Parameter("require_enable", true)});
   std::string message;
   EXPECT_FALSE(callEnable(true, &message));
   EXPECT_NE(message.find("authority"), std::string::npos);
@@ -209,7 +242,7 @@ TEST_F(BridgeTest, EnableRejectedWithoutAuthority)
 TEST_F(BridgeTest, EnableRejectedWhenFaulted)
 {
   sdk_->setSystem(ASTRALL_SYSTEM_CODE_ERROR, 0);
-  start();
+  start({rclcpp::Parameter("require_enable", true)});
   bridge_->step();
   EXPECT_FALSE(callEnable(true));
   EXPECT_FALSE(bridge_->motionEnabled());
@@ -217,7 +250,7 @@ TEST_F(BridgeTest, EnableRejectedWhenFaulted)
 
 TEST_F(BridgeTest, EnableRejectedWhenLinkLost)
 {
-  start();
+  start({rclcpp::Parameter("require_enable", true)});
   sdk_->emitStatus(false, true);
   EXPECT_FALSE(callEnable(true));
   EXPECT_FALSE(bridge_->motionEnabled());
@@ -225,7 +258,7 @@ TEST_F(BridgeTest, EnableRejectedWhenLinkLost)
 
 TEST_F(BridgeTest, OperatorDisableStopsMotion)
 {
-  start();
+  start({rclcpp::Parameter("require_enable", true)});
   ASSERT_TRUE(callEnable(true));
   publishCmd(0.3, 0.0, 0.0);
   bridge_->step();
@@ -239,7 +272,7 @@ TEST_F(BridgeTest, OperatorDisableStopsMotion)
 
 TEST_F(BridgeTest, AuthorityLossDisablesAndRegainDoesNotReEnable)
 {
-  start();
+  start({rclcpp::Parameter("require_enable", true)});
   ASSERT_TRUE(callEnable(true));
   publishCmd(0.3, 0.0, 0.0);
   bridge_->step();
@@ -304,7 +337,8 @@ TEST_F(BridgeTest, DecayWindowScalesLateralVelocity)
 TEST_F(BridgeTest, NoPostureChangeWhenDisabled)
 {
   sdk_->setSport(ASTRALL_SPORT_STATUS_DAMPING);
-  start({rclcpp::Parameter("auto_enter_move_mode", true)});
+  start({rclcpp::Parameter("require_enable", true),
+         rclcpp::Parameter("auto_enter_move_mode", true)});
   publishCmd(0.3, 0.0, 0.0);
   bridge_->step();
   EXPECT_TRUE(sdk_->modeCommands().empty());
@@ -313,7 +347,8 @@ TEST_F(BridgeTest, NoPostureChangeWhenDisabled)
 TEST_F(BridgeTest, NoPostureChangeWithoutFreshCommand)
 {
   sdk_->setSport(ASTRALL_SPORT_STATUS_DAMPING);
-  start({rclcpp::Parameter("auto_enter_move_mode", true)});
+  start({rclcpp::Parameter("require_enable", true),
+         rclcpp::Parameter("auto_enter_move_mode", true)});
   ASSERT_TRUE(callEnable(true));
   bridge_->step();
   EXPECT_TRUE(sdk_->modeCommands().empty());
@@ -322,7 +357,8 @@ TEST_F(BridgeTest, NoPostureChangeWithoutFreshCommand)
 TEST_F(BridgeTest, PostureSequenceWhenEnabledAndCommanded)
 {
   sdk_->setSport(ASTRALL_SPORT_STATUS_DAMPING);
-  start({rclcpp::Parameter("auto_enter_move_mode", true)});
+  start({rclcpp::Parameter("require_enable", true),
+         rclcpp::Parameter("auto_enter_move_mode", true)});
   ASSERT_TRUE(callEnable(true));
   publishCmd(0.3, 0.0, 0.0);
   bridge_->step();
@@ -339,7 +375,7 @@ TEST_F(BridgeTest, PostureSequenceWhenEnabledAndCommanded)
 
 TEST_F(BridgeTest, FaultDisablesMotion)
 {
-  start();
+  start({rclcpp::Parameter("require_enable", true)});
   ASSERT_TRUE(callEnable(true));
   publishCmd(0.3, 0.0, 0.0);
   bridge_->step();
@@ -355,7 +391,8 @@ TEST_F(BridgeTest, FaultDisablesMotion)
 TEST_F(BridgeTest, BlockingErrorMaskTriggersFault)
 {
   sdk_->setSystem(ASTRALL_SYSTEM_CODE_RUNNING, ASTRALL_ERR_LOSE_CAMERA);
-  start({rclcpp::Parameter("blocking_error_mask", static_cast<int64_t>(ASTRALL_ERR_MOTOR_STATUS))});
+  start({rclcpp::Parameter("require_enable", true),
+         rclcpp::Parameter("blocking_error_mask", static_cast<int64_t>(ASTRALL_ERR_MOTOR_STATUS))});
   bridge_->step();
   EXPECT_TRUE(callEnable(true));
   sdk_->setSystem(ASTRALL_SYSTEM_CODE_RUNNING, ASTRALL_ERR_MOTOR_STATUS);
@@ -367,7 +404,7 @@ TEST_F(BridgeTest, BlockingErrorMaskTriggersFault)
 
 TEST_F(BridgeTest, LinkLossDisablesMotion)
 {
-  start();
+  start({rclcpp::Parameter("require_enable", true)});
   ASSERT_TRUE(callEnable(true));
   sdk_->emitStatus(false, true);
   publishCmd(0.3, 0.0, 0.0);

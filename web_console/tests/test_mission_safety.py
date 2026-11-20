@@ -21,25 +21,21 @@ def test_parse_waypoints_limits_count():
         parse_waypoints([{"x": 0, "y": 0}] * (MAX_WAYPOINTS + 1))
 
 
-def test_controller_start_and_chassis_without_bindings():
+def test_controller_start_without_bindings():
     ctl = MissionController()
     assert ctl.start([{"x": 0, "y": 0}])["ok"] is False
-    assert ctl.set_chassis(True)["ok"] is False
-    assert ctl.get_status() == {"status": None, "chassis_enabled": None, "chassis_supported": False}
+    assert ctl.get_status() == {"status": None}
 
 
 def test_controller_forwards_to_bindings():
     ctl = MissionController()
     seen = []
     ctl.bind(lambda pts, loop, temp: (seen.append((len(pts), loop, temp)) or (True, "ok", "id-7")),
-             lambda name: (True, name),
-             lambda flag: (True, "chassis {}".format(flag)))
+             lambda name: (True, name))
     assert ctl.start([{"x": 1, "y": 1}], loop=True) == {"ok": True, "message": "ok", "mission_id": "id-7"}
     assert seen == [(1, True, False)]
     assert ctl.command("return_home") == {"ok": True, "message": "/waypoint_manager/return_home"}
     assert ctl.command("bogus")["ok"] is False
-    ctl.update_chassis(True)
-    assert ctl.get_status()["chassis_supported"] is True
 
 
 def test_stall_detector_flags_stopped_robot_during_mission():

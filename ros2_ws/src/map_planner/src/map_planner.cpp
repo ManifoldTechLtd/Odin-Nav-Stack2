@@ -91,6 +91,12 @@ MapPlanner::MapPlanner(const rclcpp::Node::SharedPtr& node) : node_(node) {
   path_validate_enable_ =
       node_->declare_parameter("path_validate_enable", path_validate_enable_);
   path_min_clear_m_ = node_->declare_parameter("path_min_clear_m", path_min_clear_m_);
+  goal_relocate_enable_ =
+      node_->declare_parameter("goal_relocate_enable", goal_relocate_enable_);
+  goal_relocate_clearance_m_ = node_->declare_parameter(
+      "goal_relocate_clearance_m", goal_relocate_clearance_m_);
+  goal_relocate_max_radius_m_ = node_->declare_parameter(
+      "goal_relocate_max_radius_m", goal_relocate_max_radius_m_);
 
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(node_->get_clock());
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(
@@ -567,6 +573,163 @@ bool MapPlanner::getRobotPose(geometry_msgs::msg::PoseStamped& pose) const {
   }
 }
 
+bool MapPlanner::relocateBlockedGoal(int start_x, int start_y,
+                                     int& goal_x, int& goal_y,
+                                     double shell_clear_m) const {
+  const int width = static_cast<int>(map_.info.width);
+  const int height = static_cast<int>(map_.info.height);
+  const double res = map_.info.resolution;
+  if (width <= 0 || height <= 0 || res <= 0.0 || goal_relocate_max_radius_m_ <= 0.0) {
+    return false;
+  }
+
+  // Place relocated goals outside NeuPAN's DUNE repulsion envelope (half_length + d_max)
+  // so the local controller walks cleanly into arrive_threshold instead of stepping in place.
+  shell_clear_m = std::max(path_min_clear_m_ + res, shell_clear_m);
+  const int clear_pad = static_cast<int>(std::ceil(shell_clear_m / res)) + 2;
+  const int max_r = std::max(1, static_cast<int>(std::ceil(goal_relocate_max_radius_m_ / res)));
+  const int max_r_sq = max_r * max_r;
+  const int shell_r_sq = (max_r + clear_pad) * (max_r + clear_pad);
+
+  const int bx0 = std::max(0, goal_x - max_r - clear_pad);
+  const int by0 = std::max(0, goal_y - max_r - clear_pad);
+  const int bx1 = std::min(width - 1, goal_x + max_r + clear_pad);
+  const int by1 = std::min(height - 1, goal_y + max_r + clear_pad);
+  const int bw = bx1 - bx0 + 1;
+  const int bh = by1 - by0 + 1;
+  auto bidx = [&](int x, int y) {
+    return static_cast<std::size_t>(y - by0) * bw + static_cast<std::size_t>(x - bx0);
+  };
+
+  // Step 1: Flood-fill ONLY the connected obstacle + inflation component covering (goal_x, goal_y).
+  // Its outer shell scales automatically with the obstacle's actual inflated footprint.
+  std::vector<uint8_t> seen(static_cast<std::size_t>(bw) * bh, 0);
+  std::vector<std::pair<int, int>> q_blob;
+  std::vector<std::pair<int, int>> shell;
+  q_blob.emplace_back(goal_x, goal_y);
+  seen[bidx(goal_x, goal_y)] = 1;
+
+  const int dx8[8] = {1, -1, 0, 0, 1, 1, -1, -1};
+  const int dy8[8] = {0, 0, 1, -1, 1, -1, 1, -1};
+
+  for (std::size_t head = 0; head < q_blob.size(); ++head) {
+    const auto [cx, cy] = q_blob[head];
+    for (int i = 0; i < 8; ++i) {
+      const int nx = cx + dx8[i];
+      const int ny = cy + dy8[i];
+      if (nx < bx0 || ny < by0 || nx > bx1 || ny > by1) continue;
+      const std::size_t bi = bidx(nx, ny);
+      if (seen[bi]) continue;
+      const int ddx = nx - goal_x;
+      const int ddy = ny - goal_y;
+      const int d2 = ddx * ddx + ddy * ddy;
+      if (d2 > shell_r_sq) continue;
+      const int nidx = toIndex(nx, ny);
+      if (!cellHasClearance(nidx, shell_clear_m)) {
+        if (d2 <= max_r_sq) {
+          seen[bi] = 1;
+          q_blob.emplace_back(nx, ny);
+        }
+      } else {
+        seen[bi] = 2;
+        shell.emplace_back(nx, ny);
+      }
+    }
+  }
+  if (shell.empty()) {
+    return false;
+  }
+
+  // Step 2: Verify reachability from (start_x, start_y) using the same traversability rules as A*.
+  auto filter_reachable = [&](int rx0, int ry0, int rx1, int ry1) {
+    const int rw = rx1 - rx0 + 1;
+    const int rh = ry1 - ry0 + 1;
+    std::vector<uint8_t> vis(static_cast<std::size_t>(rw) * rh, 0);
+    auto ridx = [&](int x, int y) {
+      return static_cast<std::size_t>(y - ry0) * rw + static_cast<std::size_t>(x - rx0);
+    };
+    std::size_t remaining_targets = 0;
+    std::vector<uint8_t> is_target(static_cast<std::size_t>(rw) * rh, 0);
+    for (const auto& [sx, sy] : shell) {
+      if (sx >= rx0 && sy >= ry0 && sx <= rx1 && sy <= ry1) {
+        const std::size_t ti = ridx(sx, sy);
+        if (!is_target[ti]) {
+          is_target[ti] = 1;
+          ++remaining_targets;
+        }
+      }
+    }
+    std::vector<std::pair<int, int>> q_reach;
+    q_reach.emplace_back(start_x, start_y);
+    vis[ridx(start_x, start_y)] = 1;
+    if (is_target[ridx(start_x, start_y)]) --remaining_targets;
+
+    for (std::size_t head = 0; head < q_reach.size() && remaining_targets > 0; ++head) {
+      const auto [cx, cy] = q_reach[head];
+      for (int i = 0; i < 8; ++i) {
+        const int nx = cx + dx8[i];
+        const int ny = cy + dy8[i];
+        if (nx < rx0 || ny < ry0 || nx > rx1 || ny > ry1) continue;
+        const std::size_t ni = ridx(nx, ny);
+        if (vis[ni]) continue;
+        if (!cellHasClearance(toIndex(nx, ny), path_min_clear_m_)) continue;
+        if (dx8[i] != 0 && dy8[i] != 0 &&
+            (!cellHasClearance(toIndex(nx, cy), path_min_clear_m_) ||
+             !cellHasClearance(toIndex(cx, ny), path_min_clear_m_))) {
+          continue;
+        }
+        vis[ni] = 1;
+        q_reach.emplace_back(nx, ny);
+        if (is_target[ni]) --remaining_targets;
+      }
+    }
+    std::vector<std::pair<int, int>> out;
+    out.reserve(shell.size());
+    for (const auto& [sx, sy] : shell) {
+      if (sx >= rx0 && sy >= ry0 && sx <= rx1 && sy <= ry1 && vis[ridx(sx, sy)]) {
+        out.emplace_back(sx, sy);
+      }
+    }
+    return out;
+  };
+
+  const int pad = std::max(40, static_cast<int>(std::ceil(4.0 / res)));
+  const int rx0 = std::max(0, std::min(start_x, bx0) - pad);
+  const int ry0 = std::max(0, std::min(start_y, by0) - pad);
+  const int rx1 = std::min(width - 1, std::max(start_x, bx1) + pad);
+  const int ry1 = std::min(height - 1, std::max(start_y, by1) + pad);
+  auto reachable_shell = filter_reachable(rx0, ry0, rx1, ry1);
+  if (reachable_shell.empty() && (rx0 > 0 || ry0 > 0 || rx1 < width - 1 || ry1 < height - 1)) {
+    reachable_shell = filter_reachable(0, 0, width - 1, height - 1);
+  }
+  if (reachable_shell.empty()) {
+    return false;
+  }
+
+  // Step 3: Score reachable outer-shell candidates: minimize distance to original goal while
+  // biasing toward the approaching robot side (0.55*R on approach side vs 1.45*R on far side).
+  const double d_sg = std::hypot(static_cast<double>(start_x - goal_x),
+                                 static_cast<double>(start_y - goal_y));
+  double best_score = std::numeric_limits<double>::infinity();
+  int best_x = goal_x;
+  int best_y = goal_y;
+  for (const auto& [cx, cy] : reachable_shell) {
+    const double d_gc = std::hypot(static_cast<double>(cx - goal_x),
+                                   static_cast<double>(cy - goal_y));
+    const double d_sc = std::hypot(static_cast<double>(cx - start_x),
+                                   static_cast<double>(cy - start_y));
+    const double score = d_gc + 0.45 * (d_sc - d_sg);
+    if (score < best_score) {
+      best_score = score;
+      best_x = cx;
+      best_y = cy;
+    }
+  }
+  goal_x = best_x;
+  goal_y = best_y;
+  return true;
+}
+
 bool MapPlanner::plan(const geometry_msgs::msg::PoseStamped& start,
                       const geometry_msgs::msg::PoseStamped& goal,
                       nav_msgs::msg::Path& path, std::string& fail_reason) {
@@ -594,18 +757,55 @@ bool MapPlanner::plan(const geometry_msgs::msg::PoseStamped& start,
   const int width = static_cast<int>(map_.info.width);
   const int height = static_cast<int>(map_.info.height);
   const int start_index = toIndex(start_x, start_y);
-  const int goal_index = toIndex(goal_x, goal_y);
+  int goal_index = toIndex(goal_x, goal_y);
   const bool start_occupied = !cellHasClearance(start_index, path_min_clear_m_);
-  const bool goal_occupied = !cellHasClearance(goal_index, path_min_clear_m_);
-  if (start_occupied || goal_occupied) {
-    fail_reason = (start_occupied && goal_occupied) ? "START_AND_GOAL_OCCUPIED"
-                  : start_occupied                  ? "START_OCCUPIED"
-                                                     : "GOAL_OCCUPIED";
+  const bool goal_hard_occupied = !cellHasClearance(goal_index, path_min_clear_m_);
+  const double soft_trigger_clear_m =
+      std::max(path_min_clear_m_, goal_relocate_clearance_m_ - 0.10);
+  const bool goal_too_close =
+      goal_relocate_enable_ && !cellHasClearance(goal_index, soft_trigger_clear_m);
+  bool goal_relocated = false;
+  if (start_occupied) {
+    fail_reason = goal_hard_occupied ? "START_AND_GOAL_OCCUPIED" : "START_OCCUPIED";
     RCLCPP_WARN(node_->get_logger(),
-                "Start or goal is blocked by occupancy/clearance "
-                "(%s, required clearance %.2fm).",
+                "Start is blocked by occupancy/clearance (%s, required clearance %.2fm).",
                 fail_reason.c_str(), path_min_clear_m_);
     return false;
+  }
+  if (goal_hard_occupied || goal_too_close) {
+    const int orig_gx = goal_x;
+    const int orig_gy = goal_y;
+    bool relocated_ok = false;
+    if (goal_relocate_enable_) {
+      relocated_ok = relocateBlockedGoal(
+          start_x, start_y, goal_x, goal_y, goal_relocate_clearance_m_);
+      if (!relocated_ok && goal_hard_occupied &&
+          goal_relocate_clearance_m_ > path_min_clear_m_ + map_.info.resolution) {
+        // Narrow passage fallback: accept minimal safe clearance if wide DUNE margin doesn't fit.
+        relocated_ok = relocateBlockedGoal(
+            start_x, start_y, goal_x, goal_y, path_min_clear_m_ + map_.info.resolution);
+      }
+    }
+    if (relocated_ok) {
+      goal_index = toIndex(goal_x, goal_y);
+      goal_relocated = (goal_x != orig_gx || goal_y != orig_gy);
+      if (goal_relocated) {
+        const auto p_orig = mapToWorld(orig_gx, orig_gy);
+        const auto p_new = mapToWorld(goal_x, goal_y);
+        RCLCPP_INFO(node_->get_logger(),
+                    "[map_planner] Goal (%.2f, %.2f) near/inside obstacle -> relocated to "
+                    "(%.2f, %.2f) (shift=%.2fm, clear>=%.2fm)",
+                    p_orig.x, p_orig.y, p_new.x, p_new.y,
+                    std::hypot(p_new.x - p_orig.x, p_new.y - p_orig.y),
+                    goal_relocate_clearance_m_);
+      }
+    } else if (goal_hard_occupied) {
+      fail_reason = "GOAL_OCCUPIED";
+      RCLCPP_WARN(node_->get_logger(),
+                  "Goal is blocked by occupancy/clearance (%s, required clearance %.2fm).",
+                  fail_reason.c_str(), path_min_clear_m_);
+      return false;
+    }
   }
 
   const auto& q = start.pose.orientation;
@@ -817,6 +1017,9 @@ bool MapPlanner::plan(const geometry_msgs::msg::PoseStamped& start,
     last_path_quality_message_ = pathQualityMessage(quality);
   } else if (simplify_requires_alignment) {
     last_path_quality_message_ = "OK|REQUIRES_ALIGNMENT";
+  }
+  if (goal_relocated) {
+    last_path_quality_message_ += "|GOAL_RELOCATED";
   }
   nav_msgs::msg::Path checked = path;
   checked.poses.insert(checked.poses.begin(), start);

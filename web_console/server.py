@@ -98,7 +98,6 @@ def _post_routes(hub):
         "/api/mission/start": lambda req: hub.mission.start(
             req.get("waypoints"), loop=req.get("loop", False), temporary=req.get("temporary", False)),
         "/api/mission/command": lambda req: hub.mission.command(req.get("action", "")),
-        "/api/chassis/control": lambda req: hub.mission.set_chassis(req.get("enabled", False)),
         "/api/stack/start": lambda req: hub.stack.start(
             req.get("map", ""), req.get("navigation_mode", "replan_periodic"),
             planner=req.get("planner", "neupan"), sru_policy=req.get("sru_policy", "main")),
