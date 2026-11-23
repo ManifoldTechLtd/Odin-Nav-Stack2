@@ -28,7 +28,7 @@ from robot_profile import (
 
 
 def _static_tf_node(name, parent, child, x=0.0, y=0.0, z=0.0,
-                    qx=0.0, qy=0.0, qz=0.0, qw=1.0):
+                    qx=0.0, qy=0.0, qz=0.0, qw=1.0, sim_time=None):
     return Node(
         package='tf2_ros',
         executable='static_transform_publisher',
@@ -39,6 +39,7 @@ def _static_tf_node(name, parent, child, x=0.0, y=0.0, z=0.0,
             '--qz', f'{qz:g}', '--qw', f'{qw:g}',
             '--frame-id', parent, '--child-frame-id', child,
         ],
+        parameters=[sim_time] if sim_time else None,
         output='screen',
     )
 
@@ -49,6 +50,7 @@ def _include_profile_nodes(context, *args, **kwargs):
         raise RuntimeError('profile launch argument is required')
     profile = load_profile(profile_path)
     mount = sensor_mount_config(profile)
+    sim_time = {'use_sim_time': LaunchConfiguration('use_sim_time')}
     half_yaw = 0.5 * mount['yaw']
     qz = math.sin(half_yaw)
     qw = math.cos(half_yaw)
@@ -77,7 +79,7 @@ def _include_profile_nodes(context, *args, **kwargs):
             respawn=True,
             respawn_delay=3.0,
             additional_env=pc_additional_env,
-            parameters=[cloud_filter_params_file],
+            parameters=[cloud_filter_params_file, sim_time],
         ))
         if cloud_filter_mode == 'on':
             nav_cloud_topic = '/odin1/cloud_filtered'
@@ -102,7 +104,7 @@ def _include_profile_nodes(context, *args, **kwargs):
         respawn=True,
         respawn_delay=3.0,
         additional_env=pc_additional_env,
-        parameters=[pc_params],
+        parameters=[pc_params, sim_time],
         remappings=[
             ('cloud_in', nav_cloud_topic),
             ('scan', '/scan_raw'),
@@ -118,7 +120,7 @@ def _include_profile_nodes(context, *args, **kwargs):
         output='screen',
         respawn=True,
         respawn_delay=3.0,
-        parameters=[sliding_map_params_file, footprint_parameters(profile)],
+        parameters=[sliding_map_params_file, footprint_parameters(profile), sim_time],
     )
 
     gp_backend = global_planner_backend(
@@ -137,7 +139,7 @@ def _include_profile_nodes(context, *args, **kwargs):
             output='screen',
             respawn=True,
             respawn_delay=3.0,
-            parameters=[planner_params],
+            parameters=[planner_params, sim_time],
         ))
     else:
         gp_pkg, gp_launch = global_planner_launch(profile, gp_backend)
@@ -162,6 +164,7 @@ def _include_profile_nodes(context, *args, **kwargs):
                 'config_file': neupan_cfg,
                 'navigation_mode': LaunchConfiguration('navigation_mode'),
                 'periodic_replan_sec': LaunchConfiguration('periodic_replan_sec'),
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
             }.items(),
         ))
     elif lp_backend != 'neupan':
@@ -188,7 +191,8 @@ def _include_profile_nodes(context, *args, **kwargs):
         ))
 
     return [
-        _static_tf_node('imu_to_odin1_base', 'imu', 'odin1_base_link'),
+        _static_tf_node('imu_to_odin1_base', 'imu', 'odin1_base_link',
+                        sim_time=sim_time),
         _static_tf_node(
             'odin1_to_base',
             mount['parent'],
@@ -198,6 +202,7 @@ def _include_profile_nodes(context, *args, **kwargs):
             z=mount['z'],
             qz=qz,
             qw=qw,
+            sim_time=sim_time,
         ),
         _static_tf_node(
             'odin1_to_lidar',
@@ -206,6 +211,7 @@ def _include_profile_nodes(context, *args, **kwargs):
             x=0.00347,
             y=0.03447,
             z=0.02174,
+            sim_time=sim_time,
         ),
         _static_tf_node(
             'lidar_to_camera',
@@ -218,6 +224,7 @@ def _include_profile_nodes(context, *args, **kwargs):
             qy=-0.499,
             qz=0.499,
             qw=0.504,
+            sim_time=sim_time,
         ),
         *cloud_filter_nodes,
         pc_to_scan,
@@ -248,6 +255,9 @@ def generate_launch_description():
     declare_periodic = DeclareLaunchArgument(
         'periodic_replan_sec', default_value='2.0',
         description='Periodic replan interval in seconds')
+    declare_use_sim_time = DeclareLaunchArgument(
+        'use_sim_time', default_value='false',
+        description='Use simulation clock (/clock) from the simulator bridge')
 
     scan_filter = Node(
         package='map_planner',
@@ -256,7 +266,8 @@ def generate_launch_description():
         output='screen',
         respawn=True,
         respawn_delay=3.0,
-        parameters=[{'enable': False}],
+        parameters=[{'enable': False},
+                    {'use_sim_time': LaunchConfiguration('use_sim_time')}],
     )
 
     profile_nodes = OpaqueFunction(function=_include_profile_nodes)
@@ -269,6 +280,7 @@ def generate_launch_description():
         declare_neupan_config,
         declare_navigation_mode,
         declare_periodic,
+        declare_use_sim_time,
         profile_nodes,
         scan_filter,
     ])
