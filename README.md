@@ -344,7 +344,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | **Ask a VLM questions about the scene** | [VLM Scene Understanding](#54-vlm-scene-understanding) |
 | **Understand the architecture / module dataflow** | [Architecture](docs/architecture/ONS2_ARCHITECTURE.md) · [Module Dataflow](docs/architecture/MODULE_DATAFLOW.md) |
 | **Scan a site and build a navigation map** (Q9000 / Odin1) | [Map Tutorial](docs/map-tutorial/map-tutorial.md) · [`pcd_to_pgm.py`](scripts/map_processing/pcd_to_pgm.py) |
-| **Reproduce a scenario in simulation** (Real2Sim) | [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
+| **Reproduce a scenario in simulation** (Real2Sim) | [04 · Simulation](docs/simulation/04_simulation.md) · [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
 | **Deploy with Docker** (Jetson, ROS1) | [docker/docker-compose.yml](docker/docker-compose.yml) |
 
 > **Chinese docs:** every guide in this repository has a `*.zh-CN.md` sibling (usage guides,
@@ -357,6 +357,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | 1 | [Quick Start for Existing Robots](docs/usage/01_quick_start.md) | Start the stack on Go2, SW01, or Dobot Lumo, and send missions |
 | 2 | [Parameter Tuning](docs/usage/02_parameter_tuning.md) | Change speed, footprint, clearance, and tracking for each platform |
 | 3 | [Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md) | Connect a new robot: interface contract, chassis bridge, TF, launch |
+| 4 | [Run ONS2 in the Isaac Simulator](docs/simulation/04_simulation.md) | Isaac Sim + MT-Real2Sim, ROS 1/2 runtimes, waypoint missions |
 
 ## 5.3 Feature Status at a Glance
 
