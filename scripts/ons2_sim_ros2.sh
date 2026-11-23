@@ -20,8 +20,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="${ONS2_SIM_LOG_DIR:-/tmp/ons2_sim_logs}"
 mkdir -p "${LOG_DIR}"
 
+set +u
 source /opt/ros/jazzy/setup.bash
 source "${REPO_ROOT}/ros2_ws/install/setup.bash"
+set -u
 export PYTHONPATH="${REPO_ROOT}/NeuPAN:${REPO_ROOT}/scripts/lib:${PYTHONPATH:-}"
 export RCUTILS_LOGGING_BUFFERED_STREAM=1
 cd "${REPO_ROOT}/NeuPAN"
