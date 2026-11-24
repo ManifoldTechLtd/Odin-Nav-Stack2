@@ -77,9 +77,31 @@ if [[ "${WITH_ROSBRIDGE}" -eq 1 ]]; then
   ros2 run rosbridge_server rosbridge_websocket --ros-args \
     -p port:=9090 -p max_message_size:=100000000 >"${LOG_DIR}/rosbridge.log" 2>&1 &
 fi
-if [[ "${WITH_FOXGLOVE}" -eq 1 ]]; then
+if pgrep -f "foxglove_bridge" >/dev/null 2>&1; then
+  log "foxglove_bridge already running (ws://0.0.0.0:8765)"
+else
   ros2 run foxglove_bridge foxglove_bridge --ros-args \
     -p port:=8765 -p send_buffer_limit:=200000000 >"${LOG_DIR}/foxglove.log" 2>&1 &
+  log "foxglove_bridge started (ws://0.0.0.0:8765)"
+fi
+
+# Interactive console identical to scripts/ons2_sw01.sh:
+# Foxglove Pose tool publishes /waypoint_pick, the console runs single/multi
+# waypoint missions and pause/resume/cancel/return-home transitions.
+if command -v tmux >/dev/null 2>&1; then
+  cat > /tmp/ons2_control.sh <<EOF
+#!/usr/bin/env bash
+source /opt/ros/jazzy/setup.bash
+source ${REPO_ROOT}/ros2_ws/install/setup.bash
+export PYTHONPATH=${REPO_ROOT}/NeuPAN:${REPO_ROOT}/scripts/lib:\${PYTHONPATH:-}
+exec python3 ${REPO_ROOT}/ros2_ws/scripts/test_nav_control_ros2.py --allow-motion --use-sim-time
+EOF
+  chmod +x /tmp/ons2_control.sh
+  tmux kill-session -t ons2_sim 2>/dev/null || true
+  tmux new-session -d -s ons2_sim -n control -x 220 -y 50 /tmp/ons2_control.sh
+  log "control console started; attach with: docker exec -it isaac_nav_ros2 tmux attach -t ons2_sim"
+else
+  log "tmux not installed; interactive control console skipped"
 fi
 
 log "ready; logs in ${LOG_DIR}"

@@ -101,6 +101,30 @@ docker exec isaac_nav_ros2 bash -lc '
 Verified preset missions: a 3-waypoint mission from the spawn area
 (`office_0923_sim.yaml`) and a 5-waypoint return route (`office_0923_return5.yaml`).
 
+## 5.1 Interactive console (same script as the real robot)
+
+The simulator runs the official ROS 2 control console
+`ros2_ws/scripts/test_nav_control_ros2.py` (the same script `scripts/ons2_sw01.sh`
+starts on a real robot) inside a tmux session:
+
+```bash
+docker exec -it isaac_nav_ros2 tmux attach -t ons2_sim
+```
+
+* Pick points in Foxglove with the **Pose** tool on topic `/waypoint_pick`,
+  frame `map` (single- and multi-waypoint collection, pause/resume/cancel/return-home
+  are handled by the console).
+* The console runs with `--allow-motion`; the simulator additionally passes
+  `--use-sim-time` so TF lookups use `/clock` (the public-main script is otherwise
+  unchanged).
+* Chassis enable `[c]` is SW01-specific and not used in the simulator; motion is
+  delivered directly through `/cmd_vel`.
+
+Official startup scripts on public `main`: ROS 1 Go2 `scripts/ons2_go2.sh` →
+`ros_ws/scripts/test_nav_control_rospy.py`; ROS 2 `scripts/ons2_sw01.sh` →
+`ros2_ws/scripts/test_nav_control_ros2.py`. The old `test_nav_control.py` is superseded
+by these two runtime-specific scripts.
+
 ## 6. Map notes
 
 * `office_0923_sim.pgm` is derived from an internal partial v3 map (kept as

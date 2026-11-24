@@ -94,6 +94,26 @@ docker exec isaac_nav_ros2 bash -lc '
 已验证预设：从出生区出发的 3 航点任务（`office_0923_sim.yaml`）与 5 航点返程
 （`office_0923_return5.yaml`）。
 
+## 5.1 交互控制台（与真机同一脚本）
+
+仿真运行官方 ROS 2 控制台 `ros2_ws/scripts/test_nav_control_ros2.py`（真机
+`scripts/ons2_sw01.sh` 启动的同一脚本），放在 tmux 会话里：
+
+```bash
+docker exec -it isaac_nav_ros2 tmux attach -t ons2_sim
+```
+
+* 在 Foxglove 用 **Pose** 工具发到 `/waypoint_pick`，frame 选 `map`；单点/多点采点、
+  暂停/恢复/取消/返航等状态转移都在控制台里完成。
+* 控制台以 `--allow-motion` 启动；仿真额外传 `--use-sim-time`，让 TF 查询使用
+  `/clock`（除该参数外与 public main 脚本一致）。
+* `[c]` 底盘使能是 SW01 专用，仿真不需要；运动直接经 `/cmd_vel` 下发。
+
+public `main` 官方启动脚本：ROS1 Go2 `scripts/ons2_go2.sh` →
+`ros_ws/scripts/test_nav_control_rospy.py`；ROS2 `scripts/ons2_sw01.sh` →
+`ros2_ws/scripts/test_nav_control_ros2.py`。旧 `test_nav_control.py` 已被这两个
+运行时专用脚本取代。
+
 ## 6. 地图说明
 
 * `office_0923_sim.pgm` 由内部 v3 部分地图派生（原件保留为 `office_0923_v3partial.pgm`）；
