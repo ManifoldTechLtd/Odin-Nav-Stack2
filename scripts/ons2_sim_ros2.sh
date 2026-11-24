@@ -79,10 +79,12 @@ if [[ "${WITH_ROSBRIDGE}" -eq 1 ]]; then
 fi
 if pgrep -f "foxglove_bridge" >/dev/null 2>&1; then
   log "foxglove_bridge already running (ws://0.0.0.0:8765)"
-else
+elif ros2 pkg prefix foxglove_bridge >/dev/null 2>&1; then
   ros2 run foxglove_bridge foxglove_bridge --ros-args \
     -p port:=8765 -p send_buffer_limit:=200000000 >"${LOG_DIR}/foxglove.log" 2>&1 &
   log "foxglove_bridge started (ws://0.0.0.0:8765)"
+else
+  log "foxglove_bridge package missing; start it on the host with ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-77}"
 fi
 
 # Interactive console identical to scripts/ons2_sw01.sh:
