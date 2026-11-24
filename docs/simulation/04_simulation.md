@@ -50,6 +50,13 @@ NeuPAN runs from source via `PYTHONPATH=/ons2/NeuPAN` (the pip project has no wh
 runtime image already contains its dependencies (torch CPU, cvxpylayers, ecos, gctl,
 matplotlib, numpy 1.26, scipy 1.12).
 
+**NeuPAN config layout.** Each robot keeps `config.yaml` + `planner.yaml` under
+`robots/<robot>/neupan/`. Official profiles: `robots/go2` (Unitree Go2),
+`robots/sw01` (Xuanji SW01, analytical DUNE), and `robots/_template` (user-customized
+copy). The simulation profile `robots/go2_sim` **reuses** Go2's files through
+`local_planner.backends.neupan.config: ../go2/neupan/config.yaml`; do not add a fourth
+copy under `go2_sim`.
+
 ## 4. Start the simulation
 
 ```bash
@@ -110,7 +117,7 @@ Verified preset missions: a 3-waypoint mission from the spawn area
 | Symptom | Cause / fix |
 |---|---|
 | `AMENT_TRACE_SETUP_FILES: unbound variable` | `set -u` around `source /opt/ros/jazzy/setup.bash`; the shipped script disables `set -u` while sourcing. |
-| NeuPAN dies with `planner.yaml not found` | `robots/<robot>/neupan/` must contain `planner.yaml` next to `config.yaml`; `robots/go2_sim/` does. |
+| NeuPAN dies with `planner.yaml not found` | Each robot's `neupan/` needs `config.yaml` + `planner.yaml`; `robots/go2_sim` reuses `robots/go2/neupan/` via the profile's `config:` key. |
 | `msgpack` / `numpy._core` errors | Image must include `msgpack`, numpy 1.26.4, scipy 1.12.0 (see Dockerfile.ros2). |
 | Goals get relocated | Increase waypoint clearance (≥1.1 m) or adjust `goal_relocate_*` parameters. |
 | Navigation frozen | All nodes need `use_sim_time:=true` and `/clock` must be published by the bridge. |

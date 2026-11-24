@@ -29,7 +29,6 @@ export RCUTILS_LOGGING_BUFFERED_STREAM=1
 cd "${REPO_ROOT}/NeuPAN"
 
 PROFILE="${REPO_ROOT}/robots/go2_sim/robot.yaml"
-NEUPAN_CONFIG="${REPO_ROOT}/robots/go2_sim/neupan/config.yaml"
 
 log() { echo "[ons2_sim] $*"; }
 
@@ -51,7 +50,6 @@ ros2 launch ons2_bringup bringup.launch.py \
   profile:="${PROFILE}" \
   cloud_filter:=off \
   navigation_mode:=replan_periodic \
-  neupan_config:="${NEUPAN_CONFIG}" \
   use_sim_time:=true >"${LOG_DIR}/bringup.log" 2>&1 &
 
 for _ in $(seq 1 60); do

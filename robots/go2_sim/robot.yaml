@@ -57,6 +57,7 @@ local_planner:
   backend: neupan
   backends:
     neupan:
+      # Reuse the official Go2 NeuPAN config + planner.yaml (single source).
       interface:
         mode: action
         path_topic: /initial_path
@@ -65,8 +66,8 @@ local_planner:
         cmd_vel_topic: /cmd_vel
         nav_path_action: /neupan/nav_path
         stop_topic: /neupan/stop
-      config: neupan/config.yaml
-      planner: neupan/planner.yaml
+      config: ../go2/neupan/config.yaml
+      planner: ../go2/neupan/planner.yaml
     sru:
       interface:
         mode: goal_pose

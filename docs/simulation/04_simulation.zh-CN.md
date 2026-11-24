@@ -44,6 +44,12 @@ docker exec isaac_nav_ros2 bash -lc '
 NeuPAN 以源码方式运行（`PYTHONPATH=/ons2/NeuPAN`）；镜像内已装好其依赖（torch CPU、
 cvxpylayers、ecos、gctl、matplotlib、numpy 1.26、scipy 1.12）。
 
+**NeuPAN 配置布局。** 每个机器人目录 `robots/<robot>/neupan/` 下各有 `config.yaml` +
+`planner.yaml`。官方三套：`robots/go2`（Unitree Go2）、`robots/sw01`（璇玑 SW01，解析式
+DUNE）、`robots/_template`（用户自定义副本）。仿真 profile `robots/go2_sim` **复用**
+Go2 的同一份文件（`local_planner.backends.neupan.config: ../go2/neupan/config.yaml`），
+不要再在 `go2_sim` 下复制第四套。
+
 ## 4. 启动
 
 ```bash
@@ -102,7 +108,7 @@ docker exec isaac_nav_ros2 bash -lc '
 | 现象 | 原因 / 处理 |
 |---|---|
 | `AMENT_TRACE_SETUP_FILES: unbound variable` | `set -u` 下 source ROS；脚本已在 source 期间关闭 `set -u`。 |
-| NeuPAN 报 `planner.yaml not found` | `robots/<robot>/neupan/` 需同时有 `planner.yaml` 与 `config.yaml`；`robots/go2_sim/` 已提供。 |
+| NeuPAN 报 `planner.yaml not found` | 每个机器人的 `neupan/` 需同时有 `config.yaml` + `planner.yaml`；`go2_sim` 通过 profile 的 `config:` 复用 `go2` 的同一份。 |
 | `msgpack` / `numpy._core` 报错 | 镜像需包含 `msgpack`、numpy 1.26.4、scipy 1.12.0（见 Dockerfile.ros2）。 |
 | 目标被重定位 | 提高航点余量（≥1.1 m）或调整 `goal_relocate_*` 参数。 |
 | 导航不前进 | 所有节点需 `use_sim_time:=true`，且桥必须发布 `/clock`。 |
