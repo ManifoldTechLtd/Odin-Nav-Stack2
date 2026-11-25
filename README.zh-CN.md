@@ -80,6 +80,24 @@
 - **[Odin RTK](https://github.com/ManifoldTechLtd/Odin-RTK)** —— Odin RTK Fusion，把 Odin SLAM 里程计与 RTK/GNSS 的 GGA 数据融合，输出带全局参考的位姿。
 - **[Odin Perception](https://github.com/ManifoldTechLtd/Odin-perception)** —— ONS2 的端侧巡检感知组件：把一帧图像交给视觉模型，按结构化检查清单输出可判定的结论（yes/no、状态、计数、读字、描述），并保留证据图与耗时。
 
+## 1.4 真机与仿真（Isaac Sim）
+
+仿真支持是增量、默认关闭的，不会改变真机启动方式。真机继续使用原入口、profile、地图和调参；仿真使用 `robots/go2_sim/robot.yaml` 和 `scripts/ons2_sim_ros2.sh`，所有节点 `use_sim_time:=true`，`/clock` 由 Isaac 桥提供。
+
+| | 真机 | 仿真（Isaac Sim） |
+|---|---|---|
+| 入口 | `scripts/ons2_sw01.sh`（ROS 2）、`scripts/ons2_go2.sh` / `scripts/ons2_dobot_lumo.sh`（ROS 1） | 仿真 ROS 2 容器内的 `scripts/ons2_sim_ros2.sh` |
+| profile | `robots/<robot>/robot.yaml` | `robots/go2_sim/robot.yaml`（复用 `robots/go2/neupan/`） |
+| 时钟 | 墙钟，`use_sim_time=false` | 每节点 `use_sim_time:=true`，`/clock` 来自桥接 |
+| 传感器/TF | Odin1 驱动提供 `/odin1/*` 和 TF | `sim_bridge_ros2` 提供 `/odin1/*` + `/clock`，订阅 `/cmd_vel`，TF 链一致 |
+| 地图 | 现场三件套，`--map=NAME` | 仿真器 `integrations/ons2/maps/`，`--map` 传入 |
+
+真机不需要修改：共享 launch 只新增 `use_sim_time` 参数（默认 false）；控制台新增 `--use-sim-time`（默认不启用）；规划器、控制器和导航调参代码零改动。仿真 profile 和脚本是独立文件，真机启动器不引用。
+
+`feature/sim-integration` 是 6 个提交、10 个文件的增量补丁（含两份仿真指南、`robots/go2_sim`、`scripts/ons2_sim_ros2.sh` 和 gated launch 参数）；`origin/release` 与 `upstream/main` 的树内容一致（提交哈希不同），分支当前落后上游 2 个文档提交，合并前需纳入评审。还有 1 个本地未提交的 TF Buffer 修复，使 `--use-sim-time` 也作用于 TF 查询，不影响真机。
+
+完整步骤、航点、故障排查见 [04 · Simulation](docs/simulation/04_simulation.zh-CN.md)。
+
 # 2. 支持的平台
 
 | 机器人 | 运行时 | 状态 |

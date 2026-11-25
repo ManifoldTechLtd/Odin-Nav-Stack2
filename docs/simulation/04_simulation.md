@@ -9,7 +9,46 @@ assets live in its `integrations/ons2/` directory.
 > ROS 1 (Noetic) bridge support is implemented in the simulator; the Noetic-side launch and
 > the NeuPAN Python 3.10 sidecar are not yet validated.
 
-## 1. What runs where
+## 1. Scope: real robot vs simulation
+
+Simulation support is additive and gated; it does not change how ONS2 runs on a robot.
+
+| | Real robot | Simulation (Isaac Sim) |
+|---|---|---|
+| Entry point | `scripts/ons2_sw01.sh` (ROS 2), `scripts/ons2_go2.sh` / `scripts/ons2_dobot_lumo.sh` (ROS 1) | `scripts/ons2_sim_ros2.sh` inside the simulator's ROS 2 container |
+| Profile | `robots/<robot>/robot.yaml` | `robots/go2_sim/robot.yaml`, reusing `robots/go2/neupan/` |
+| Clock | wall clock, `use_sim_time=false` | `use_sim_time:=true` on every node, `/clock` from the bridge |
+| Sensors / TF | Odin1 driver publishes `/odin1/*` and TF | `sim_bridge_ros2` publishes `/odin1/*` + `/clock` and subscribes `/cmd_vel`; same TF chain `map→odom→imu→odin1_base_link→base_link` |
+| Map | site triplet via `--map=NAME` | `office_0923_sim.pgm` / `.yaml` from the simulator's `integrations/ons2/maps/`, passed via `--map` |
+| Chassis | SW01 `[c]` enable gate | not used; `/cmd_vel` drives the simulated robot directly |
+
+The shared ROS 2 launch files only gained a `use_sim_time` argument that defaults to `false`,
+and the control console script only gained an opt-in `--use-sim-time` flag;
+the simulation profile and `scripts/ons2_sim_ros2.sh` are separate files. No planner,
+controller or navigation-tuning code changed, so a real robot behaves exactly as before
+unless the simulation flags are used.
+
+### 1.1 What to change for simulation / for the real robot
+
+| Target | Change |
+|---|---|
+| Simulation | Use `scripts/ons2_sim_ros2.sh` with the simulator map (`--map`), keep `use_sim_time:=true` everywhere and confirm `/clock`; send waypoints with the simulator's `send_waypoints.sh` or the Foxglove `/waypoint_pick` console (§6, §6.1). |
+| Real robot | Nothing. Keep `scripts/ons2_*.sh` and `robots/<robot>/...`; do not pass `use_sim_time:=true` (it defaults to `false`). |
+
+Startup is in §5; the symptom table is in §8.
+
+### 1.2 Branch status: `feature/sim-integration`
+
+Six commits / 10 files against the `upstream/main` merge base (+539/−12): the `go2_sim` profile, the
+`use_sim_time` argument in the `ons2_bringup` / `mission_manager` / `atomic_move` /
+`neupan_ros` launch files, `scripts/ons2_sim_ros2.sh`, the opt-in `--use-sim-time` flag in
+`ros2_ws/scripts/test_nav_control_ros2.py`, and these two guides plus the README links. The
+branch is 2 commits behind the current `upstream/main` (map-tutorial docs update,
+`.gitignore` chore); merge or review that gap before a release. One uncommitted local fix
+(`Buffer(..., node=self.node)` in the same console script) makes `--use-sim-time` apply to TF
+lookups as well; it is not part of the six commits yet.
+
+## 2. What runs where
 
 ```
 Isaac Sim (TCP:9090, msgpack)
@@ -23,7 +62,7 @@ The TF chain is identical to the real Go2:
 [simulation-interface.md](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial/blob/v2/docs/simulation-interface.md)
 (or `docs/simulation-interface.md` in a local simulator checkout).
 
-## 2. Prerequisites
+## 3. Prerequisites
 
 * Simulator checkout of `MT-Real2Sim-Tutorial` branch `v2` (or the integration branch) with
   the Isaac image `r2s2r-isaac:5.1.0`.
@@ -32,7 +71,7 @@ The TF chain is identical to the real Go2:
 * ONS2 checkout (this repository). The simulator expects it next to itself
   (`../Odin-Nav-Stack2` by default, override with `--ons2-root`).
 
-## 3. One-time build (ROS 2)
+## 4. One-time build (ROS 2)
 
 ```bash
 cd MT-Real2Sim-Tutorial/docker
@@ -57,7 +96,7 @@ copy). The simulation profile `robots/go2_sim` **reuses** Go2's files through
 `local_planner.backends.neupan.config: ../go2/neupan/config.yaml`; do not add a fourth
 copy under `go2_sim`.
 
-## 4. Start the simulation
+## 5. Start the simulation
 
 ```bash
 cd MT-Real2Sim-Tutorial
@@ -81,7 +120,12 @@ docker exec isaac_nav_ros2 bash -lc \
   'bash /ons2/scripts/ons2_sim_ros2.sh --map /integrations/ons2/maps/office_0923_sim.yaml'
 ```
 
-## 5. Send waypoints
+`scripts/ons2_sim_ros2.sh` is the only entry point that passes `use_sim_time:=true`; it
+starts `map_server`, the `go2_sim` bringup, `atomic_move`, `mission_manager`, the waypoint
+bridge and, when tmux is installed, the control console. If the stack stays silent or does
+not move, check §8 before changing any parameter.
+
+## 6. Send waypoints
 
 The real-robot interface is unchanged: `waypoint_goal_bridge` → `/waypoint_manager/start_mission`.
 
@@ -101,7 +145,7 @@ docker exec isaac_nav_ros2 bash -lc '
 Verified preset missions: a 3-waypoint mission from the spawn area
 (`office_0923_sim.yaml`) and a 5-waypoint return route (`office_0923_return5.yaml`).
 
-## 5.1 Interactive console (same script as the real robot)
+## 6.1 Interactive console (same script as the real robot)
 
 The simulator runs the official ROS 2 control console
 `ros2_ws/scripts/test_nav_control_ros2.py` (the same script `scripts/ons2_sw01.sh`
@@ -125,7 +169,7 @@ Official startup scripts on public `main`: ROS 1 Go2 `scripts/ons2_go2.sh` →
 `ros2_ws/scripts/test_nav_control_ros2.py`. The old `test_nav_control.py` is superseded
 by these two runtime-specific scripts.
 
-## 6. Map notes
+## 7. Map notes
 
 * `office_0923_sim.pgm` is derived from an internal partial v3 map (kept as
   `office_0923_v3partial.pgm`). Unknown cells were filled as free; walls (0) and doors
@@ -136,7 +180,7 @@ by these two runtime-specific scripts.
 * The 2D map must match the USDZ scene frame. Do not reuse real-site maps with a different
   scene.
 
-## 7. Known issues and troubleshooting
+## 8. Known issues and troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
@@ -148,7 +192,7 @@ by these two runtime-specific scripts.
 | GUI mode does not move | Click the Isaac **Play** button, or run headless (office scene config is headless). |
 | No `/odin1/*` topics | Only one TCP client is allowed; keep a single bridge connected, restart the bridge after launching Isaac. |
 
-## 8. ROS 1 runtime
+## 9. ROS 1 runtime
 
 The simulator's ROS 1 `sim_bridge` supports `frame_layout: odin` and the same topics.
 Running the Noetic ONS2 stack additionally needs a NeuPAN Python 3.10 sidecar container
