@@ -1,4 +1,4 @@
-sw# Map Building & Processing Guide (Q9000 & Odin1)
+# Map Building & Processing Guide (Q9000 & Odin1)
 
 **English** | [中文](map-tutorial.zh-CN.md)
 
@@ -6,14 +6,14 @@ sw# Map Building & Processing Guide (Q9000 & Odin1)
 > Although this guide uses the **Unitree Go2** as a concrete example for file transfer and mounting height parameters, the map scanning, export, and PCD-to-PGM grid conversion workflow is **completely platform-agnostic**. It applies equally to any robot running ONS2 (such as ASTRALL SW01, Dobot Lumo, or custom mobile platforms) regardless of the specific robot model.
 
 This document walks through how to build the three map files required by ONS2 (`<map>.bin`, `<map>.pgm`, and `<map>.yaml`):
-- **Sections 1–5 (Recommended): Offline Post-Processing via MindCloud Studio** — using data captured by either a **Q9000** scanner or an **Odin1** module (`recorddata: 1`).
-- **Section 6 (Alternative): Onboard Online Mapping with Odin1 Only** — saving `.bin` and `.pcd`/`.pgm` directly on the robot without MindCloud Studio, along with its practical limitations.
+- **Sections 1–5 (Recommended): Offline Post-Processing via XAI or MindCloud Studio** — using data captured by either a **Q9000** scanner or an **Odin1** module (`recorddata: 1`); the XAI platform workflow in Section 2.1 is the recommended option.
+- **Section 6 (Alternative): Onboard Online Mapping with Odin1 Only** — saving `.bin` and `.pcd`/`.pgm` directly on the robot without XAI / MindCloud Studio post-processing, along with its practical limitations.
 
 ---
 
 ## 1. Capture Raw Mapping Data (Q9000 or Odin1)
 
-MindCloud Studio accepts raw mapping projects recorded by either a **Q9000** scanner or an **Odin1** sensor:
+Both the **XAI platform** and **MindCloud Studio** accept raw mapping projects recorded by either a **Q9000** scanner or an **Odin1** sensor (`.lx` for Q9000; `.olx` exported by Odin1 with `recorddata: 1`):
 
 ### Option 1A — Capture with a Q9000 Scanner
 
@@ -37,14 +37,66 @@ If you do not have a Q9000, you can record a MindCloud-compatible project direct
    # ROS 2
    ros2 launch odin_ros_driver odin1_ros2.launch.py
    ```
-3. Stop the driver when finished, set `recorddata: 0` back in `control_command.yaml`, and copy the recorded project folder from `odin_ros_driver/recorddata/<record_start_time>/` to your workstation for MindCloud Studio post-processing (Section 2).
+3. Stop the driver when finished, set `recorddata: 0` back in `control_command.yaml`, and copy the recorded project folder from `odin_ros_driver/recorddata/<record_start_time>/` to your workstation for XAI or MindCloud Studio post-processing (Section 2).
 
 > [!TIP]
-> A workstation or laptop with a dedicated GPU is recommended for MindCloud Studio. Ultrabooks without a discrete GPU will process point clouds significantly more slowly.
+> **MindCloud Studio** runs locally and benefits from a workstation or laptop with a dedicated GPU—ultrabooks without a discrete GPU will process point clouds significantly more slowly. The **XAI platform** trains in the cloud, so no local GPU is required.
 
 ---
 
-## 2. Open the Project in MindCloud Studio
+## 2. Process the Project Offline (XAI or MindCloud Studio)
+
+> [!NOTE]
+> **The XAI platform and MindCloud Studio are two parallel offline post-processing paths—choose either one.** Both accept projects recorded by a Q9000 scanner (`.lx`) or an Odin1 module (`.olx`), and both ultimately produce the downstream-required `.pcd` point cloud and `.bin` relocalization map; once you have these two files, continue with Section 4 (convert `.pcd` to `.pgm`, copy `.bin` into `customer_file/`, etc.).
+>
+> The differences:
+> - **XAI platform (Section 2.1, recommended):** a web platform—no local software to install; upload the project, train in the cloud, then download `.pcd` and `.bin` directly. Logging in each day grants 300 credits.
+> - **MindCloud Studio (Section 2.2):** a local desktop application that requires an installer and a license; a computer with a dedicated GPU is recommended.
+
+### 2.1 Open the Project with XAI (Recommended)
+
+On the Manifold Tech XAI platform you can upload a project folder directly for training and download maps in several formats (point cloud, relocalization map, 3D Gaussian, mesh, etc.).
+
+URL: <https://mindcloudx.ai/>
+
+1. Click **Log in / Sign up** in the top-right corner. If you do not have an account, sign up. Logging in each day grants 300 credits, which is enough to train one map; contact us if you need more.
+
+   ![XAI platform login / sign-up](https://s3.bmp.ovh/2026/11/25/bfofJkxl.png)
+
+2. After logging in, click **Train Now** in the center of the page to enter the assets page:
+
+   ![Click "Train Now" to enter the assets page](https://s3.bmp.ovh/2026/11/25/iTn1vYWv.png)
+
+3. Click **Upload Dataset** in the top-right corner, select the Q9000 USB drive in the file picker (Odin1 users: select the `recorddata/<record_start_time>/` folder copied from the robot), locate the folder matching this scan, drag it in, and click **Start Upload**.
+
+   > [!TIP]
+   > We recommend copying the Q9000 scan folder to your desktop first and uploading from there, so that an oversized upload does not exceed the device connection timeout and abort the task.
+
+   ![Upload dataset](https://s3.bmp.ovh/2026/11/25/xZpQihnB.png)
+
+4. After the upload starts, you are returned to the project page; the upload speed is shown in the bottom-right corner:
+
+   ![Upload speed](https://s3.bmp.ovh/2026/11/25/PjJLlt27.png)
+
+5. When the upload completes, open the project with the same name, click the **Point Cloud** tab in the top-left corner, then click **Create Training**. (If you need 3DGS, CAD, or Mesh outputs, click Create Training on the corresponding tab instead.)
+
+   ![Create training](https://s3.bmp.ovh/2026/11/25/C7iPC9Ye.png)
+
+6. Keep the defaults in the pop-up dialog and click **Start Training**; wait for training to finish:
+
+   ![Start training](https://s3.bmp.ovh/2026/11/25/EMi8NPfk.png)
+
+7. Once training completes, open the corresponding project page:
+
+   ![Training completed](https://s3.bmp.ovh/2026/11/25/S3jdGrGg.png)
+
+8. Click to download the `pcd(.pcd)` and `map(.bin)` files:
+
+   ![Download pcd and map](https://s3.bmp.ovh/2026/11/25/0CCkE3RW.png)
+
+You now have the `.pcd` and `.bin` files required downstream—**there is no need to perform the export steps in Section 3**; continue directly with Section 4.
+
+### 2.2 Open the Project in MindCloud Studio
 
 Launch **MindCloud Studio** on your computer and follow the steps below. (Contact Manifold Tech support to obtain the appropriate MindCloud Studio installer and license.)
 
@@ -52,7 +104,7 @@ Launch **MindCloud Studio** on your computer and follow the steps below. (Contac
 
    ![MindCloud Studio File -> New Single Point Cloud Project](https://i.ibb.co/hFMQJbY9/10.png)
 
-2. Select your recorded project folder from the Q9000 USB drive and open the `.lx` project file.  
+2. Select your recorded project folder from the Q9000 USB drive (or the folder copied from Odin1) and open the `.lx` (Q9000) or `.olx` (Odin1) project file.  
    *(Tip: Copy the project folder from the Q9000 USB drive to your local disk beforehand so the Q9000 battery does not run out during long exports.)*
 
    ![Select the .lx project file](https://i.ibb.co/LXV6SR7b/11.png)
@@ -63,9 +115,14 @@ Launch **MindCloud Studio** on your computer and follow the steps below. (Contac
 
 4. Wait for loading and processing to finish. If you do not need to archive a high-precision digital twin asset, enabling **Loop Closure Detection** (`回环检测`) and **Moving Object Removal** (`运动物体滤除`) is sufficient—you can leave **Bundle Adjustment** (`平差优化`) unchecked for faster map generation.
 
+Once processing completes, continue with Section 3 to export the `.pcd` and `.bin` files.
+
 ---
 
 ## 3. Export Map Files
+
+> [!NOTE]
+> This section applies only to MindCloud Studio (Section 2.2). If you trained the map on the XAI platform (Section 2.1), the `.pcd` and `.bin` files are already downloaded, so you can skip ahead to Section 4.
 
 Once processing completes, export two files:
 - **`.pcd`** — 3D point-cloud map (used to generate the 2D `.pgm` + `.yaml` occupancy grid for global planning)
@@ -232,9 +289,9 @@ For full mission control and patrol instructions after startup, see [01 · Quick
 
 ---
 
-## 6. Alternative: Onboard Online Mapping with Odin1 Only (No MindCloud Studio)
+## 6. Alternative: Onboard Online Mapping with Odin1 Only (No XAI / MindCloud Studio Post-Processing)
 
-For small indoor environments where offline post-processing in MindCloud Studio is not required, Odin1 can also save a `.bin` relocalization map and a `.pcd` point cloud **directly on the onboard computer** in SLAM mode (`custom_map_mode: 1`).
+For small indoor environments where offline post-processing (XAI or MindCloud Studio) is not required, Odin1 can also save a `.bin` relocalization map and a `.pcd` point cloud **directly on the onboard computer** in SLAM mode (`custom_map_mode: 1`).
 
 ### 6.1 Procedure (ROS 1 Helper Script `map_recording.sh`)
 
@@ -263,8 +320,8 @@ For small indoor environments where offline post-processing in MindCloud Studio 
 
 ### 6.2 Limitations of Onboard Online Mapping
 
-Compared to the MindCloud Studio workflow (Sections 1–4), onboard online mapping has three important limitations:
+Compared to the offline workflow (XAI or MindCloud Studio, Sections 1–4), onboard online mapping has three important limitations:
 
-1. **No offline global optimization or dynamic-object removal:** Pedestrians or moving objects seen during mapping are baked directly into the saved `.pcd` and `.pgm` unless manually erased in GIMP (Section 4.4), and large loops do not benefit from MindCloud Studio's offline bundle adjustment.
+1. **No offline global optimization or dynamic-object removal:** Pedestrians or moving objects seen during mapping are baked directly into the saved `.pcd` and `.pgm` unless manually erased in GIMP (Section 4.4), and large loops do not benefit from offline bundle adjustment (XAI or MindCloud Studio).
 2. **Manual `.bin` placement and renaming:** The Odin1 driver writes `map_<save_time>.bin` inside `odin_ros_driver/map/<driver_start_time>/` (unless `mapping_result_dest_dir` and `mapping_result_file_name` are explicitly configured in `control_command.yaml`). You must copy and rename it to `customer_file/<map_name>.bin` so it matches `<map_name>.pgm` and `<map_name>.yaml`.
-3. **`map_recording.sh` is a legacy ROS 1 helper:** The shell wrapper `scripts/map_processing/map_recording.sh` relies on ROS 1 `roslaunch`/`rosservice` and the ROS 1 `pcd2pgm` package. For ROS 2 or multi-robot deployments, using `pcd_to_pgm.py` (Section 4.2) with MindCloud Studio is strongly recommended.
+3. **`map_recording.sh` is a legacy ROS 1 helper:** The shell wrapper `scripts/map_processing/map_recording.sh` relies on ROS 1 `roslaunch`/`rosservice` and the ROS 1 `pcd2pgm` package. For ROS 2 or multi-robot deployments, using `pcd_to_pgm.py` (Section 4.2) after XAI or MindCloud Studio post-processing is strongly recommended.

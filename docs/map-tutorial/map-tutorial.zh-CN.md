@@ -8,14 +8,14 @@
 > Dobot Lumo，或自研移动平台）都同样适用，与具体机型无关。
 
 本文介绍生成 ONS2 导航所需地图三件套（`<地图名>.bin`、`<地图名>.pgm`、`<地图名>.yaml`）的完整流程：
-- **第 1–5 节（推荐）：通过 MindCloud Studio 离线后处理建图** —— 同时支持 **Q9000** 扫描仪数据与 **Odin1** 离线录制数据（`recorddata: 1`）。
-- **第 6 节（备选）：仅用 Odin1 机载在线建图** —— 不经 MindCloud Studio、直接在机器人机载端保存 `.bin` 与 `.pcd`/`.pgm` 的操作步骤及其局限性。
+- **第 1–5 节（推荐）：通过 XAI 或 MindCloud Studio 离线后处理建图** —— 同时支持 **Q9000** 扫描仪数据与 **Odin1** 离线录制数据（`recorddata: 1`）；其中第 2.1 节的 XAI 平台流程更推荐。
+- **第 6 节（备选）：仅用 Odin1 机载在线建图** —— 不经 XAI / MindCloud Studio 离线后处理、直接在机器人机载端保存 `.bin` 与 `.pcd`/`.pgm` 的操作步骤及其局限性。
 
 ---
 
 ## 1. 采集原始建图数据（Q9000 或 Odin1）
 
-**MindCloud Studio** 同时支持导入由 **Q9000** 扫描仪或 **Odin1** 空间感知模组录制的原始建图工程：
+**XAI 平台**与 **MindCloud Studio** 都支持导入由 **Q9000** 扫描仪或 **Odin1** 空间感知模组录制的原始建图工程（Q9000 为 `.lx` 工程，Odin1 为 `recorddata: 1` 导出的 `.olx` 工程）：
 
 ### 方式 1A —— 使用 Q9000 扫描仪采集
 
@@ -25,7 +25,7 @@
 
 ### 方式 1B —— 使用 Odin1 录制离线数据（`recorddata: 1`）
 
-如果没有 Q9000，也可以直接用机器人上的 **Odin1** 录制可导入 MindCloud Studio 的工程数据：
+如果没有 Q9000，也可以直接用机器人上的 **Odin1** 录制可导入 XAI 或 MindCloud Studio 的工程数据：
 
 1. 编辑 `odin_ros_driver/config/control_command.yaml`（位于 `ros_ws/src/odin_ros_driver/` 或 `ros2_ws/src/odin_ros_driver/`），开启 `recorddata`：
    ```yaml
@@ -39,14 +39,66 @@
    # ROS 2
    ros2 launch odin_ros_driver odin1_ros2.launch.py
    ```
-3. 采集完成后停止驱动，将 `control_command.yaml` 中的 `recorddata` 改回 `0`，并把生成的 `odin_ros_driver/recorddata/<录制起始时间>/` 整个文件夹拷贝到工作站电脑上，进入第 2 节用 **MindCloud Studio** 打开。
+3. 采集完成后停止驱动，将 `control_command.yaml` 中的 `recorddata` 改回 `0`，并把生成的 `odin_ros_driver/recorddata/<录制起始时间>/` 整个文件夹拷贝到工作站电脑上，进入第 2 节用 **XAI 平台**或 **MindCloud Studio** 打开。
 
 > [!TIP]
-> 建议用带独立显卡的工作站或笔记本运行 MindCloud Studio。没有独显的超极本处理点云会慢很多。
+> 使用 **MindCloud Studio** 时建议用带独立显卡的工作站或笔记本，没有独显的超极本处理点云会慢很多；使用 **XAI 平台**则在云端训练，对本地电脑配置没有要求。
 
 ---
 
-## 2. 在 MindCloud Studio 中打开工程
+## 2. 离线处理工程（XAI 或 MindCloud Studio）
+
+> [!NOTE]
+> **XAI 平台与 MindCloud Studio 是两条并列的离线后处理路径，任选其一即可**：两者都支持导入 Q9000（`.lx`）与 Odin1（`.olx`）录制的工程，最终都能导出下游所需的 `.pcd` 点云与 `.bin` 重定位地图；拿到这两个文件后，都从第 4 节继续（`.pcd` 转 `.pgm`、`.bin` 拷到 `customer_file/` 等）。
+>
+> 两者的区别：
+> - **XAI 平台（2.1，更推荐）**：网页平台，无需安装本地软件，上传工程后在云端训练，完成后直接下载 `.pcd` 与 `.bin`；每天登录赠送 300 积分。
+> - **MindCloud Studio（2.2）**：本地桌面软件，需要安装包与授权，且建议使用带独立显卡的电脑。
+
+### 2.1 用 XAI 打开工程（更推荐）
+
+进入留形科技 XAI 平台，可以直接上传工程文件进行训练，下载对应格式的地图（除点云、重定位地图之外，还有 3D 高斯、Mesh 等格式）。
+
+网址：<https://mindcloudx.ai/>
+
+1. 右上角选择**登录/注册**。如果没有账号，选择注册即可。每天登录有 300 积分，可用于训练一个地图；如需更多积分请联系我们获取。
+
+   ![XAI 平台登录/注册](https://s3.bmp.ovh/2026/11/25/bfofJkxl.png)
+
+2. 登录成功后点击页面中央的**立即训练**，进入资产页面：
+
+   ![点击“立即训练”进入资产页面](https://s3.bmp.ovh/2026/11/25/iTn1vYWv.png)
+
+3. 右上角选择**上传数据集**，随后在弹出的文件夹中，选择 Q9000 对应的 U 盘（Odin1 用户选择从机载拷贝出的 `recorddata/<录制起始时间>/` 文件夹），找到本次扫描对应名字的文件夹，拖动，随后点击**开始上传**。
+
+   > [!TIP]
+   > 推荐先把 Q9000 的扫描文件夹复制到桌面，再从桌面上传到此处，以免文件过大导致设备断连、中断任务。
+
+   ![上传数据集](https://s3.bmp.ovh/2026/11/25/xZpQihnB.png)
+
+4. 开始上传后会回到项目页面，右下角显示上传速度：
+
+   ![上传速度](https://s3.bmp.ovh/2026/11/25/PjJLlt27.png)
+
+5. 完成后进入同名的项目，点击左上角的**点云**页面，随后点击**创建训练**。（若有 3DGS、CAD、Mesh 的需求，就在对应的页面中点击创建训练即可。）
+
+   ![创建训练](https://s3.bmp.ovh/2026/11/25/C7iPC9Ye.png)
+
+6. 随后弹出的界面保持默认，选择**开始训练**即可，等待训练完成：
+
+   ![开始训练](https://s3.bmp.ovh/2026/11/25/EMi8NPfk.png)
+
+7. 训练完成后，进入对应项目界面：
+
+   ![训练完成](https://s3.bmp.ovh/2026/11/25/S3jdGrGg.png)
+
+8. 随后点击下载中的 `pcd(.pcd)` 和 `map(.bin)` 两个文件即可：
+
+   ![下载 pcd 与 map](https://s3.bmp.ovh/2026/11/25/0CCkE3RW.png)
+
+至此已经拿到下游所需的 `.pcd` 与 `.bin`，**无需再执行第 3 节的导出步骤**，直接从第 4 节继续。
+
+### 2.2 在 MindCloud Studio 中打开工程
 
 在电脑上启动 **MindCloud Studio**，按下面步骤操作。（MindCloud Studio 的安装包与授权请联系留形科技支持获取。）
 
@@ -54,7 +106,7 @@
 
    ![MindCloud Studio 文件 -> 新建单点云工程](https://i.ibb.co/hFMQJbY9/10.png)
 
-2. 从 Q9000 的 U 盘里选择录制的工程文件夹，打开 `.lx` 工程文件。
+2. 从 Q9000 的 U 盘（或 Odin1 拷贝出的数据目录）里选择录制的工程文件夹，打开 `.lx`（Q9000）或 `.olx`（Odin1）工程文件。
    *（小提示：建议先把工程文件夹从 Q9000 的 U 盘拷到本地磁盘，免得长时间导出过程中 Q9000 没电。）*
 
    ![选择 .lx 工程文件](https://i.ibb.co/LXV6SR7b/11.png)
@@ -65,9 +117,14 @@
 
 4. 等待加载与处理完成。如果你不需要归档高精度数字孪生资产，勾选 **回环检测** 与 **运动物体滤除** 就够了 —— **平差优化**可以不勾，建图更快。
 
+处理完成后，继续第 3 节导出 `.pcd` 与 `.bin`。
+
 ---
 
 ## 3. 导出地图文件
+
+> [!NOTE]
+> 本节仅适用于 MindCloud Studio（2.2）。若使用第 2.1 节的 XAI 平台训练，`.pcd` 与 `.bin` 已在平台直接下载，可跳到第 4 节。
 
 处理完成后，导出两个文件：
 
@@ -236,9 +293,9 @@ bash /path/to/base_inspection/scripts/ons2_go2.sh --map=<地图名>    # 例如 
 
 ---
 
-## 6. 备选方式：仅用 Odin1 机载在线建图（不经 MindCloud Studio）
+## 6. 备选方式：仅用 Odin1 机载在线建图（不经 XAI / MindCloud Studio 离线后处理）
 
-对于无需使用 MindCloud Studio 做离线后处理的小型室内场景，Odin1 也支持在 SLAM 模式（`custom_map_mode: 1`）下**直接在机载电脑上在线保存 `.bin` 重定位地图与 `.pcd` 点云地图**。
+对于无需做离线后处理（XAI / MindCloud Studio）的小型室内场景，Odin1 也支持在 SLAM 模式（`custom_map_mode: 1`）下**直接在机载电脑上在线保存 `.bin` 重定位地图与 `.pcd` 点云地图**。
 
 ### 6.1 操作步骤（以 ROS 1 辅助脚本 `map_recording.sh` 为例）
 
@@ -267,8 +324,8 @@ bash /path/to/base_inspection/scripts/ons2_go2.sh --map=<地图名>    # 例如 
 
 ### 6.2 机载在线建图的局限性说明
 
-与通过 **MindCloud Studio** 离线后处理（第 1–4 节）相比，机载在线建图存在以下 3 点局限：
+与通过 **XAI / MindCloud Studio** 离线后处理（第 1–4 节）相比，机载在线建图存在以下 3 点局限：
 
-1. **无离线全局优化与动态物体滤除：** 建图过程中经过的行人或移动物体会直接残留在 `.pcd` 和 `.pgm` 中（需按第 4.4 节在 GIMP 中手动擦除），且大尺度场景下没有 MindCloud Studio 的离线全局平差优化精度高。
+1. **无离线全局优化与动态物体滤除：** 建图过程中经过的行人或移动物体会直接残留在 `.pcd` 和 `.pgm` 中（需按第 4.4 节在 GIMP 中手动擦除），且大尺度场景下没有离线后处理（XAI / MindCloud Studio）的全局平差优化精度高。
 2. **`.bin` 文件不会自动落位到 `customer_file/`：** Odin1 驱动默认将重定位地图输出为 `odin_ros_driver/map/<启动时间>/map_<保存时间>.bin`（除非在 `control_command.yaml` 中显式配置了 `mapping_result_dest_dir` 和 `mapping_result_file_name`），必须手动拷贝并重命名为 `customer_file/<地图名>.bin`，以确保与 `<地图名>.pgm`/`.yaml` 同名。
-3. **`map_recording.sh` 仅适用于 ROS 1：** `scripts/map_processing/map_recording.sh` 是早期第一版留下的 ROS 1 封装脚本（依赖 `roslaunch`、`rosservice` 与 ROS 1 的 `pcd2pgm` 包）。在 ROS 2 或多机器人生产部署中，更推荐使用 **MindCloud Studio + `pcd_to_pgm.py`**（第 1–4 节）。
+3. **`map_recording.sh` 仅适用于 ROS 1：** `scripts/map_processing/map_recording.sh` 是早期第一版留下的 ROS 1 封装脚本（依赖 `roslaunch`、`rosservice` 与 ROS 1 的 `pcd2pgm` 包）。在 ROS 2 或多机器人生产部署中，更推荐使用 **XAI / MindCloud Studio + `pcd_to_pgm.py`**（第 1–4 节）。
