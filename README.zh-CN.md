@@ -94,8 +94,6 @@
 
 真机不需要修改：共享 launch 只新增 `use_sim_time` 参数（默认 false）；控制台新增 `--use-sim-time`（默认不启用）；规划器、控制器和导航调参代码零改动。仿真 profile 和脚本是独立文件，真机启动器不引用。
 
-`feature/sim-integration` 是 6 个提交、10 个文件的增量补丁（含两份仿真指南、`robots/go2_sim`、`scripts/ons2_sim_ros2.sh` 和 gated launch 参数）；`origin/release` 与 `upstream/main` 的树内容一致（提交哈希不同），分支当前落后上游 2 个文档提交，合并前需纳入评审。还有 1 个本地未提交的 TF Buffer 修复，使 `--use-sim-time` 也作用于 TF 查询，不影响真机。
-
 完整步骤、航点、故障排查见 [04 · Simulation](docs/simulation/04_simulation.zh-CN.md)。
 
 # 2. 支持的平台

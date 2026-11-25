@@ -37,17 +37,6 @@ unless the simulation flags are used.
 
 Startup is in §5; the symptom table is in §8.
 
-### 1.2 Branch status: `feature/sim-integration`
-
-Six commits / 10 files against the `upstream/main` merge base (+539/−12): the `go2_sim` profile, the
-`use_sim_time` argument in the `ons2_bringup` / `mission_manager` / `atomic_move` /
-`neupan_ros` launch files, `scripts/ons2_sim_ros2.sh`, the opt-in `--use-sim-time` flag in
-`ros2_ws/scripts/test_nav_control_ros2.py`, and these two guides plus the README links. The
-branch is 2 commits behind the current `upstream/main` (map-tutorial docs update,
-`.gitignore` chore); merge or review that gap before a release. One uncommitted local fix
-(`Buffer(..., node=self.node)` in the same console script) makes `--use-sim-time` apply to TF
-lookups as well; it is not part of the six commits yet.
-
 ## 2. What runs where
 
 ```

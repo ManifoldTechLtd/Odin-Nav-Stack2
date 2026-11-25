@@ -83,8 +83,7 @@
 
 ## 1.4 Real Robot vs Simulation
 
-Simulation support is **additive and off by default**. It currently lives on the
-`feature/sim-integration` branch, not in a release: a deployed robot keeps the same entry
+Simulation support is **additive and off by default**. A deployed robot keeps the same entry
 scripts, profiles, maps and tuning.
 
 | | Real robot | Simulation (Isaac Sim) |
@@ -107,40 +106,6 @@ files that no real-robot launcher references, and the ROS 1 workspace is untouch
 `scripts/ons2_sim_ros2.sh --map <sim>.yaml`; every node runs with `use_sim_time` enabled so
 TF and timers follow `/clock`. Build, launch, waypoint, console and troubleshooting steps are
 in [04 · Simulation](docs/simulation/04_simulation.md).
-
-### 1.4.1 What `feature/sim-integration` contains
-
-Six commits on its `upstream/main` base, 10 files changed (+539/−12):
-
-| Commit | Change |
-|---|---|
-| `b692dc83` feat(sim): add go2_sim profile and ROS2 simulation bringup with sim clock | New `robots/go2_sim/robot.yaml`, `use_sim_time` argument in the ROS 2 bringup / mission / atomic-move / NeuPAN launch files, first `scripts/ons2_sim_ros2.sh` |
-| `80a2b8b0` fix(sim): source ROS with unset-safe shell and ship go2_sim planner.yaml | Sim script and a `go2_sim` NeuPAN `planner.yaml` (later dropped in favour of `robots/go2/`) |
-| `996eba5d` docs(sim): add single-source simulation guide and README links | `docs/simulation/04_simulation.md` + `.zh-CN.md`, README pointers |
-| `af741b37` refactor(sim): reuse official Go2 NeuPAN config instead of a fourth copy | `go2_sim` profile points at `robots/go2/neupan/{config,planner}.yaml` |
-| `819ee16b` feat(sim): run the official ONS2 control console with sim time and /waypoint_pick | Opt-in `--use-sim-time` in `ros2_ws/scripts/test_nav_control_ros2.py`, `/waypoint_pick` flow |
-| `3012fb3b` fix(sim): tolerate a missing foxglove package at bringup | Sim script starts without `foxglove_bridge` when the package is absent |
-
-The 10 files are `README.md`, both `docs/simulation/04_simulation*` guides,
-`robots/go2_sim/robot.yaml`, `ros2_ws/scripts/test_nav_control_ros2.py`, the launch files of
-`ons2_bringup` / `mission_manager` / `atomic_move` / `neupan_ros`, and
-`scripts/ons2_sim_ros2.sh`. Everything is sim-only, additive, or behind a `false` default — no
-planner, controller or navigation-tuning code changed — so real navigation is unaffected
-unless the simulation flags are used.
-
-One **uncommitted** local fix remains: `ros2_ws/scripts/test_nav_control_ros2.py` now passes
-`node=self.node` to the TF `Buffer`, so `--use-sim-time` also applies to TF lookups. It is not
-part of the six commits yet.
-
-### 1.4.2 Branch and release status
-
-`git diff --stat origin/release upstream/main` is empty after the latest fetch:
-**`origin/release` and `upstream/main` are content-identical** (they carry different commit
-hashes, `2c849010` vs `d7243b05`). `feature/sim-integration` is 6 commits ahead of its base
-but 2 commits behind the current `upstream/main` (a map-tutorial docs update and a
-`.gitignore` chore); a direct two-dot diff against `origin/release` therefore also lists the
-3 files changed by those newer commits (13 files total). Merge or review that gap before
-cutting a release.
 
 # 2. Supported Platforms
 

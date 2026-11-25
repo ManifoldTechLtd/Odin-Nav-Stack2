@@ -34,16 +34,6 @@
 
 启动见 §5，排障对照表见 §8。
 
-### 1.2 分支状态：`feature/sim-integration`
-
-以 `upstream/main` 合并基点为基准的 6 个提交 / 10 个文件（+539/−12）：`go2_sim` 档案、
-`ons2_bringup` / `mission_manager` / `atomic_move` / `neupan_ros` launch 中的
-`use_sim_time` 参数、`scripts/ons2_sim_ros2.sh`、`ros2_ws/scripts/test_nav_control_ros2.py`
-中可选的 `--use-sim-time`，以及这两篇指南与 README 链接。该分支当前落后 `upstream/main`
-2 个提交（map-tutorial 文档更新、`.gitignore` 清理），发布前需先合并/评审。还有一处未提交
-的本地修改（同一控制台脚本中的 `Buffer(..., node=self.node)`），让 `--use-sim-time` 同时
-作用于 TF 查询，尚未计入这 6 个提交。
-
 ## 2. 运行拓扑
 
 ```
