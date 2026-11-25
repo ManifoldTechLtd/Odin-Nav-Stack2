@@ -143,7 +143,7 @@ class NavControlTest:
         self._rtk_execution_id = None
         self.last_start_response = None
         self.last_start_attempted = False
-        self.tf_buffer = Buffer(cache_time=Duration(seconds=30.0))
+        self.tf_buffer = Buffer(cache_time=Duration(seconds=30.0), node=self.node)
         self.tf_listener = TransformListener(self.tf_buffer, self.node)
 
         self._clients = {
