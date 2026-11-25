@@ -75,3 +75,7 @@ ros2_ws/src/terrain_corridor/
 ros2_ws/src/terrain_map_msgs/
 ros2_ws/src/topo_planner_ros2/
 ros2_ws/scripts/mock_depth_publisher.py
+docs/agent-index/
+AGENTS.md
+scripts/as2_launch_al_ilqr.sh
+scripts/start_odin_ros2.sh
