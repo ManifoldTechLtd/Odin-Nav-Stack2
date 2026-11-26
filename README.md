@@ -52,6 +52,8 @@
 
 ## 1.2 What's New
 
+- **[2026-11-26] ONS2 now runs in the Isaac Sim simulator — build and verify algorithms with no robot on hand**  
+  The whole navigation stack is adapted to the Real2Sim bridges, so planning, control and task flows can be developed and validated entirely in simulation before touching hardware. See the [simulation guide](docs/simulation/04_simulation.md) and the [Real2Sim tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial).
 - **[2026-11-20] Built-in ONS2 Web Control Console (`:18090`)**  
   Start/stop the stack, switch `NeuPAN` / `SRU` policies, pick waypoints on the live PGM map, teleop, stream compressed video, and record preset bags directly in the browser. See the [ONS2 Web Console Guide](docs/web_console.md).
 - **[2026-11-20] Blocked-Goal Adaptive Arrival & Smooth Dynamic Avoidance**  

@@ -51,6 +51,8 @@
 
 ## 1.2 新增内容
 
+- **[2026-11-26] ONS2 完成与 Isaac Sim 仿真器适配——没有机器人也能在仿真中跑算法**  
+  整套导航栈已完成对 Real2Sim 桥接的适配，规划、控制与任务流程都可以先在仿真中开发和验证，再上实机。详见[仿真指南](docs/simulation/04_simulation.zh-CN.md) 与 [Real2Sim 教程](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial)。
 - **[2026-11-20] 内置 ONS2 Web 控制端（`:18090`）**  
   在浏览器中一键启停导航栈、切换 `NeuPAN / SRU` 策略、全局地图选点下发任务、遥控接管、高帧率相机监看及按预设在线录包。详见 [ONS2 Web 控制端指南](docs/web_console.zh-CN.md)。
 - **[2026-11-20] 目标被挡就近到达与近障丝滑避让**  
