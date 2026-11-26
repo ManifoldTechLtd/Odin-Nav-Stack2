@@ -446,6 +446,7 @@ private:
   std::atomic<bool> navigation_stopped_{true};
   std::atomic<int> live_action_goals_{0};
   bool path_safety_waiting_{false};
+  int path_safety_consecutive_fails_{0};
   double path_safety_scan_max_age_sec_{1.0};
   std::atomic<std::int64_t> path_safety_scan_stamp_ns_{0};
   std::atomic<std::int64_t> path_safety_scan_received_ns_{0};

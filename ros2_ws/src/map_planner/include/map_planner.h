@@ -47,6 +47,8 @@ private:
   bool getRobotPose(geometry_msgs::msg::PoseStamped& pose) const;
   // fail_reason is set on failure to one of: OUT_OF_MAP, START_OCCUPIED,
   // GOAL_OCCUPIED, START_AND_GOAL_OCCUPIED, NO_PATH_FOUND.
+  bool isStaticUninflatedFree(int mx, int my) const;
+  bool findNearestFreeStart(int start_x, int start_y, int& out_x, int& out_y) const;
   bool plan(const geometry_msgs::msg::PoseStamped& start,
             const geometry_msgs::msg::PoseStamped& goal,
             nav_msgs::msg::Path& path, std::string& fail_reason);
@@ -187,6 +189,8 @@ private:
   double path_protect_initial_m_{1.0};
   bool path_validate_enable_{true};
   double path_min_clear_m_{0.10};
+  bool start_escape_enable_{true};
+  double start_escape_max_radius_m_{0.85};
   bool goal_relocate_enable_{true};
   double goal_relocate_clearance_m_{0.55};
   double goal_relocate_max_radius_m_{3.5};

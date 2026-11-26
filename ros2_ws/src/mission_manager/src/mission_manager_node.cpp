@@ -1749,7 +1749,7 @@ void MissionManager::processPeriodicReplan() {
   const rclcpp::Time now = node_->now();
   const bool periodic_due =
       last_periodic_replan_at_.nanoseconds() == 0 ||
-      (now - last_periodic_replan_at_).seconds() >= periodic_replan_sec_;
+      (now - last_periodic_replan_at_).seconds() >= (path_safety_waiting_ ? std::min(0.4, periodic_replan_sec_) : periodic_replan_sec_);
   // Path-validity watchdog: when the active path corridor is blocked (install
   // gate blocked hysteresis), replan immediately instead of waiting the periodic
   // interval; cooldown avoids a replan storm while stuck. Direction stability is

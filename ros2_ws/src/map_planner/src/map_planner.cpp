@@ -91,6 +91,8 @@ MapPlanner::MapPlanner(const rclcpp::Node::SharedPtr& node) : node_(node) {
   path_validate_enable_ =
       node_->declare_parameter("path_validate_enable", path_validate_enable_);
   path_min_clear_m_ = node_->declare_parameter("path_min_clear_m", path_min_clear_m_);
+  start_escape_enable_ = node_->declare_parameter("start_escape_enable", start_escape_enable_);
+  start_escape_max_radius_m_ = node_->declare_parameter("start_escape_max_radius_m", start_escape_max_radius_m_);
   goal_relocate_enable_ =
       node_->declare_parameter("goal_relocate_enable", goal_relocate_enable_);
   goal_relocate_clearance_m_ = node_->declare_parameter(
@@ -730,6 +732,85 @@ bool MapPlanner::relocateBlockedGoal(int start_x, int start_y,
   return true;
 }
 
+bool MapPlanner::isStaticUninflatedFree(int mx, int my) const {
+  if (!map_ready_) return false;
+  const int width = static_cast<int>(map_.info.width);
+  const int height = static_cast<int>(map_.info.height);
+  if (mx < 0 || my < 0 || mx >= width || my >= height) return false;
+  const int idx = my * width + mx;
+  if (idx < 0 || idx >= static_cast<int>(map_.data.size())) return false;
+  const int8_t val = map_.data[idx];
+  return val >= 0 && val < obstacle_threshold_;
+}
+
+bool MapPlanner::findNearestFreeStart(int start_x, int start_y,
+                                      int& out_x, int& out_y) const {
+  if (!start_escape_enable_ || !map_ready_ || map_.info.resolution <= 0.0 ||
+      start_escape_max_radius_m_ <= 0.0) {
+    return false;
+  }
+  if (!isStaticUninflatedFree(start_x, start_y)) return false;
+  const int width = static_cast<int>(map_.info.width);
+  const int height = static_cast<int>(map_.info.height);
+  const int max_r = std::max(
+      1, static_cast<int>(std::ceil(start_escape_max_radius_m_ / map_.info.resolution)));
+  const int max_r_sq = max_r * max_r;
+  const int bx0 = std::max(0, start_x - max_r);
+  const int by0 = std::max(0, start_y - max_r);
+  const int bx1 = std::min(width - 1, start_x + max_r);
+  const int by1 = std::min(height - 1, start_y + max_r);
+  const int bw = bx1 - bx0 + 1;
+  const int bh = by1 - by0 + 1;
+  std::vector<uint8_t> visited(static_cast<std::size_t>(bw) * bh, 0);
+  std::queue<std::pair<int, int>> q;
+  auto mark = [&](int x, int y) {
+    visited[static_cast<std::size_t>(y - by0) * bw + (x - bx0)] = 1;
+  };
+  auto is_vis = [&](int x, int y) {
+    return visited[static_cast<std::size_t>(y - by0) * bw + (x - bx0)] != 0;
+  };
+  mark(start_x, start_y);
+  q.push({start_x, start_y});
+  static const int kDx[8] = {1, -1, 0, 0, 1, 1, -1, -1};
+  static const int kDy[8] = {0, 0, 1, -1, 1, -1, 1, -1};
+  int best_x = -1, best_y = -1;
+  double best_dist_sq = std::numeric_limits<double>::max();
+  auto uninflated_free = [&](int x, int y) { return isStaticUninflatedFree(x, y); };
+  while (!q.empty()) {
+    const auto [cx, cy] = q.front();
+    q.pop();
+    const double dsq = static_cast<double>(cx - start_x) * (cx - start_x) +
+                       static_cast<double>(cy - start_y) * (cy - start_y);
+    if (dsq > best_dist_sq + 4.0) continue;
+    const int idx = toIndex(cx, cy);
+    if (cellHasClearance(idx, path_min_clear_m_)) {
+      if (map_planner_safety::segmentFree(
+              start_x + 0.5, start_y + 0.5, cx + 0.5, cy + 0.5, uninflated_free)) {
+        if (dsq < best_dist_sq) {
+          best_dist_sq = dsq;
+          best_x = cx;
+          best_y = cy;
+        }
+      }
+      continue;
+    }
+    for (int d = 0; d < 8; ++d) {
+      const int nx = cx + kDx[d];
+      const int ny = cy + kDy[d];
+      if (nx < bx0 || nx > bx1 || ny < by0 || ny > by1) continue;
+      if ((nx - start_x) * (nx - start_x) + (ny - start_y) * (ny - start_y) > max_r_sq) continue;
+      if (is_vis(nx, ny)) continue;
+      if (!isStaticUninflatedFree(nx, ny)) continue;
+      mark(nx, ny);
+      q.push({nx, ny});
+    }
+  }
+  if (best_x < 0) return false;
+  out_x = best_x;
+  out_y = best_y;
+  return true;
+}
+
 bool MapPlanner::plan(const geometry_msgs::msg::PoseStamped& start,
                       const geometry_msgs::msg::PoseStamped& goal,
                       nav_msgs::msg::Path& path, std::string& fail_reason) {
@@ -756,7 +837,7 @@ bool MapPlanner::plan(const geometry_msgs::msg::PoseStamped& start,
   }
   const int width = static_cast<int>(map_.info.width);
   const int height = static_cast<int>(map_.info.height);
-  const int start_index = toIndex(start_x, start_y);
+  int start_index = toIndex(start_x, start_y);
   int goal_index = toIndex(goal_x, goal_y);
   const bool start_occupied = !cellHasClearance(start_index, path_min_clear_m_);
   const bool goal_hard_occupied = !cellHasClearance(goal_index, path_min_clear_m_);
@@ -765,12 +846,27 @@ bool MapPlanner::plan(const geometry_msgs::msg::PoseStamped& start,
   const bool goal_too_close =
       goal_relocate_enable_ && !cellHasClearance(goal_index, soft_trigger_clear_m);
   bool goal_relocated = false;
+  bool start_escaped = false;
+  int plan_start_x = start_x;
+  int plan_start_y = start_y;
   if (start_occupied) {
-    fail_reason = goal_hard_occupied ? "START_AND_GOAL_OCCUPIED" : "START_OCCUPIED";
-    RCLCPP_WARN(node_->get_logger(),
-                "Start is blocked by occupancy/clearance (%s, required clearance %.2fm).",
-                fail_reason.c_str(), path_min_clear_m_);
-    return false;
+    if (findNearestFreeStart(start_x, start_y, plan_start_x, plan_start_y)) {
+      start_escaped = true;
+      const double esc_m =
+          std::hypot(plan_start_x - start_x, plan_start_y - start_y) * map_.info.resolution;
+      RCLCPP_INFO(node_->get_logger(),
+                  "[map_planner] inflation-layer start escape: (%d,%d)->(%d,%d) shift=%.2fm",
+                  start_x, start_y, plan_start_x, plan_start_y, esc_m);
+      start_x = plan_start_x;
+      start_y = plan_start_y;
+      start_index = toIndex(start_x, start_y);
+    } else {
+      fail_reason = goal_hard_occupied ? "START_AND_GOAL_OCCUPIED" : "START_OCCUPIED";
+      RCLCPP_WARN(node_->get_logger(),
+                  "Start is blocked by occupancy/clearance (%s, required clearance %.2fm).",
+                  fail_reason.c_str(), path_min_clear_m_);
+      return false;
+    }
   }
   if (goal_hard_occupied || goal_too_close) {
     const int orig_gx = goal_x;
@@ -1022,11 +1118,33 @@ bool MapPlanner::plan(const geometry_msgs::msg::PoseStamped& start,
     last_path_quality_message_ += "|GOAL_RELOCATED";
   }
   nav_msgs::msg::Path checked = path;
-  checked.poses.insert(checked.poses.begin(), start);
+  if (!start_escaped) {
+    checked.poses.insert(checked.poses.begin(), start);
+  }
   if (!collisionFreePath(checked, path_min_clear_m_)) {
     fail_reason = "PATH_COLLISION";
     path.poses.clear();
     return false;
+  }
+  if (start_escaped && !path.poses.empty()) {
+    const auto p0 = start.pose.position;
+    const auto p1 = path.poses.front().pose.position;
+    const double seg_len = std::hypot(p1.x - p0.x, p1.y - p0.y);
+    const int steps = std::max(1, static_cast<int>(std::ceil(seg_len / map_.info.resolution)));
+    std::vector<geometry_msgs::msg::PoseStamped> lead;
+    lead.reserve(static_cast<std::size_t>(steps));
+    for (int s = 0; s < steps; ++s) {
+      const double u = static_cast<double>(s) / static_cast<double>(steps);
+      geometry_msgs::msg::PoseStamped pose = start;
+      pose.header = path.header;
+      pose.pose.position.x = p0.x + u * (p1.x - p0.x);
+      pose.pose.position.y = p0.y + u * (p1.y - p0.y);
+      pose.pose.position.z = 0.0;
+      pose.pose.orientation.w = 1.0;
+      lead.push_back(pose);
+    }
+    path.poses.insert(path.poses.begin(), lead.begin(), lead.end());
+    last_path_quality_message_ += "|START_ESCAPED";
   }
   const auto t_end = std::chrono::steady_clock::now();
 
@@ -1759,9 +1877,51 @@ void MapPlanner::validatePathService(
     prepared.poses.push_back(point);
   }
   nav_msgs::msg::Path checked = prepared;
+  const double check_clear_m = req->check_start_connection ? path_min_clear_m_ : 0.0;
   if (req->check_start_connection) checked.poses.insert(checked.poses.begin(), robot);
-  if (prepared.poses.size() < 2 ||
-      !collisionFreePath(checked, path_min_clear_m_)) {
+  bool safe_ok = prepared.poses.size() >= 2 && collisionFreePath(checked, check_clear_m);
+  if (!safe_ok && prepared.poses.size() >= 2 && start_escape_enable_) {
+    int rmx = 0, rmy = 0;
+    if (worldToMap(robot.pose.position, rmx, rmy) && isStaticUninflatedFree(rmx, rmy)) {
+      std::size_t first_clear = checked.poses.size();
+      double lead_arc = 0.0;
+      bool lead_wall_free = true;
+      const double res_m = map_.info.resolution;
+      const double ox = map_.info.origin.position.x;
+      const double oy = map_.info.origin.position.y;
+      auto uninflated_free = [&](int x, int y) { return isStaticUninflatedFree(x, y); };
+      for (std::size_t i = 0; i < checked.poses.size(); ++i) {
+        if (i > 0) {
+          const auto& a = checked.poses[i - 1].pose.position;
+          const auto& b = checked.poses[i].pose.position;
+          lead_arc += std::hypot(b.x - a.x, b.y - a.y);
+          if (!map_planner_safety::segmentFree(
+                  (a.x - ox) / res_m, (a.y - oy) / res_m,
+                  (b.x - ox) / res_m, (b.y - oy) / res_m, uninflated_free)) {
+            lead_wall_free = false;
+            break;
+          }
+        }
+        if (lead_arc > start_escape_max_radius_m_ + 0.15) break;
+        int pmx = 0, pmy = 0;
+        if (worldToMap(checked.poses[i].pose.position, pmx, pmy) &&
+            cellHasClearance(toIndex(pmx, pmy), check_clear_m)) {
+          first_clear = i;
+          break;
+        }
+      }
+      if (lead_wall_free && first_clear < checked.poses.size()) {
+        nav_msgs::msg::Path suffix;
+        suffix.header = checked.header;
+        suffix.poses.assign(checked.poses.begin() + static_cast<std::ptrdiff_t>(first_clear),
+                            checked.poses.end());
+        if (suffix.poses.size() >= 2 && collisionFreePath(suffix, check_clear_m)) {
+          safe_ok = true;
+        }
+      }
+    }
+  }
+  if (!safe_ok) {
     res->message = "PATH_COLLISION_OR_LOW_CLEARANCE";
     return;
   }

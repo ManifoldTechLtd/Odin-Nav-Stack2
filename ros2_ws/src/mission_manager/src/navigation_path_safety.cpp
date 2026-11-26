@@ -55,6 +55,7 @@ bool MissionManager::validateForInstall(nav_msgs::msg::Path &path,
 }
 
 void MissionManager::holdForPathSafety(const std::string &reason) {
+  path_safety_consecutive_fails_ = 0;
   if (path_safety_waiting_ && navigation_stopped_.load()) return;
   const bool was_waiting = path_safety_waiting_;
   stopNavigation();
@@ -75,8 +76,18 @@ void MissionManager::processPathSafety() {
       path_safety_future_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
     const auto result = path_safety_future_.get();
     if (navigating && !path_safety_waiting_ && !path_done_.load() &&
-        result.generation == path_goal_generation_.load() && !result.valid) {
-      holdForPathSafety(result.reason);
+        result.generation == path_goal_generation_.load()) {
+      if (result.valid) {
+        path_safety_consecutive_fails_ = 0;
+      } else if (result.reason == "PATH_COLLISION_OR_LOW_CLEARANCE") {
+        ++path_safety_consecutive_fails_;
+        last_periodic_replan_at_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+        if (path_safety_consecutive_fails_ >= 2) {
+          holdForPathSafety(result.reason);
+        }
+      } else {
+        holdForPathSafety(result.reason);
+      }
     }
   }
   if (!navigating) return;
