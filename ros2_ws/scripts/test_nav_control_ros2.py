@@ -143,7 +143,7 @@ class NavControlTest:
         self._rtk_execution_id = None
         self.last_start_response = None
         self.last_start_attempted = False
-        self.tf_buffer = Buffer(cache_time=Duration(seconds=30.0))
+        self.tf_buffer = Buffer(cache_time=Duration(seconds=30.0), node=self.node)
         self.tf_listener = TransformListener(self.tf_buffer, self.node)
 
         self._clients = {
@@ -1335,9 +1335,18 @@ def main():
         action="store_true",
         help="Disable curses TUI and fall back to plain CLI prompts",
     )
+    parser.add_argument(
+        "--use-sim-time",
+        action="store_true",
+        help="Use simulation clock (/clock) for TF lookups (Isaac/Real2Sim)",
+    )
     args = parser.parse_args()
     rclpy.init(args=sys.argv[:1])
-    node = rclpy.create_node("test_nav_control")
+    overrides = []
+    if args.use_sim_time:
+        from rclpy.parameter import Parameter
+        overrides.append(Parameter("use_sim_time", value=True))
+    node = rclpy.create_node("test_nav_control", parameter_overrides=overrides)
     executor = MultiThreadedExecutor()
     executor.add_node(node)
     spin_thread = threading.Thread(target=executor.spin, daemon=True)

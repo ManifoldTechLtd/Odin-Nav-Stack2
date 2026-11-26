@@ -29,6 +29,7 @@ def generate_launch_description():
     config_file = LaunchConfiguration('config_file')
     nav_mode = LaunchConfiguration('navigation_mode')
     periodic_sec = LaunchConfiguration('periodic_replan_sec')
+    use_sim_time = LaunchConfiguration('use_sim_time')
 
     declare_config = DeclareLaunchArgument(
         'config_file', default_value=os.environ.get('NEUPAN_ROS_CONFIG', ''),
@@ -38,6 +39,9 @@ def generate_launch_description():
         description='escape | replan_periodic | neupan_only')
     declare_periodic = DeclareLaunchArgument(
         'periodic_replan_sec', default_value=os.environ.get('PERIODIC_REPLAN_SEC', '2.0'))
+    declare_use_sim_time = DeclareLaunchArgument(
+        'use_sim_time', default_value='false',
+        description='Use simulation clock (/clock)')
 
     node = Node(
         package='neupan_ros',
@@ -50,7 +54,9 @@ def generate_launch_description():
         parameters=[{
             'navigation_mode': nav_mode,
             'periodic_replan_sec': periodic_sec,
+            'use_sim_time': use_sim_time,
         }],
     )
 
-    return LaunchDescription([declare_config, declare_mode, declare_periodic, node])
+    return LaunchDescription([
+        declare_config, declare_mode, declare_periodic, declare_use_sim_time, node])

@@ -41,6 +41,7 @@ def generate_launch_description():
     goal_topic = LaunchConfiguration('goal_topic')
     enable_topic = LaunchConfiguration('enable_topic')
     planner_cmd_vel_topic = LaunchConfiguration('planner_cmd_vel_topic')
+    use_sim_time = LaunchConfiguration('use_sim_time')
 
     declare_mode = DeclareLaunchArgument(
         'navigation_mode',
@@ -66,6 +67,8 @@ def generate_launch_description():
     declare_goal_topic = DeclareLaunchArgument('goal_topic', default_value='/sru/goal_pose')
     declare_enable_topic = DeclareLaunchArgument('enable_topic', default_value='/sru/cmd_vel_enable')
     declare_planner_cmd_vel = DeclareLaunchArgument('planner_cmd_vel_topic', default_value='/sru/cmd_vel')
+    declare_use_sim_time = DeclareLaunchArgument(
+        'use_sim_time', default_value='false', description='Use simulation clock (/clock)')
 
     params = {
         # Coordinate frames and service/action endpoints
@@ -132,7 +135,7 @@ def generate_launch_description():
         output='screen',
         respawn=True,
         respawn_delay=3.0,
-        parameters=[params, {'navigation_mode': nav_mode}],
+        parameters=[params, {'navigation_mode': nav_mode, 'use_sim_time': use_sim_time}],
     )
 
     return LaunchDescription([
@@ -146,5 +149,6 @@ def generate_launch_description():
         declare_goal_topic,
         declare_enable_topic,
         declare_planner_cmd_vel,
+        declare_use_sim_time,
         node,
     ])

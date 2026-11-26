@@ -81,6 +81,32 @@
 - **[Odin RTK](https://github.com/ManifoldTechLtd/Odin-RTK)** — Odin RTK Fusion: fuses Odin SLAM odometry with RTK/GNSS GGA data to output globally referenced poses.
 - **[Odin Perception](https://github.com/ManifoldTechLtd/Odin-perception)** — the on-device inspection perception component for ONS2: feed one image to a vision model and get decidable verdicts against a structured checklist (yes/no, state, count, read-text, describe), with evidence image and latency.
 
+## 1.4 Real Robot vs Simulation
+
+Simulation support is **additive and off by default**. A deployed robot keeps the same entry
+scripts, profiles, maps and tuning.
+
+| | Real robot | Simulation (Isaac Sim) |
+|---|---|---|
+| Entry point | `scripts/ons2_sw01.sh` (ROS 2), `scripts/ons2_go2.sh` / `scripts/ons2_dobot_lumo.sh` (ROS 1) | `scripts/ons2_sim_ros2.sh` inside the simulator's ROS 2 container |
+| Robot profile | `robots/<robot>/robot.yaml` (`sw01`, `go2`, `dobot_lumo`, or your own) | `robots/go2_sim/robot.yaml`, which reuses `robots/go2/neupan/` |
+| Clock | wall clock, `use_sim_time` stays `false` | `use_sim_time:=true` on every node; `/clock` comes from the bridge |
+| Sensors and TF | Odin1 driver on the robot supplies `/odin1/*` and TF | `sim_bridge_ros2` publishes `/odin1/*` + `/clock` and subscribes `/cmd_vel`; same TF chain `map→odom→imu→odin1_base_link→base_link` |
+| Map | your site triplet selected with `--map=NAME` | the simulator's `integrations/ons2/maps/*.pgm` + `*.yaml`, passed with `--map` |
+| Chassis enable | SW01 `[c]` enable gate | not used; `/cmd_vel` drives the simulated robot directly |
+
+**Real robot: no changes required.** The only shared files touched are the ROS 2 launch files
+(new `use_sim_time` argument, default `false`) and the control console script (new opt-in
+`--use-sim-time` flag, which `scripts/ons2_sw01.sh` does not pass). Existing profiles, launch
+and tuning therefore produce the same nodes with the same parameters, and topics, services,
+actions and the map format are unchanged. The simulation profile and script are separate
+files that no real-robot launcher references, and the ROS 1 workspace is untouched.
+
+**Simulation:** bring up the simulator bridge, then start the stack with
+`scripts/ons2_sim_ros2.sh --map <sim>.yaml`; every node runs with `use_sim_time` enabled so
+TF and timers follow `/clock`. Build, launch, waypoint, console and troubleshooting steps are
+in [04 · Simulation](docs/simulation/04_simulation.md).
+
 # 2. Supported Platforms
 
 | Robot | Runtime | Status |
@@ -90,7 +116,8 @@
 | Dobot Lumo | ROS1 Noetic | Supported (`scripts/ons2_dobot_lumo.sh`, profile `robots/dobot_lumo/`, defaults to `dry_run=true`) |
 | Your own robot | ROS1 or ROS2 | Copy `robots/_template/`; see [03 · Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md) |
 
-Unitree Go2 is supported by the ROS1 stack only.
+Unitree Go2 is supported by the ROS1 stack only on hardware; the ROS 2 `go2_sim` profile is
+for the Isaac simulator (see [1.4](#14-real-robot-vs-simulation)), not for a physical Go2.
 
 # 3. Local Planner: NeuPAN or SRU
 
@@ -344,7 +371,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | **Ask a VLM questions about the scene** | [VLM Scene Understanding](#54-vlm-scene-understanding) |
 | **Understand the architecture / module dataflow** | [Architecture](docs/architecture/ONS2_ARCHITECTURE.md) · [Module Dataflow](docs/architecture/MODULE_DATAFLOW.md) |
 | **Scan a site and build a navigation map** (Q9000 / Odin1) | [Map Tutorial](docs/map-tutorial/map-tutorial.md) · [`pcd_to_pgm.py`](scripts/map_processing/pcd_to_pgm.py) |
-| **Reproduce a scenario in simulation** (Real2Sim) | [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
+| **Reproduce a scenario in simulation** (Real2Sim) | [04 · Simulation](docs/simulation/04_simulation.md) · [MT-Real2Sim-Tutorial](https://github.com/ManifoldTechLtd/MT-Real2Sim-Tutorial) |
 | **Deploy with Docker** (Jetson, ROS1) | [docker/docker-compose.yml](docker/docker-compose.yml) |
 
 > **Chinese docs:** every guide in this repository has a `*.zh-CN.md` sibling (usage guides,
@@ -357,6 +384,7 @@ Stop: `bash scripts/ons2_sw01_stop.sh`. Use `ROS_DOMAIN_ID=98` in every terminal
 | 1 | [Quick Start for Existing Robots](docs/usage/01_quick_start.md) | Start the stack on Go2, SW01, or Dobot Lumo, and send missions |
 | 2 | [Parameter Tuning](docs/usage/02_parameter_tuning.md) | Change speed, footprint, clearance, and tracking for each platform |
 | 3 | [Integrate Your Own Robot](docs/usage/03_integrate_your_robot.md) | Connect a new robot: interface contract, chassis bridge, TF, launch |
+| 4 | [Run ONS2 in the Isaac Simulator](docs/simulation/04_simulation.md) | Isaac Sim + MT-Real2Sim, ROS 1/2 runtimes, waypoint missions |
 
 ## 5.3 Feature Status at a Glance
 
